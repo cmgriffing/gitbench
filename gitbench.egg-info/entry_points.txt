@@ -1,0 +1,2 @@
+[console_scripts]
+gitbench = gitbench.cli:cli
