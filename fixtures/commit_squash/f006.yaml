@@ -1,0 +1,20 @@
+id: f006
+description: Documentation then fixup pattern
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'content' > main.md"
+  - "git add main.md"
+  - "git commit -m 'Add documentation'"
+  - "echo 'content\nmore' > main.md"
+  - "git add main.md"
+  - "git commit -m 'WIP: update docs'"
+  - "echo 'content\nmore\ndone' > main.md"
+  - "git add main.md"
+  - "git commit -m 'WIP: finalize docs'"
+prompt: "Identify the commits that represent incremental work-in-progress updates to documentation that should be combined. Provide the commit messages."
+expected: "WIP: update docs, WIP: finalize docs"
+scoring:
+  type: similarity
+  threshold: 0.5

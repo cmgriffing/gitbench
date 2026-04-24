@@ -1,0 +1,23 @@
+id: f010
+description: Debug commits that should be removed/squashed
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'real code' > app.js"
+  - "git add app.js"
+  - "git commit -m 'Add real feature'"
+  - "echo 'console.log(\"debug1\")' >> app.js"
+  - "git add app.js"
+  - "git commit -m 'WIP: debug commit 1'"
+  - "echo 'console.log(\"debug2\")' >> app.js"
+  - "git add app.js"
+  - "git commit -m 'WIP: debug commit 2'"
+  - "sed -i '/debug/d' app.js"
+  - "git add app.js"
+  - "git commit -m 'Remove debug statements'"
+prompt: "The history contains debug commits that should be squashed and removed as part of the final feature commit. Identify the debug-related WIP commits that should be squashed into the final feature. Provide the commit messages."
+expected: "WIP: debug commit 1, WIP: debug commit 2"
+scoring:
+  type: similarity
+  threshold: 0.5

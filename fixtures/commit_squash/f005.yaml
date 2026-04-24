@@ -1,0 +1,23 @@
+id: f005
+description: Experimental commits that should be combined
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'base' > base.txt"
+  - "git add base.txt"
+  - "git commit -m 'Base setup'"
+  - "echo 'exp1' > experiment.py"
+  - "git add experiment.py"
+  - "git commit -m 'Experiment v1'"
+  - "echo 'exp2' > experiment.py"
+  - "git add experiment.py"
+  - "git commit -m 'Experiment v2'"
+  - "echo 'final' > experiment.py"
+  - "git add experiment.py"
+  - "git commit -m 'Experiment final'"
+prompt: "Find the commits that should be squashed to clean up experimental work. These are typically consecutive commits with similar purpose that were split during development. Provide the commit messages."
+expected: "Experiment v1, Experiment v2"
+scoring:
+  type: similarity
+  threshold: 0.5

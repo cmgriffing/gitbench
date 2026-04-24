@@ -1,0 +1,26 @@
+id: f012
+description: Long-running feature with many small commits
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'start' > feature.py"
+  - "git add feature.py"
+  - "git commit -m 'Initial feature'"
+  - "echo 'start\nline1' > feature.py"
+  - "git add feature.py"
+  - "git commit -m 'WIP: add line1'"
+  - "echo 'start\nline1\nline2' > feature.py"
+  - "git add feature.py"
+  - "git commit -m 'WIP: add line2'"
+  - "echo 'start\nline1\nline2\nline3' > feature.py"
+  - "git add feature.py"
+  - "git commit -m 'WIP: add line3'"
+  - "echo 'start\nline1\nline2\nline3\nline4' > feature.py"
+  - "git add feature.py"
+  - "git commit -m 'Complete feature'"
+prompt: "This repository has a feature built incrementally with many small commits. Identify all the WIP commits that should be squashed together for a cleaner history. Provide the commit messages."
+expected: "WIP: add line1, WIP: add line2, WIP: add line3"
+scoring:
+  type: similarity
+  threshold: 0.5

@@ -1,0 +1,23 @@
+id: f009
+description: Style fixes mixed with content changes
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'def foo():\n    pass' > script.py"
+  - "git add script.py"
+  - "git commit -m 'Add function foo'"
+  - "echo 'def foo():\n    x=1' > script.py"
+  - "git add script.py"
+  - "git commit -m 'WIP: add logic'"
+  - "echo 'def foo():\n    x = 1' > script.py"
+  - "git add script.py"
+  - "git commit -m 'WIP: style fix'"
+  - "echo 'def foo():\n    x = 1\n    return x' > script.py"
+  - "git add script.py"
+  - "git commit -m 'Return value'"
+prompt: "Identify the WIP commits that should be squashed - these represent incremental implementation work that should be combined. Provide the commit messages."
+expected: "WIP: add logic, WIP: style fix"
+scoring:
+  type: similarity
+  threshold: 0.5

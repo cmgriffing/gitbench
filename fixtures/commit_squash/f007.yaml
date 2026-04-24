@@ -1,0 +1,23 @@
+id: f007
+description: Test commits first then implementation
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'code' > app.py"
+  - "git add app.py"
+  - "git commit -m 'Initial app'"
+  - "echo 'import unittest' > test.py"
+  - "git add test.py"
+  - "git commit -m 'WIP: add test stub'"
+  - "echo 'import unittest\n\nclass Test(unittest.TestCase):\n    pass' > test.py"
+  - "git add test.py"
+  - "git commit -m 'WIP: expand test'"
+  - "echo 'import unittest\n\nclass Test(unittest.TestCase):\n    def test_ok(self): pass' > test.py"
+  - "git add test.py"
+  - "git commit -m 'Complete tests'"
+prompt: "Identify the WIP commits that should be squashed together for a cleaner test file addition. Provide the commit messages."
+expected: "WIP: add test stub, WIP: expand test"
+scoring:
+  type: similarity
+  threshold: 0.5
