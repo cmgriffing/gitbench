@@ -6,6 +6,8 @@ import pytest
 
 from gitbench.benchmarks import Benchmark
 from gitbench.benchmarks.commit_messages import CommitMessagesBenchmark
+from gitbench.benchmarks.merge_conflicts import MergeConflictsBenchmark
+from gitbench.benchmarks.git_bisect import GitBisectBenchmark
 
 
 class TestBenchmarkABC:
@@ -123,6 +125,158 @@ class TestCommitMessagesBenchmark:
 
         assert isinstance(result, Score)
         assert result.similarity < 0.4  # Should be fairly different (not extremely low due to common words)
+
+
+class TestMergeConflictsBenchmark:
+    """Test the merge_conflicts benchmark implementation."""
+
+    def test_benchmark_inherits_from_benchmark_abc(self):
+        """Test that MergeConflictsBenchmark is a subclass of Benchmark."""
+        assert issubclass(MergeConflictsBenchmark, Benchmark)
+
+    def test_benchmark_has_name(self):
+        """Test that the benchmark has the expected name."""
+        assert MergeConflictsBenchmark.name == "merge_conflicts"
+
+    def test_benchmark_has_description(self):
+        """Test that the benchmark has a description."""
+        assert isinstance(MergeConflictsBenchmark.description, str)
+        assert len(MergeConflictsBenchmark.description) > 0
+
+    def test_benchmark_can_be_instantiated(self):
+        """Test that MergeConflictsBenchmark can be instantiated."""
+        benchmark = MergeConflictsBenchmark()
+        assert benchmark is not None
+
+    def test_load_fixtures_returns_list(self):
+        """Test that load_fixtures returns a list of fixtures."""
+        benchmark = MergeConflictsBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert isinstance(fixtures, list)
+
+    def test_fixture_count_at_least_10(self):
+        """Test that at least 10 fixtures are loaded."""
+        benchmark = MergeConflictsBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert len(fixtures) >= 10, f"Expected at least 10 fixtures, got {len(fixtures)}"
+
+    def test_fixtures_have_required_fields(self):
+        """Test that all fixtures have required fields."""
+        benchmark = MergeConflictsBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        for fixture in fixtures:
+            assert hasattr(fixture, "id")
+            assert hasattr(fixture, "description")
+            assert hasattr(fixture, "setup")
+            assert hasattr(fixture, "prompt")
+            assert hasattr(fixture, "expected")
+            assert hasattr(fixture, "scoring")
+
+            assert isinstance(fixture.id, str)
+            assert isinstance(fixture.setup, list)
+            assert isinstance(fixture.prompt, str)
+            assert isinstance(fixture.expected, str)
+            assert isinstance(fixture.scoring, dict)
+
+    def test_fixture_ids_are_unique(self):
+        """Test that all fixture IDs are unique."""
+        benchmark = MergeConflictsBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        ids = [f.id for f in fixtures]
+        assert len(ids) == len(set(ids)), f"Duplicate fixture IDs found: {ids}"
+
+    def test_score_method_works(self):
+        """Test that the score method works correctly."""
+        from gitbench.harness.types import Score
+
+        benchmark = MergeConflictsBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        # Score with an identical expected value should score high
+        fixture = fixtures[0]
+        result = benchmark.score(fixture, fixture.expected)
+
+        assert isinstance(result, Score)
+        assert result.fixture_id == fixture.id
+        assert result.similarity > 0.8  # Should be very similar
+
+
+class TestGitBisectBenchmark:
+    """Test the git_bisect benchmark implementation."""
+
+    def test_benchmark_inherits_from_benchmark_abc(self):
+        """Test that GitBisectBenchmark is a subclass of Benchmark."""
+        assert issubclass(GitBisectBenchmark, Benchmark)
+
+    def test_benchmark_has_name(self):
+        """Test that the benchmark has the expected name."""
+        assert GitBisectBenchmark.name == "git_bisect"
+
+    def test_benchmark_has_description(self):
+        """Test that the benchmark has a description."""
+        assert isinstance(GitBisectBenchmark.description, str)
+        assert len(GitBisectBenchmark.description) > 0
+
+    def test_benchmark_can_be_instantiated(self):
+        """Test that GitBisectBenchmark can be instantiated."""
+        benchmark = GitBisectBenchmark()
+        assert benchmark is not None
+
+    def test_load_fixtures_returns_list(self):
+        """Test that load_fixtures returns a list of fixtures."""
+        benchmark = GitBisectBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert isinstance(fixtures, list)
+
+    def test_fixture_count_at_least_10(self):
+        """Test that at least 10 fixtures are loaded."""
+        benchmark = GitBisectBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert len(fixtures) >= 10, f"Expected at least 10 fixtures, got {len(fixtures)}"
+
+    def test_fixtures_have_required_fields(self):
+        """Test that all fixtures have required fields."""
+        benchmark = GitBisectBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        for fixture in fixtures:
+            assert hasattr(fixture, "id")
+            assert hasattr(fixture, "description")
+            assert hasattr(fixture, "setup")
+            assert hasattr(fixture, "prompt")
+            assert hasattr(fixture, "expected")
+            assert hasattr(fixture, "scoring")
+
+            assert isinstance(fixture.id, str)
+            assert isinstance(fixture.setup, list)
+            assert isinstance(fixture.prompt, str)
+            assert isinstance(fixture.expected, str)
+            assert isinstance(fixture.scoring, dict)
+
+    def test_fixture_ids_are_unique(self):
+        """Test that all fixture IDs are unique."""
+        benchmark = GitBisectBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        ids = [f.id for f in fixtures]
+        assert len(ids) == len(set(ids)), f"Duplicate fixture IDs found: {ids}"
+
+    def test_score_method_works(self):
+        """Test that the score method works correctly."""
+        from gitbench.harness.types import Score
+
+        benchmark = GitBisectBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        # Score with an identical expected value should score high
+        fixture = fixtures[0]
+        result = benchmark.score(fixture, fixture.expected)
+
+        assert isinstance(result, Score)
+        assert result.fixture_id == fixture.id
+        assert result.similarity > 0.8  # Should be very similar
 
 
 class TestBenchmarkDiscovery:
