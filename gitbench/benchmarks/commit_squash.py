@@ -2,30 +2,17 @@
 
 import logging
 import subprocess
-from abc import ABC, abstractmethod
 from pathlib import Path
 
+from abc import ABC, abstractmethod
+
+from gitbench.benchmarks import Benchmark
 from gitbench.harness.loader import FixtureLoader
 from gitbench.harness.scorer import Scorer
 from gitbench.harness.types import Fixture, Score
 from gitbench.utils.git import GitExecutor
 
 logger = logging.getLogger(__name__)
-
-
-class Benchmark(ABC):
-    """Abstract base class for GitBench benchmarks."""
-
-    name: str = ""
-    description: str = ""
-
-    @abstractmethod
-    def load_fixtures(self) -> list[Fixture]:
-        pass
-
-    @abstractmethod
-    def score(self, fixture: Fixture, model_output: str) -> Score:
-        pass
 
 
 class CommitSquashBenchmark(Benchmark):
