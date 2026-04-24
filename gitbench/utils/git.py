@@ -57,7 +57,12 @@ class GitExecutor:
         self._repo_path = str(repo_dir)
 
         for command in commands:
-            self._run_command(command)
+            # git merge returns exit code 1 when there are conflicts, which is
+            # the expected outcome for merge conflict fixtures. Allow it to pass.
+            if command.startswith("git merge") or command.startswith("git rebase"):
+                self._run_command_permissive(command)
+            else:
+                self._run_command(command)
 
         logger.debug(f"Repo setup complete: {self._repo_path}")
         return self._repo_path
@@ -80,6 +85,38 @@ class GitExecutor:
         )
 
         if result.returncode != 0:
+            logger.error(
+                f"Command failed: {command}\n"
+                f"Exit code: {result.returncode}\n"
+                f"stderr: {result.stderr}"
+            )
+            raise RuntimeError(
+                f"Command failed in {self._repo_path}: {command}\n"
+                f"stderr: {result.stderr}"
+            )
+
+        if result.stderr:
+            logger.debug(f"Command stderr: {result.stderr}")
+
+    def _run_command_permissive(self, command: str) -> None:
+        """Run a single command that may return exit code 1 (e.g., git merge).
+
+        Args:
+            command: The command string to execute.
+
+        Raises:
+            RuntimeError: If the command returns non-zero AND non-1 exit.
+        """
+        result = subprocess.run(
+            command,
+            shell=True,
+            cwd=self._repo_path,
+            capture_output=True,
+            text=True,
+        )
+
+        # git merge returns 1 when there are conflicts (expected)
+        if result.returncode not in (0, 1):
             logger.error(
                 f"Command failed: {command}\n"
                 f"Exit code: {result.returncode}\n"
