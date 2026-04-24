@@ -84,11 +84,13 @@ def check_git_availability() -> bool:
         return False
 
 
-def get_model_client(model_type: str) -> OpenAIAdapter | MockModelClient:
+def get_model_client(model_type: str, timeout: int = 30, retry_count: int = 3) -> OpenAIAdapter | MockModelClient:
     """Get the model client based on type.
 
     Args:
         model_type: Either 'openai' or 'mock'.
+        timeout: Timeout in seconds for model generation (default: 30).
+        retry_count: Number of retries on failure (default: 3).
 
     Returns:
         The appropriate model client instance.
@@ -97,7 +99,7 @@ def get_model_client(model_type: str) -> OpenAIAdapter | MockModelClient:
         click.ClickException: If model type is invalid.
     """
     if model_type == "openai":
-        return OpenAIAdapter()
+        return OpenAIAdapter(timeout=timeout, retry_count=retry_count)
     elif model_type == "mock":
         return MockModelClient()
     else:
@@ -238,7 +240,21 @@ def cli():
     is_flag=True,
     help="Print detailed per-fixture results",
 )
-def run(run_all: bool, benchmark_name: str | None, model: str, output: str | None, verbose: bool):
+@click.option(
+    "--timeout",
+    "-t",
+    default=30,
+    type=int,
+    help="Timeout in seconds for model generation (default: 30)",
+)
+@click.option(
+    "--retry-count",
+    "-r",
+    default=3,
+    type=int,
+    help="Number of retries on model failure (default: 3)",
+)
+def run(run_all: bool, benchmark_name: str | None, model: str, output: str | None, verbose: bool, timeout: int, retry_count: int):
     """Run one or all benchmarks against the specified model."""
     if run_all and benchmark_name:
         raise click.ClickException("Cannot use --benchmark with --all. Choose one or the other.")
@@ -254,7 +270,7 @@ def run(run_all: bool, benchmark_name: str | None, model: str, output: str | Non
     logger.info(f"Starting benchmark(s) with model: {model}")
 
     try:
-        model_client = get_model_client(model)
+        model_client = get_model_client(model, timeout=timeout, retry_count=retry_count)
 
         if run_all:
             click.echo("Running all benchmarks...", err=True)

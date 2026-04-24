@@ -29,14 +29,18 @@ class ModelInterface(ABC):
 class OpenAIAdapter(ModelInterface):
     """Adapter for OpenAI API compatible models."""
 
-    def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None):
+    def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None, timeout: int = 30, retry_count: int = 3):
         """Initialize the OpenAI adapter.
 
         Args:
             model: The model identifier (default: gpt-4o-mini).
             api_key: Optional API key. If not provided, reads from OPENAI_API_KEY env var.
+            timeout: Timeout in seconds for model generation (default: 30).
+            retry_count: Number of retries on failure (default: 3).
         """
         self.model = model
+        self.timeout = timeout
+        self.retry_count = retry_count
         self._api_key = api_key
         self._client = None
 
