@@ -8,6 +8,8 @@ from gitbench.benchmarks import Benchmark
 from gitbench.benchmarks.commit_messages import CommitMessagesBenchmark
 from gitbench.benchmarks.merge_conflicts import MergeConflictsBenchmark
 from gitbench.benchmarks.git_bisect import GitBisectBenchmark
+from gitbench.benchmarks.rebase import RebaseBenchmark
+from gitbench.benchmarks.reflog import ReflogBenchmark
 
 
 class TestBenchmarkABC:
@@ -268,6 +270,158 @@ class TestGitBisectBenchmark:
         from gitbench.harness.types import Score
 
         benchmark = GitBisectBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        # Score with an identical expected value should score high
+        fixture = fixtures[0]
+        result = benchmark.score(fixture, fixture.expected)
+
+        assert isinstance(result, Score)
+        assert result.fixture_id == fixture.id
+        assert result.similarity > 0.8  # Should be very similar
+
+
+class TestRebaseBenchmark:
+    """Test the rebase benchmark implementation."""
+
+    def test_benchmark_inherits_from_benchmark_abc(self):
+        """Test that RebaseBenchmark is a subclass of Benchmark."""
+        assert issubclass(RebaseBenchmark, Benchmark)
+
+    def test_benchmark_has_name(self):
+        """Test that the benchmark has the expected name."""
+        assert RebaseBenchmark.name == "rebase"
+
+    def test_benchmark_has_description(self):
+        """Test that the benchmark has a description."""
+        assert isinstance(RebaseBenchmark.description, str)
+        assert len(RebaseBenchmark.description) > 0
+
+    def test_benchmark_can_be_instantiated(self):
+        """Test that RebaseBenchmark can be instantiated."""
+        benchmark = RebaseBenchmark()
+        assert benchmark is not None
+
+    def test_load_fixtures_returns_list(self):
+        """Test that load_fixtures returns a list of fixtures."""
+        benchmark = RebaseBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert isinstance(fixtures, list)
+
+    def test_fixture_count_at_least_10(self):
+        """Test that at least 10 fixtures are loaded."""
+        benchmark = RebaseBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert len(fixtures) >= 10, f"Expected at least 10 fixtures, got {len(fixtures)}"
+
+    def test_fixtures_have_required_fields(self):
+        """Test that all fixtures have required fields."""
+        benchmark = RebaseBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        for fixture in fixtures:
+            assert hasattr(fixture, "id")
+            assert hasattr(fixture, "description")
+            assert hasattr(fixture, "setup")
+            assert hasattr(fixture, "prompt")
+            assert hasattr(fixture, "expected")
+            assert hasattr(fixture, "scoring")
+
+            assert isinstance(fixture.id, str)
+            assert isinstance(fixture.setup, list)
+            assert isinstance(fixture.prompt, str)
+            assert isinstance(fixture.expected, str)
+            assert isinstance(fixture.scoring, dict)
+
+    def test_fixture_ids_are_unique(self):
+        """Test that all fixture IDs are unique."""
+        benchmark = RebaseBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        ids = [f.id for f in fixtures]
+        assert len(ids) == len(set(ids)), f"Duplicate fixture IDs found: {ids}"
+
+    def test_score_method_works(self):
+        """Test that the score method works correctly."""
+        from gitbench.harness.types import Score
+
+        benchmark = RebaseBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        # Score with an identical expected value should score high
+        fixture = fixtures[0]
+        result = benchmark.score(fixture, fixture.expected)
+
+        assert isinstance(result, Score)
+        assert result.fixture_id == fixture.id
+        assert result.similarity > 0.8  # Should be very similar
+
+
+class TestReflogBenchmark:
+    """Test the reflog benchmark implementation."""
+
+    def test_benchmark_inherits_from_benchmark_abc(self):
+        """Test that ReflogBenchmark is a subclass of Benchmark."""
+        assert issubclass(ReflogBenchmark, Benchmark)
+
+    def test_benchmark_has_name(self):
+        """Test that the benchmark has the expected name."""
+        assert ReflogBenchmark.name == "reflog"
+
+    def test_benchmark_has_description(self):
+        """Test that the benchmark has a description."""
+        assert isinstance(ReflogBenchmark.description, str)
+        assert len(ReflogBenchmark.description) > 0
+
+    def test_benchmark_can_be_instantiated(self):
+        """Test that ReflogBenchmark can be instantiated."""
+        benchmark = ReflogBenchmark()
+        assert benchmark is not None
+
+    def test_load_fixtures_returns_list(self):
+        """Test that load_fixtures returns a list of fixtures."""
+        benchmark = ReflogBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert isinstance(fixtures, list)
+
+    def test_fixture_count_at_least_10(self):
+        """Test that at least 10 fixtures are loaded."""
+        benchmark = ReflogBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert len(fixtures) >= 10, f"Expected at least 10 fixtures, got {len(fixtures)}"
+
+    def test_fixtures_have_required_fields(self):
+        """Test that all fixtures have required fields."""
+        benchmark = ReflogBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        for fixture in fixtures:
+            assert hasattr(fixture, "id")
+            assert hasattr(fixture, "description")
+            assert hasattr(fixture, "setup")
+            assert hasattr(fixture, "prompt")
+            assert hasattr(fixture, "expected")
+            assert hasattr(fixture, "scoring")
+
+            assert isinstance(fixture.id, str)
+            assert isinstance(fixture.setup, list)
+            assert isinstance(fixture.prompt, str)
+            assert isinstance(fixture.expected, str)
+            assert isinstance(fixture.scoring, dict)
+
+    def test_fixture_ids_are_unique(self):
+        """Test that all fixture IDs are unique."""
+        benchmark = ReflogBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        ids = [f.id for f in fixtures]
+        assert len(ids) == len(set(ids)), f"Duplicate fixture IDs found: {ids}"
+
+    def test_score_method_works(self):
+        """Test that the score method works correctly."""
+        from gitbench.harness.types import Score
+
+        benchmark = ReflogBenchmark()
         fixtures = benchmark.load_fixtures()
 
         # Score with an identical expected value should score high
