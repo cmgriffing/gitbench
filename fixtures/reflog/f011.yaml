@@ -1,0 +1,24 @@
+id: f011
+description: Rebase with multiple branches - find lost commit from feature branch
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'v1.0' > version.txt"
+  - "git add version.txt"
+  - "git commit -m 'Release v1.0'"
+  - "git checkout -b feature-x"
+  - "echo 'export A' > env.sh"
+  - "git add env.sh"
+  - "git commit -m 'Add env export A'"
+  - "echo 'export B' >> env.sh"
+  - "git add env.sh"
+  - "git commit -m 'Add env export B - enables feature X'"
+  - "git checkout main"
+  - "git merge feature-x"
+  - "git branch -D feature-x"
+prompt: "After merging and deleting 'feature-x', you need to recover the commit 'Add env export B - enables feature X' which was the last commit on that branch. Use git reflog to identify what git command to run."
+expected: "Add env export B - enables feature X"
+scoring:
+  type: similarity
+  threshold: 0.5

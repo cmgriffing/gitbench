@@ -1,0 +1,24 @@
+id: f010
+description: Mixed reset then new commits - find the orphaned commit
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'class Model {}' > model.py"
+  - "git add model.py"
+  - "git commit -m 'Add Model class'"
+  - "echo 'class View {}' > view.py"
+  - "git add view.py"
+  - "git commit -m 'Add View class'"
+  - "echo 'class Controller {}' > controller.py"
+  - "git add controller.py"
+  - "git commit -m 'Add Controller class - completes MVC'"
+  - "git reset --mixed HEAD~1"
+  - "echo 'class Controller {}' > controller.py"
+  - "git add controller.py"
+  - "git commit -m 'Re-add Controller'"
+prompt: "You ran 'git reset --mixed HEAD~1', then made a new commit. The original 'Add Controller class - completes MVC' commit is now orphaned. Use git reflog to find the commit message you need to recover."
+expected: "Add Controller class - completes MVC"
+scoring:
+  type: similarity
+  threshold: 0.5
