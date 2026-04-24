@@ -7,9 +7,6 @@ import pytest
 from gitbench.harness.model import MockModelClient, ModelInterface, OpenAIAdapter
 from gitbench.harness.types import ModelMessage
 
-# Try to import openai for conditional tests
-openai = pytest.importorskip("openai")
-
 
 class TestModelInterface:
     """Tests for ModelInterface ABC."""
@@ -77,9 +74,21 @@ class TestMockModelClient:
         result = client.generate(messages, temperature=0.5, max_tokens=100)
         assert result == "Output"
 
+    def test_accepts_timeout_and_retry(self):
+        """Test that MockModelClient accepts timeout and retry_count params."""
+        client = MockModelClient(response="Test", timeout=10, retry_count=5)
+        assert client.timeout == 10
+        assert client.retry_count == 5
+        assert client.response == "Test"
+
 
 class TestOpenAIAdapter:
     """Tests for OpenAIAdapter."""
+
+    @pytest.fixture(autouse=True)
+    def _require_openai(self):
+        """Skip OpenAI tests when the package is not installed."""
+        pytest.importorskip("openai", reason="openai not installed")
 
     def test_creation(self):
         """Test creating an OpenAIAdapter."""
@@ -95,6 +104,18 @@ class TestOpenAIAdapter:
         """Test that default model is set correctly."""
         adapter = OpenAIAdapter()
         assert adapter.model == "gpt-4o-mini"
+
+    def test_timeout_and_retry_params(self):
+        """Test that timeout and retry_count parameters are accepted."""
+        adapter = OpenAIAdapter(timeout=5, retry_count=2)
+        assert adapter.timeout == 5
+        assert adapter.retry_count == 2
+
+    def test_default_timeout_and_retry(self):
+        """Test default timeout and retry values."""
+        adapter = OpenAIAdapter()
+        assert adapter.timeout == 30
+        assert adapter.retry_count == 3
 
     @patch("openai.OpenAI")
     def test_generate_calls_openai_api(self, mock_openai_class):
