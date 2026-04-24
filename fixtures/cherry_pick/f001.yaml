@@ -15,8 +15,8 @@ setup:
   - "echo 'Hello, Planet!' > greeting.txt"
   - "git add greeting.txt"
   - "git commit -m 'Update greeting'"
-  - "git cherry-pick feature"
-prompt: "Resolve the cherry-pick conflict in greeting.txt. The base (parent of picked commit) had 'Hello, World!'. The cherry-picked commit (feature) changed it to 'Hello, World!!!'. However, main (the current HEAD) has already changed greeting.txt to 'Hello, Planet!'. Resolve the conflict preferring the more enthusiastic greeting. Provide ONLY the resolved file content."
+  - "git cherry-pick $(git rev-parse feature)"
+prompt: "Resolve the cherry-pick conflict in greeting.txt. The base version was 'Hello, World!'. The incoming commit changed it to 'Hello, World!!!'. The current branch has 'Hello, Planet!'. Provide ONLY the resolved file content, nothing else."
 expected: "Hello, Planet!!!"
 scoring:
   type: similarity

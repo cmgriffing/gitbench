@@ -15,8 +15,8 @@ setup:
   - "printf 'server:\n  port: 8080\n  host: 0.0.0.0' > config.yaml"
   - "git add config.yaml"
   - "git commit -m 'Listen on all interfaces'"
-  - "git cherry-pick prod"
-prompt: "Resolve the cherry-pick conflict in config.yaml. The cherry-picked commit (prod) changed port from 8080 to 443 (HTTPS) while keeping host as localhost. However, main (the current HEAD) changed host to 0.0.0.0 while keeping port 8080. Keep the port change from the cherry-picked commit. Provide ONLY the resolved file content."
+  - "git cherry-pick $(git rev-parse prod)"
+prompt: "Resolve the cherry-pick conflict in config.yaml. The base had port: 8080 and host: localhost. The incoming commit changed port to 443 (HTTPS) keeping localhost. The current branch kept port 8080 but changed host to 0.0.0.0. Provide ONLY the resolved file content."
 expected: |
   server:
     port: 443

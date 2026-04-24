@@ -18,8 +18,8 @@ setup:
   - "printf 'flask==3.0.0\nrequests==2.25.0' > requirements.txt"
   - "git add app.py requirements.txt"
   - "git commit -m 'Upgrade to Flask 3 and change port'"
-  - "git cherry-pick security"
-prompt: "Resolve the cherry-pick conflicts in app.py and requirements.txt. For app.py: the cherry-picked commit (security) disabled debug while keeping port 5000, but main changed port to 8080. Take the debug=False from the cherry-pick, keep the port from main. For requirements.txt: the cherry-picked commit updated requests to 2.28.0 keeping flask 2.0.0, but main upgraded flask to 3.0.0 keeping requests 2.25.0. Take the requests update from the cherry-pick, keep flask from main. Provide ONLY the resolved app.py content (this is the primary conflict to resolve)."
+  - "git cherry-pick $(git rev-parse security)"
+prompt: "Resolve the cherry-pick conflicts in app.py and requirements.txt. For app.py: the incoming commit disabled debug while keeping port 5000, the current branch (main) changed port to 8080 while keeping debug enabled. For requirements.txt: the incoming commit updated requests to 2.28.0 keeping flask 2.0.0, the current branch upgraded flask to 3.0.0 keeping requests 2.25.0. For app.py prefer disabling debug. For requirements.txt prefer keeping the older flask version for compatibility but take the updated requests. Provide ONLY the resolved app.py content (this is the primary conflict to resolve)."
 expected: |
   app = Flask(__name__)
   app.run(port=8080, debug=False)

@@ -15,11 +15,11 @@ setup:
   - "printf 'Name: John Doe\nEmail: johndoe@personal.com\nPhone: 555-9876' > contact.txt"
   - "git add contact.txt"
   - "git commit -m 'Update contact info'"
-  - "git cherry-pick work"
-prompt: "Resolve the cherry-pick conflict in contact.txt. The cherry-picked commit (work) changed the email to john@company.com while keeping the phone as 555-1234. However, main (the current HEAD) updated both the email to johndoe@personal.com and the phone to 555-9876. Take the email from the incoming cherry-picked commit (work branch). Provide ONLY the resolved file content."
+  - "git cherry-pick $(git rev-parse work)"
+prompt: "Resolve the cherry-pick conflict in contact.txt. The base had john@example.com and 555-1234. The incoming commit kept john@example.com but updated the email to john@company.com. The current branch updated both to johndoe@personal.com and 555-9876. Provide ONLY the resolved file content with the most complete updates."
 expected: |
   Name: John Doe
-  Email: john@company.com
+  Email: johndoe@personal.com
   Phone: 555-9876
 scoring:
   type: similarity

@@ -16,8 +16,8 @@ setup:
   - "printf '{\n  \"name\": \"MyApp\",\n  \"version\": \"1.0.0\"\n}' > settings.json"
   - "git add settings.json"
   - "git commit -m 'Rename app to MyApp'"
-  - "git cherry-pick v2"
-prompt: "Resolve the cherry-pick conflict in settings.json. The cherry-picked commit (v2) bumped version to 2.0.0 keeping name as 'app'. However, main (the current HEAD) renamed name to 'MyApp' while keeping version at 1.0.0. Take the version bump from the cherry-picked commit. Provide ONLY the resolved settings.json content as valid JSON."
+  - "git cherry-pick $(git rev-parse v2)"
+prompt: "Resolve the cherry-pick conflict in settings.json. The base had name: app, version: 1.0.0. The incoming commit (v2 branch) kept name: app but bumped version to 2.0.0. The current branch (main) renamed name to MyApp but kept version 1.0.0. Provide ONLY the resolved settings.json content as valid JSON."
 expected: |
   {
     "name": "MyApp",

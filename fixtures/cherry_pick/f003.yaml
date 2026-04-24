@@ -15,8 +15,8 @@ setup:
   - "echo 'Status: Failed' > status.txt"
   - "git add status.txt"
   - "git commit -m 'Update status'"
-  - "git cherry-pick fix"
-prompt: "Resolve the cherry-pick conflict in status.txt. The cherry-picked commit (fix) set 'Status: Resolved'. But main (the current HEAD) has already updated it to 'Status: Failed'. The fix branch represents the approved resolution. Prefer the fix. Provide ONLY the resolved file content."
+  - "git cherry-pick $(git rev-parse fix)"
+prompt: "Resolve the cherry-pick conflict in status.txt. The base was 'Status: OK'. The incoming commit changed it to 'Status: Resolved'. The current branch has 'Status: Failed'. Provide ONLY the resolved file content."
 expected: "Status: Resolved"
 scoring:
   type: similarity
