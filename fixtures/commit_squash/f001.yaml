@@ -16,8 +16,8 @@ setup:
   - "echo 'print(3)' >> main.py"
   - "git add main.py"
   - "git commit -m 'Complete feature'"
-prompt: "Analyze this git history and identify which consecutive commits should be squashed together to create a cleaner history. Focus on WIP (Work In Progress) commits that represent incomplete work. Provide the commit hashes or commit messages of the commits to squash, in the order they should be combined."
+prompt: "Analyze this git history and identify which consecutive commits should be marked as squash/fixup in an interactive rebase to create a cleaner history. Focus on WIP (Work In Progress) commits that represent incomplete work. Do not include the base/anchor commit they would be squashed into. Provide the commit hashes or commit messages in the order they should be combined."
 expected: "WIP: add main.py, WIP: continue work"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

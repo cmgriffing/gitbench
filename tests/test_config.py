@@ -1,0 +1,420 @@
+"""Tests for GitBench config module."""
+
+import json
+import os
+from unittest.mock import patch
+
+import pytest
+
+from gitbench.config import find_config, find_profile_for_model, load_config, resolve_profile
+
+
+class TestFindConfig:
+    """Tests for find_config function."""
+
+    def test_returns_none_when_no_config(self, tmp_path, monkeypatch):
+        """Test that None is returned when no config file exists."""
+        monkeypatch.chdir(tmp_path)
+        result = find_config()
+        assert result is None
+
+    def test_finds_gitbench_json(self, tmp_path, monkeypatch):
+        """Test that gitbench.json in cwd is found."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / "gitbench.json"
+        config_file.write_text("{}")
+        result = find_config()
+        assert result == config_file
+
+    def test_finds_dot_gitbench_json(self, tmp_path, monkeypatch):
+        """Test that .gitbench.json in cwd is found."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / ".gitbench.json"
+        config_file.write_text("{}")
+        result = find_config()
+        assert result == config_file
+
+
+class TestLoadConfig:
+    """Tests for load_config function."""
+
+    def test_returns_empty_dict_when_no_config(self, tmp_path, monkeypatch):
+        """Test that empty dict is returned when no config file exists."""
+        monkeypatch.chdir(tmp_path)
+        result = load_config()
+        assert result == {}
+
+    def test_loads_valid_config(self, tmp_path):
+        """Test loading a valid config file."""
+        config_file = tmp_path / "gitbench.json"
+        config = {
+            "models": {
+                "test": {"model": "gpt-4o", "api_key_env": "TEST_KEY"}
+            }
+        }
+        config_file.write_text(json.dumps(config))
+        result = load_config(config_file)
+        assert result == config
+
+    def test_exits_on_invalid_json(self, tmp_path):
+        """Test that invalid JSON raises SystemExit."""
+        config_file = tmp_path / "gitbench.json"
+        config_file.write_text("{invalid json}")
+        with pytest.raises(SystemExit):
+            load_config(config_file)
+
+
+class TestResolveProfile:
+    """Tests for resolve_profile function."""
+
+    def test_raises_on_missing_profile(self):
+        """Test that missing profile raises SystemExit."""
+        config = {"models": {"existing": {"model": "gpt-4o"}}}
+        with pytest.raises(SystemExit, match="not found"):
+            resolve_profile(config, "nonexistent")
+
+    def test_returns_profile_values(self):
+        """Test resolving a profile with api_key_env set."""
+        config = {
+            "models": {
+                "test": {
+                    "model": "gpt-4o",
+                    "base_url": "https://api.openai.com/v1",
+                    "api_key_env": "TEST_API_KEY",
+                }
+            }
+        }
+        with patch.dict(os.environ, {"TEST_API_KEY": "sk-test123"}):
+            result = resolve_profile(config, "test")
+            assert result["models"] == ["gpt-4o"]
+            assert result["base_url"] == "https://api.openai.com/v1"
+            assert result["api_key"] == "sk-test123"
+            assert result["_api_key_env"] == "TEST_API_KEY"
+
+    def test_api_key_none_when_env_not_set(self):
+        """Test that api_key is None when env var is not set."""
+        config = {
+            "models": {
+                "test": {
+                    "model": "gpt-4o",
+                    "api_key_env": "NONEXISTENT_VAR_12345",
+                }
+            }
+        }
+        with patch.dict(os.environ, {}, clear=True):
+            result = resolve_profile(config, "test")
+            assert result["api_key"] is None
+            assert result["_api_key_env"] == "NONEXISTENT_VAR_12345"
+
+    def test_no_api_key_when_not_configured(self):
+        """Test profile without api_key_env."""
+        config = {
+            "models": {
+                "local": {
+                    "model": "llama3.1",
+                    "base_url": "http://localhost:11434/v1",
+                }
+            }
+        }
+        result = resolve_profile(config, "local")
+        assert result["models"] == ["llama3.1"]
+        assert "api_key" not in result
+        assert "_api_key_env" not in result
+
+    def test_direct_api_key_in_config(self):
+        """Test that api_key set directly in config is preserved."""
+        config = {
+            "models": {
+                "cloud": {
+                    "model": "gpt-4o",
+                    "base_url": "https://api.openai.com/v1",
+                    "api_key": "sk-direct-key-123",
+                }
+            }
+        }
+        result = resolve_profile(config, "cloud")
+        assert result["api_key"] == "sk-direct-key-123"
+        assert "_api_key_env" not in result
+
+    def test_api_key_env_overrides_direct_api_key(self):
+        """Test that api_key_env takes precedence over direct api_key."""
+        config = {
+            "models": {
+                "cloud": {
+                    "model": "gpt-4o",
+                    "base_url": "https://api.openai.com/v1",
+                    "api_key": "sk-direct-key",
+                    "api_key_env": "MY_API_KEY",
+                }
+            }
+        }
+        with patch.dict(os.environ, {"MY_API_KEY": "sk-from-env"}):
+            result = resolve_profile(config, "cloud")
+            assert result["api_key"] == "sk-from-env"
+            assert result["_api_key_env"] == "MY_API_KEY"
+            # Direct api_key should be overwritten by env var
+            assert "api_key" not in result or result.get("api_key") == "sk-from-env"
+
+    def test_explicit_provider_preserved(self):
+        """Test that explicit provider field is preserved."""
+        config = {
+            "models": {
+                "local": {
+                    "model": "gemma4:26b",
+                    "base_url": "http://localhost:11434/v1",
+                    "provider": "ollama",
+                }
+            }
+        }
+        result = resolve_profile(config, "local")
+        assert result["provider"] == "ollama"
+
+    def test_provider_inferred_as_ollama_for_localhost(self):
+        """Test that provider defaults to 'ollama' when base_url contains localhost."""
+        config = {
+            "models": {
+                "local": {
+                    "model": "llama3.1:8b",
+                    "base_url": "http://localhost:11434/v1",
+                }
+            }
+        }
+        result = resolve_profile(config, "local")
+        assert result["provider"] == "ollama"
+
+    def test_provider_inferred_as_ollama_for_127_0_0_1(self):
+        """Test that provider defaults to 'ollama' for 127.0.0.1."""
+        config = {
+            "models": {
+                "local": {
+                    "model": "llama3.1:8b",
+                    "base_url": "http://127.0.0.1:11434",
+                }
+            }
+        }
+        result = resolve_profile(config, "local")
+        assert result["provider"] == "ollama"
+
+    def test_provider_inferred_as_openai_for_remote_url(self):
+        """Test that provider defaults to 'openai' for remote URLs."""
+        config = {
+            "models": {
+                "cloud": {
+                    "model": "gpt-4o",
+                    "base_url": "https://api.openai.com/v1",
+                    "api_key_env": "OPENAI_API_KEY",
+                }
+            }
+        }
+        result = resolve_profile(config, "cloud")
+        assert result["provider"] == "openai"
+
+    def test_provider_inferred_as_openai_when_no_base_url(self):
+        """Test that provider defaults to 'openai' when no base_url is set."""
+        config = {
+            "models": {
+                "default": {
+                    "model": "gpt-4o-mini",
+                    "api_key_env": "OPENAI_API_KEY",
+                }
+            }
+        }
+        result = resolve_profile(config, "default")
+        assert result["provider"] == "openai"
+
+
+class TestFindProfileForModel:
+    """Tests for find_profile_for_model function."""
+
+    def test_finds_matching_profile(self):
+        """Test finding a profile by model name."""
+        config = {
+            "models": {
+                "local-ollama": {
+                    "model": "gemma4:26b",
+                    "base_url": "http://localhost:11434/v1",
+                    "provider": "ollama",
+                },
+                "cloud-openai": {
+                    "model": "gpt-4o",
+                    "base_url": "https://api.openai.com/v1",
+                    "api_key_env": "OPENAI_API_KEY",
+                },
+            }
+        }
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test"}):
+            result = find_profile_for_model(config, "gemma4:26b")
+            assert result["models"] == ["gemma4:26b"]
+            assert result["provider"] == "ollama"
+            assert result["base_url"] == "http://localhost:11434/v1"
+
+    def test_returns_empty_dict_when_no_match(self):
+        """Test that empty dict is returned when model is not in any profile."""
+        config = {
+            "models": {
+                "local": {
+                    "model": "llama3.1:8b",
+                    "base_url": "http://localhost:11434",
+                }
+            }
+        }
+        result = find_profile_for_model(config, "unknown-model")
+        assert result == {}
+
+    def test_returns_empty_dict_when_no_config(self):
+        """Test that empty dict is returned when config has no models."""
+        config = {}
+        result = find_profile_for_model(config, "gemma4:26b")
+        assert result == {}
+
+    def test_returns_first_matching_profile(self):
+        """Test that the first matching profile is returned."""
+        config = {
+            "models": {
+                "profile-a": {
+                    "model": "llama3.1:8b",
+                    "base_url": "http://localhost:11434",
+                    "provider": "ollama",
+                },
+                "profile-b": {
+                    "model": "llama3.1:8b",
+                    "base_url": "http://other-host:11434",
+                    "provider": "ollama",
+                },
+            }
+        }
+        result = find_profile_for_model(config, "llama3.1:8b")
+        assert result["base_url"] == "http://localhost:11434"
+
+    def test_resolves_provider_for_matched_profile(self):
+        """Test that the returned profile has provider resolved."""
+        config = {
+            "models": {
+                "local": {
+                    "model": "llama3.1:8b",
+                    "base_url": "http://localhost:11434",
+                    # No explicit provider — should be inferred
+                }
+            }
+        }
+        result = find_profile_for_model(config, "llama3.1:8b")
+        assert result["provider"] == "ollama"
+
+
+class TestMultipleModels:
+    """Tests for multiple models per profile."""
+
+    def test_models_list_normalized(self):
+        """Test that 'models' list is preserved as-is."""
+        config = {
+            "models": {
+                "openrouter": {
+                    "models": ["anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash"],
+                    "base_url": "https://openrouter.ai/api/v1",
+                    "api_key_env": "OPENROUTER_KEY",
+                }
+            }
+        }
+        with patch.dict(os.environ, {"OPENROUTER_KEY": "sk-test"}):
+            result = resolve_profile(config, "openrouter")
+            assert result["models"] == ["anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash"]
+            assert "model" not in result
+
+    def test_single_model_string_normalized_to_list(self):
+        """Test that single 'model' string is normalized to a list."""
+        config = {
+            "models": {
+                "test": {
+                    "model": "gpt-4o",
+                    "base_url": "https://api.openai.com/v1",
+                }
+            }
+        }
+        result = resolve_profile(config, "test")
+        assert result["models"] == ["gpt-4o"]
+        assert "model" not in result
+
+    def test_models_string_normalized_to_list(self):
+        """Test that 'models' as a string is normalized to a list."""
+        config = {
+            "models": {
+                "test": {
+                    "models": "gpt-4o",
+                    "base_url": "https://api.openai.com/v1",
+                }
+            }
+        }
+        result = resolve_profile(config, "test")
+        assert result["models"] == ["gpt-4o"]
+
+    def test_find_profile_with_models_list(self):
+        """Test finding a profile that uses 'models' list."""
+        config = {
+            "models": {
+                "openrouter": {
+                    "models": ["anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash"],
+                    "base_url": "https://openrouter.ai/api/v1",
+                    "api_key_env": "OPENROUTER_KEY",
+                }
+            }
+        }
+        with patch.dict(os.environ, {"OPENROUTER_KEY": "sk-test"}):
+            result = find_profile_for_model(config, "google/gemini-2.5-flash")
+            assert result["models"] == ["anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash"]
+
+    def test_find_profile_returns_empty_for_missing_model_in_list(self):
+        """Test that find_profile returns empty when model not in any list."""
+        config = {
+            "models": {
+                "openrouter": {
+                    "models": ["anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash"],
+                    "base_url": "https://openrouter.ai/api/v1",
+                }
+            }
+        }
+        result = find_profile_for_model(config, "openai/gpt-4o")
+        assert result == {}
+
+    def test_empty_models_list(self):
+        """Test profile with empty models list."""
+        config = {
+            "models": {
+                "empty": {
+                    "models": [],
+                    "base_url": "https://api.example.com/v1",
+                }
+            }
+        }
+        result = resolve_profile(config, "empty")
+        assert result["models"] == []
+
+    def test_model_list_normalized(self):
+        """Test that 'model' as a list is normalized to 'models' list."""
+        config = {
+            "models": {
+                "openrouter": {
+                    "model": ["openai/gpt-oss-20b", "openai/gpt-oss-120b"],
+                    "base_url": "https://openrouter.ai/api/v1",
+                    "api_key_env": "OPENROUTER_KEY",
+                }
+            }
+        }
+        with patch.dict(os.environ, {"OPENROUTER_KEY": "sk-test"}):
+            result = resolve_profile(config, "openrouter")
+            assert result["models"] == ["openai/gpt-oss-20b", "openai/gpt-oss-120b"]
+            assert "model" not in result
+
+    def test_find_profile_with_model_list(self):
+        """Test finding a profile that uses 'model' as a list."""
+        config = {
+            "models": {
+                "openrouter": {
+                    "model": ["openai/gpt-oss-20b", "deepseek/deepseek-v4-flash"],
+                    "base_url": "https://openrouter.ai/api/v1",
+                    "api_key_env": "OPENROUTER_KEY",
+                }
+            }
+        }
+        with patch.dict(os.environ, {"OPENROUTER_KEY": "sk-test"}):
+            result = find_profile_for_model(config, "deepseek/deepseek-v4-flash")
+            assert result["models"] == ["openai/gpt-oss-20b", "deepseek/deepseek-v4-flash"]

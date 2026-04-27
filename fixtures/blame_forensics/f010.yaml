@@ -1,0 +1,23 @@
+id: f010
+description: "Broken import after module rename"
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "mkdir -p src"
+  - "echo 'from utils import helper' > src/main.py"
+  - "git add src/main.py"
+  - "git commit -m 'Import helper from utils'"
+  - "echo 'from helpers import helper' > src/main.py"
+  - "git add src/main.py"
+  - "git commit -m 'Update import path'"
+  - "echo 'from utils import helper\nfrom helpers import formatter' > src/main.py"
+  - "git add src/main.py"
+  - "git commit -m 'Add formatter import'"
+  - "echo 'from utils import helper\nfrom util_helpers import formatter' > src/main.py"
+  - "git add src/main.py"
+  - "git commit -m 'Fix formatter import'"
+prompt: "There is an import error in src/main.py. The module 'helpers' does not exist. Look at git log and git blame. Which commit introduced the broken import? Output ONLY the commit message of that commit, nothing else."
+expected: "Update import path"
+scoring:
+  type: exact_match

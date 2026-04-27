@@ -26,22 +26,21 @@ classifiers = [
 dependencies = [
     "click>=8.0.0",
     "pyyaml>=6.0",
+    "openai>=1.0.0",
 ]
 
 [project.optional-dependencies]
-openai = [
-    "openai>=1.0.0",
-]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.1.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
 ]
 all = [
-    "openai>=1.0.0",
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.1.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
 ]
@@ -62,7 +61,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = ["-v", "--tb=short"]
+addopts = ["-v", "--tb=short", "--timeout=300"]
 
 [tool.black]
 line-length = 100

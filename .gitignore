@@ -29,3 +29,5 @@ vendor/
 coverage/
 .cache/
 tmp/
+gitbench.json
+.gitbench.json

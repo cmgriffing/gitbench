@@ -1,0 +1,23 @@
+id: f001
+description: "SQL injection introduced by removing input validation"
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "mkdir -p src"
+  - "echo 'def query(user): return db.execute(f\"SELECT * FROM users WHERE name = {user}\")' > src/db.py"
+  - "git add src/db.py"
+  - "git commit -m 'Initial query function'"
+  - "echo 'import re' > src/validate.py"
+  - "git add src/validate.py"
+  - "git commit -m 'Add validation module'"
+  - "echo 'def query(user): user = re.sub(r\"[^a-zA-Z]\", \"\", user); return db.execute(f\"SELECT * FROM users WHERE name = \\047{user}\\047\")' > src/db.py"
+  - "git add src/db.py"
+  - "git commit -m 'Sanitize input in query function'"
+  - "echo 'def query(user): return db.execute(f\"SELECT * FROM users WHERE name = {user}\")' > src/db.py"
+  - "git add src/db.py"
+  - "git commit -m 'Simplify query for performance'"
+prompt: "There is a SQL injection vulnerability in src/db.py. Look at the git log and git blame to find which commit introduced it. Output ONLY the commit message of the commit that introduced the bug, nothing else."
+expected: "Simplify query for performance"
+scoring:
+  type: exact_match

@@ -46,7 +46,7 @@ class ReflogBenchmark(Benchmark):
         logger.info(f"Loaded {len(fixtures)} fixtures")
         return fixtures
 
-    def score(self, fixture: Fixture, model_output: str) -> Score:
+    def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         """Score the model's recovery answer against the expected value.
 
         Args:
@@ -56,7 +56,7 @@ class ReflogBenchmark(Benchmark):
         Returns:
             A Score object with passed/failed status and similarity value.
         """
-        return self._scorer.score(fixture, model_output)
+        return self._scorer.score(fixture, model_output, repo_path=repo_path)
 
     def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
         """Set up a git repository for a reflog recovery scenario.

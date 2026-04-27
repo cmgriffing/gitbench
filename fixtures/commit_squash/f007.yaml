@@ -16,8 +16,8 @@ setup:
   - "echo 'import unittest\n\nclass Test(unittest.TestCase):\n    def test_ok(self): pass' > test.py"
   - "git add test.py"
   - "git commit -m 'Complete tests'"
-prompt: "Identify the WIP commits that should be squashed together for a cleaner test file addition. Provide the commit messages."
+prompt: "Identify the WIP commits that should be marked as squash/fixup for a cleaner test file addition. Do not include the final complete-tests commit. Provide the commit messages."
 expected: "WIP: add test stub, WIP: expand test"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

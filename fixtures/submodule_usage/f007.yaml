@@ -1,0 +1,30 @@
+id: f007
+description: "Add multiple submodules"
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'App' > app.txt"
+  - "git add app.txt"
+  - "git commit -m 'Initial commit'"
+  - "mkdir -p /tmp/lib-src && cd /tmp/lib-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'lib code' > lib.py && git add lib.py && git commit -m 'Initial lib'"
+  - "git clone --bare /tmp/lib-src ../lib-bare"
+  - "mkdir -p /tmp/utils-src && cd /tmp/utils-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'utils code' > utils.py && git add utils.py && git commit -m 'Initial utils'"
+  - "git clone --bare /tmp/utils-src ../utils-bare"
+  - "git config --global protocol.file.allow always"
+prompt: "Add the repository at '../lib-bare' as submodule 'lib' and '../utils-bare' as submodule 'utils'. Output ONLY the commands to run, one per line."
+expected: "git submodule add ../lib-bare lib\ngit submodule add ../utils-bare utils"
+scoring:
+  type: state_assertions
+  expected_state:
+    assertions:
+      - type: dir_exists
+        path: "lib"
+      - type: dir_exists
+        path: "utils"
+      - type: file_content
+        path: "lib/lib.py"
+        value: "lib code"
+      - type: file_content
+        path: "utils/utils.py"
+        value: "utils code"

@@ -16,8 +16,8 @@ setup:
   - "echo 'line1\nline2\nline3' > data.txt"
   - "git add data.txt"
   - "git commit -m 'Add complete data'"
-prompt: "This repository has a series of commits that incrementally build up a feature. Identify the WIP commits that should be squashed into a single commit. Provide the commit messages to squash."
+prompt: "This repository has a series of commits that incrementally build up a feature. Identify the WIP commits that should be marked as squash/fixup into a single clean commit. Do not include the final completed-feature commit. Provide the commit messages to squash."
 expected: "WIP: adding data, WIP: continue data"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

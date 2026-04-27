@@ -65,20 +65,33 @@ gitbench run --all --model mock --output results.json
 
 ## Benchmarks
 
-GitBench includes 8 benchmark categories:
+GitBench includes 12 benchmark categories:
 
-| Benchmark | Description | Fixtures |
-|-----------|-------------|----------|
-| `cherry_pick` | Apply specific commits from one branch to another, resolving conflicts | 12 |
-| `commit_messages` | Given a diff, generate a meaningful commit message | 12 |
-| `commit_squash` | Squash multiple commits into a single coherent commit | 12 |
-| `git_bisect` | Identify the commit that introduced a bug via automated bisect | 12 |
-| `merge_conflicts` | Resolve merge conflicts producing the correct final tree | 12 |
-| `rebase` | Clean up commit history before PR (squash, reorder, amend) | 12 |
-| `reflog` | Restore lost commits or fix detached HEAD state | 12 |
-| `stash_recovery` | Recover stashed changes or resolve stash pop conflicts | 12 |
+| Benchmark         | Description                                                            | Fixtures | Scoring       |
+| ----------------- | ---------------------------------------------------------------------- | -------- | ------------- |
+| `blame_forensics` | Trace which commit introduced a bug using git blame/log                | 12       | exact_match   |
+| `branch_cleanup`  | Identify branches to delete (fully merged into main)                   | 12       | exact_match   |
+| `cherry_pick`     | Apply specific commits from one branch to another, resolving conflicts | 12       | similarity    |
+| `commit_messages` | Given a diff, generate a meaningful commit message                     | 12       | similarity    |
+| `commit_squash`   | Squash multiple commits into a single coherent commit                  | 12       | commit_selection |
+| `git_bisect`      | Identify the commit that introduced a bug via automated bisect         | 12       | similarity    |
+| `merge_conflicts` | Resolve merge conflicts producing the correct final tree               | 12       | similarity    |
+| `rebase`          | Clean up commit history before PR (squash, reorder, amend)             | 12       | similarity    |
+| `reflog`          | Restore lost commits or fix detached HEAD state                        | 12       | similarity    |
+| `stash_recovery`  | Recover stashed changes or resolve stash pop conflicts                 | 12       | similarity    |
+| `submodule_usage` | Manage git submodules for external dependencies                        | 12       | state_assertions |
+| `worktree_usage`  | Use git worktrees for parallel development                             | 12       | state_assertions |
 
-Each benchmark has 12 fixtures — 96 total — enough for meaningful pass@1 scoring.
+Each benchmark has 12 fixtures — 144 total — for meaningful pass@1 scoring.
+
+### Scoring Types
+
+| Type | Description |
+| ---- | ----------- |
+| `similarity` | Text similarity via `difflib.SequenceMatcher`. Default threshold: 0.5 |
+| `exact_match` | Exact string comparison after stripping whitespace |
+| `state_assertions` | Execute model output as git commands, then verify repo state via assertions (file_exists, dir_exists, file_content, branch_exists, git_config, git_output) |
+| `structured` | Parse model output as key-value fields, score each independently (exact_match or similarity per field) |
 
 ## Output Format
 
@@ -112,8 +125,8 @@ When running `--all`, output is a combined JSON with a summary and per-benchmark
 ```json
 {
   "summary": {
-    "total_benchmarks": 8,
-    "total_fixtures": 96,
+    "total_benchmarks": 12,
+    "total_fixtures": 144,
     "total_passed": 15,
     "overall_pass_at_k": 0.25
   },
@@ -131,24 +144,24 @@ When running `--all`, output is a combined JSON with a summary and per-benchmark
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `benchmark` | `string` | Benchmark name |
-| `total` | `integer` | Total number of fixtures |
-| `passed` | `integer` | Number of fixtures that passed |
-| `pass_at_k` | `float` | Fraction of fixtures with at least one passing attempt |
-| `scores` | `list` | Per-fixture score objects |
-| `errors` | `integer` | Number of fixtures that produced an error |
+| Field       | Type      | Description                                            |
+| ----------- | --------- | ------------------------------------------------------ |
+| `benchmark` | `string`  | Benchmark name                                         |
+| `total`     | `integer` | Total number of fixtures                               |
+| `passed`    | `integer` | Number of fixtures that passed                         |
+| `pass_at_k` | `float`   | Fraction of fixtures with at least one passing attempt |
+| `scores`    | `list`    | Per-fixture score objects                              |
+| `errors`    | `integer` | Number of fixtures that produced an error              |
 
 Each score object contains:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `fixture_id` | `string` | Fixture identifier |
-| `passed` | `boolean` | Whether the model output passed the threshold |
-| `similarity` | `float` | Text similarity score (0.0 – 1.0) |
-| `model_output` | `string` | The model's generated output |
-| `error` | `string \| null` | Error message if processing failed |
+| Field          | Type             | Description                                   |
+| -------------- | ---------------- | --------------------------------------------- |
+| `fixture_id`   | `string`         | Fixture identifier                            |
+| `passed`       | `boolean`        | Whether the model output passed the threshold |
+| `similarity`   | `float`          | Text similarity score (0.0 – 1.0)             |
+| `model_output` | `string`         | The model's generated output                  |
+| `error`        | `string \| null` | Error message if processing failed            |
 
 ### Adding New Fixtures
 
@@ -178,7 +191,7 @@ scoring:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-benchmark) for the step-by-step guide. The short version: drop a Python module inheriting from `Benchmark` in `gitbench/benchmarks/`. No registration or harness changes needed — auto-discovered via `importlib`.
 
-**Important gotcha — rebase vs merge conflict polarity:** In merge conflicts, HEAD's changes appear above `=======`. In rebase conflicts, the polarity is reversed — upstream's changes appear *below* `=======`. When writing rebase fixtures, describe the correct branch context in the prompt.
+**Important gotcha — rebase vs merge conflict polarity:** In merge conflicts, HEAD's changes appear above `=======`. In rebase conflicts, the polarity is reversed — upstream's changes appear _below_ `=======`. When writing rebase fixtures, describe the correct branch context in the prompt.
 
 **Important gotcha — GitExecutor exit codes:** `git merge` and `git rebase` exit with code 1 on conflicts. `GitExecutor.setup_repo()` handles this automatically — do not call `_run_command()` directly for merge/rebase commands in fixtures.
 
@@ -213,6 +226,8 @@ gitbench/
 │   └── scorer.py          # Scorer: similarity scoring and pass@k computation
 ├── benchmarks/
 │   ├── __init__.py       # Benchmark abstract base class
+│   ├── blame_forensics.py # Blame/forensics benchmark
+│   ├── branch_cleanup.py # Branch cleanup benchmark
 │   ├── cherry_pick.py    # Cherry-pick benchmark
 │   ├── commit_messages.py # Commit message generation benchmark
 │   ├── commit_squash.py  # Commit squash benchmark
@@ -220,10 +235,14 @@ gitbench/
 │   ├── merge_conflicts.py # Merge conflict resolution benchmark
 │   ├── rebase.py         # Interactive rebase benchmark
 │   ├── reflog.py         # Reflog/detached HEAD recovery benchmark
-│   └── stash_recovery.py # Stash recovery benchmark
+│   ├── stash_recovery.py # Stash recovery benchmark
+│   ├── submodule_usage.py # Submodule usage benchmark
+│   └── worktree_usage.py # Worktree usage benchmark
 └── utils/
     └── git.py            # GitExecutor: sandboxed git repo management
 fixtures/
+├── blame_forensics/     # 12 YAML fixtures for blame/forensics benchmark
+├── branch_cleanup/      # 12 YAML fixtures for branch cleanup benchmark
 ├── cherry_pick/         # 12 YAML fixtures for cherry-pick benchmark
 ├── commit_messages/     # 12 YAML fixtures for commit message benchmark
 ├── commit_squash/       # 12 YAML fixtures for commit squash benchmark
@@ -231,7 +250,9 @@ fixtures/
 ├── merge_conflicts/     # 12 YAML fixtures for merge conflict benchmark
 ├── rebase/              # 12 YAML fixtures for rebase benchmark
 ├── reflog/              # 12 YAML fixtures for reflog benchmark
-└── stash_recovery/      # 12 YAML fixtures for stash recovery benchmark
+├── stash_recovery/      # 12 YAML fixtures for stash recovery benchmark
+├── submodule_usage/     # 12 YAML fixtures for submodule usage benchmark
+└── worktree_usage/      # 12 YAML fixtures for worktree usage benchmark
 tests/                    # Unit and integration tests
 ```
 

@@ -1,0 +1,24 @@
+id: f003
+description: "Remove a submodule"
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'App' > app.txt"
+  - "git add app.txt"
+  - "git commit -m 'Initial commit'"
+  - "mkdir -p /tmp/lib-src && cd /tmp/lib-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'lib code' > lib.py && git add lib.py && git commit -m 'Initial lib'"
+  - "git clone --bare /tmp/lib-src ../lib-bare"
+  - "git config --global protocol.file.allow always"
+  - "git submodule add ../lib-bare lib"
+  - "git add .gitmodules lib"
+  - "git commit -m 'Add lib submodule'"
+prompt: "Remove the submodule 'lib' completely. Output ONLY the commands to run, one per line. The .gitmodules file should no longer reference 'lib' after removal."
+expected: "git submodule deinit -f lib\ngit rm -f lib\nrm -rf .git/modules/lib"
+scoring:
+  type: state_assertions
+  expected_state:
+    assertions:
+      - type: git_output
+        command: "git submodule status"
+        contains: "lib"

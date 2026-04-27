@@ -1,0 +1,24 @@
+id: f004
+description: "List existing worktrees"
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'Hello' > hello.txt"
+  - "git add hello.txt"
+  - "git commit -m 'Initial commit'"
+  - "git checkout -b feature"
+  - "echo 'Feature' > feature.txt"
+  - "git add feature.txt"
+  - "git commit -m 'Add feature'"
+  - "git checkout main"
+  - "git worktree add ../feature-wt feature"
+prompt: "Run the command to list all git worktrees. Output ONLY the git command, nothing else."
+expected: "git worktree list"
+scoring:
+  type: state_assertions
+  expected_state:
+    assertions:
+      - type: git_output
+        command: "git worktree list"
+        contains: "feature-wt"

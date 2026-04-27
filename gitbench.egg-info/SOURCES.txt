@@ -2,6 +2,8 @@ README.md
 pyproject.toml
 gitbench/__init__.py
 gitbench/cli.py
+gitbench/config.py
+gitbench/render.py
 gitbench.egg-info/PKG-INFO
 gitbench.egg-info/SOURCES.txt
 gitbench.egg-info/dependency_links.txt
@@ -9,11 +11,14 @@ gitbench.egg-info/entry_points.txt
 gitbench.egg-info/requires.txt
 gitbench.egg-info/top_level.txt
 gitbench/benchmarks/__init__.py
+gitbench/benchmarks/cherry_pick.py
 gitbench/benchmarks/commit_messages.py
+gitbench/benchmarks/commit_squash.py
 gitbench/benchmarks/git_bisect.py
 gitbench/benchmarks/merge_conflicts.py
 gitbench/benchmarks/rebase.py
 gitbench/benchmarks/reflog.py
+gitbench/benchmarks/stash_recovery.py
 gitbench/harness/loader.py
 gitbench/harness/model.py
 gitbench/harness/scorer.py
@@ -21,9 +26,11 @@ gitbench/harness/types.py
 gitbench/utils/git.py
 tests/test_benchmarks.py
 tests/test_cli.py
+tests/test_config.py
 tests/test_git.py
 tests/test_integration.py
 tests/test_loader.py
 tests/test_model.py
+tests/test_render.py
 tests/test_scorer.py
 tests/test_types.py

@@ -19,8 +19,8 @@ setup:
   - "echo 'start\nline1\nline2\nline3\nline4' > feature.py"
   - "git add feature.py"
   - "git commit -m 'Complete feature'"
-prompt: "This repository has a feature built incrementally with many small commits. Identify all the WIP commits that should be squashed together for a cleaner history. Provide the commit messages."
+prompt: "This repository has a feature built incrementally with many small commits. Identify all the WIP commits that should be marked as squash/fixup for a cleaner history. Do not include the initial or final feature anchor commit. Provide the commit messages."
 expected: "WIP: add line1, WIP: add line2, WIP: add line3"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

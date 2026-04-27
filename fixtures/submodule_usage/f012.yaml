@@ -1,0 +1,25 @@
+id: f012
+description: "Add submodule with specific branch"
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'App' > app.txt"
+  - "git add app.txt"
+  - "git commit -m 'Initial commit'"
+  - "mkdir -p /tmp/lib-src && cd /tmp/lib-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'lib main' > lib.py && git add lib.py && git commit -m 'Initial lib on main' && git checkout -b develop && echo 'lib develop' > dev.py && git add dev.py && git commit -m 'Develop branch'"
+  - "git clone --bare /tmp/lib-src ../lib-bare"
+  - "git config --global protocol.file.allow always"
+prompt: "Add the repository at '../lib-bare' as a submodule at path 'lib', tracking the 'develop' branch. Output ONLY the git submodule command, nothing else."
+expected: "git submodule add -b develop ../lib-bare lib"
+scoring:
+  type: state_assertions
+  expected_state:
+    assertions:
+      - type: dir_exists
+        path: "lib"
+      - type: file_exists
+        path: "lib/dev.py"
+      - type: git_output
+        command: "cat .gitmodules"
+        contains: "develop"

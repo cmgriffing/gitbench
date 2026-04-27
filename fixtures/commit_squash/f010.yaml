@@ -16,8 +16,8 @@ setup:
   - "grep -v debug app.js > app.js.tmp && mv app.js.tmp app.js"
   - "git add app.js"
   - "git commit -m 'Remove debug statements'"
-prompt: "The history contains debug commits that should be squashed and removed as part of the final feature commit. Identify the debug-related WIP commits that should be squashed into the final feature. Provide the commit messages."
+prompt: "The history contains debug commits that should be marked as squash/fixup and removed as part of the final feature commit. Identify the debug-related WIP commits only. Do not include the cleanup commit that removes the debug statements. Provide the commit messages."
 expected: "WIP: debug commit 1, WIP: debug commit 2"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

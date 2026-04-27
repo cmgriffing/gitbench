@@ -16,8 +16,8 @@ setup:
   - "echo '// final' > app.js"
   - "git add app.js"
   - "git commit -m 'Finalize app.js'"
-prompt: "Analyze this git history. Multiple consecutive commits updating the same file suggest the changes should be combined. Identify the commits that should be squashed together. Provide the commit messages in order."
+prompt: "Analyze this git history. Multiple consecutive WIP commits updating the same file suggest the changes should be combined. Identify the WIP commits that should be marked as squash/fixup in an interactive rebase. Do not include the initial or final anchor commit. Provide the commit messages in order."
 expected: "WIP: update app.js, WIP: more updates"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

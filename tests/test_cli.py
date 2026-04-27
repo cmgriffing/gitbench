@@ -43,17 +43,75 @@ class TestGetModelClient:
         assert isinstance(client, MockModelClient)
 
     def test_returns_openai_adapter(self):
-        """Test that 'openai' returns an OpenAIAdapter."""
+        """Test that 'openai' model name returns an OpenAIAdapter."""
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
             client = get_model_client("openai")
             from gitbench.harness.model import OpenAIAdapter
             assert isinstance(client, OpenAIAdapter)
 
-    def test_raises_on_invalid_model_type(self):
-        """Test that invalid model type raises ClickException."""
-        from click import ClickException
-        with pytest.raises(ClickException):
-            get_model_client("invalid_model")
+    def test_returns_openai_adapter_for_any_model_name(self):
+        """Test that any non-'mock' model name returns an OpenAIAdapter."""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            # Standard model name
+            client = get_model_client("gpt-4o")
+            from gitbench.harness.model import OpenAIAdapter
+            assert isinstance(client, OpenAIAdapter)
+            assert client.model == "gpt-4o"
+
+            # OpenRouter-style model name
+            client2 = get_model_client("anthropic/claude-sonnet-4")
+            assert isinstance(client2, OpenAIAdapter)
+            assert client2.model == "anthropic/claude-sonnet-4"
+
+    def test_passes_base_url_to_adapter(self):
+        """Test that base_url is forwarded to OpenAIAdapter."""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            client = get_model_client("anthropic/claude-sonnet-4", base_url="https://openrouter.ai/api/v1")
+            from gitbench.harness.model import OpenAIAdapter
+            assert isinstance(client, OpenAIAdapter)
+            assert client._base_url == "https://openrouter.ai/api/v1"
+
+    def test_provider_ollama_returns_ollama_adapter(self):
+        """Test that provider='ollama' returns an OllamaAdapter."""
+        from gitbench.harness.model import OllamaAdapter
+        client = get_model_client("gemma4:26b", provider="ollama")
+        assert isinstance(client, OllamaAdapter)
+        assert client.model == "gemma4:26b"
+        assert client.base_url == "http://localhost:11434"
+
+    def test_provider_ollama_with_base_url(self):
+        """Test that provider='ollama' uses the given base_url."""
+        from gitbench.harness.model import OllamaAdapter
+        client = get_model_client("llama3.1:8b", base_url="http://192.168.1.50:11434", provider="ollama")
+        assert isinstance(client, OllamaAdapter)
+        assert client.base_url == "http://192.168.1.50:11434"
+
+    def test_provider_ollama_strips_v1_suffix(self):
+        """Test that /v1 suffix is stripped from Ollama base_url."""
+        from gitbench.harness.model import OllamaAdapter
+        client = get_model_client("gemma4:26b", base_url="http://localhost:11434/v1", provider="ollama")
+        assert isinstance(client, OllamaAdapter)
+        assert client.base_url == "http://localhost:11434"
+
+    def test_provider_openai_returns_openai_adapter(self):
+        """Test that provider='openai' returns an OpenAIAdapter."""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            from gitbench.harness.model import OpenAIAdapter
+            client = get_model_client("gpt-4o", provider="openai")
+            assert isinstance(client, OpenAIAdapter)
+
+    def test_provider_openai_overrides_localhost_base_url(self):
+        """Test that explicit provider='openai' wins even with localhost base_url."""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            from gitbench.harness.model import OpenAIAdapter
+            client = get_model_client("my-model", base_url="http://localhost:8080/v1", provider="openai")
+            assert isinstance(client, OpenAIAdapter)
+
+    def test_infer_ollama_from_localhost_base_url(self):
+        """Test that localhost base_url infers Ollama when provider is unset."""
+        from gitbench.harness.model import OllamaAdapter
+        client = get_model_client("any-model", base_url="http://localhost:11434")
+        assert isinstance(client, OllamaAdapter)
 
 
 class TestListCommand:
@@ -154,3 +212,250 @@ class TestRunCommand:
             )
             assert result.exit_code == 1
             assert "Git" in result.output or "git" in result.output
+
+    def test_run_with_output_dir(self, runner, tmp_path):
+        """Test that --output-dir writes a per-run JSON file."""
+        output_dir = tmp_path / "results"
+
+        with patch("gitbench.cli.check_git_availability", return_value=True):
+            result = runner.invoke(
+                cli,
+                ["run", "--benchmark", "commit_messages", "--model", "mock", "--output-dir", str(output_dir)],
+            )
+            assert result.exit_code == 0
+
+            # Directory should be created with one JSON file
+            assert output_dir.exists()
+            files = list(output_dir.glob("*.json"))
+            assert len(files) == 1
+
+            # File should contain envelope with metadata
+            data = json.loads(files[0].read_text())
+            assert data["version"] == 1
+            assert "timestamp" in data
+            assert data["model"] == "mock"
+            assert "summary" in data
+            assert "results" in data
+            assert len(data["results"]) == 1
+            assert data["results"][0]["benchmark"] == "commit_messages"
+
+    def test_run_with_jsonl(self, runner, tmp_path):
+        """Test that --jsonl appends a JSON line to a file."""
+        jsonl_path = tmp_path / "results.jsonl"
+
+        with patch("gitbench.cli.check_git_availability", return_value=True):
+            # First run
+            result = runner.invoke(
+                cli,
+                ["run", "--benchmark", "commit_messages", "--model", "mock", "--jsonl", str(jsonl_path)],
+            )
+            assert result.exit_code == 0
+
+            # Second run (should append, not overwrite)
+            result = runner.invoke(
+                cli,
+                ["run", "--benchmark", "commit_messages", "--model", "mock", "--jsonl", str(jsonl_path)],
+            )
+            assert result.exit_code == 0
+
+            # File should have two lines
+            lines = jsonl_path.read_text().strip().split("\n")
+            assert len(lines) == 2
+
+            # Each line should be valid JSON with envelope
+            for line in lines:
+                data = json.loads(line)
+                assert data["version"] == 1
+                assert "timestamp" in data
+                assert data["model"] == "mock"
+                assert "results" in data
+
+    def test_run_with_output_dir_and_jsonl(self, runner, tmp_path):
+        """Test that --output-dir and --jsonl can be used together."""
+        output_dir = tmp_path / "results"
+        jsonl_path = tmp_path / "results.jsonl"
+
+        with patch("gitbench.cli.check_git_availability", return_value=True):
+            result = runner.invoke(
+                cli,
+                [
+                    "run", "--benchmark", "commit_messages", "--model", "mock",
+                    "--output-dir", str(output_dir),
+                    "--jsonl", str(jsonl_path),
+                ],
+            )
+            assert result.exit_code == 0
+
+            # Both outputs should be created
+            assert len(list(output_dir.glob("*.json"))) == 1
+            assert jsonl_path.exists()
+            assert len(jsonl_path.read_text().strip().split("\n")) == 1
+
+
+class TestBuildRunEnvelope:
+    """Tests for build_run_envelope helper."""
+
+    def test_envelope_structure(self):
+        """Test that envelope has expected structure."""
+        from gitbench.cli import build_run_envelope
+
+        results = [
+            {"benchmark": "commit_messages", "total": 12, "passed": 10, "pass_at_k": 0.8333, "scores": [], "errors": 0},
+        ]
+        envelope = build_run_envelope(model="gpt-4o", profile="openai", results=results)
+
+        assert envelope["version"] == 1
+        assert "timestamp" in envelope
+        assert envelope["model"] == "gpt-4o"
+        assert envelope["profile"] == "openai"
+        assert envelope["summary"]["total_benchmarks"] == 1
+        assert envelope["summary"]["total_fixtures"] == 12
+        assert envelope["summary"]["total_passed"] == 10
+        assert envelope["summary"]["overall_pass_at_k"] == 0.8333
+        assert envelope["results"] == results
+
+    def test_envelope_git_sha(self):
+        """Test that envelope includes git SHA when available."""
+        from gitbench.cli import build_run_envelope
+
+        envelope = build_run_envelope(model="mock", profile="(inline)", results=[])
+        # git_sha may be None if not in a git repo, but the key should exist
+        assert "git_sha" in envelope
+
+
+class TestWriteOutputDir:
+    """Tests for write_output_dir helper."""
+
+    def test_creates_directory_and_file(self, tmp_path):
+        """Test that write_output_dir creates the directory and writes a file."""
+        from gitbench.cli import write_output_dir
+
+        envelope = {
+            "version": 1,
+            "timestamp": "2026-04-25T13:30:00+00:00",
+            "model": "gpt-4o",
+            "profile": "openai",
+            "summary": {},
+            "results": [],
+        }
+
+        output_dir = tmp_path / "results"
+        written = write_output_dir(envelope, str(output_dir))
+
+        assert written.exists()
+        assert written.parent == output_dir
+        assert "gpt-4o" in written.name
+        assert written.suffix == ".json"
+
+        data = json.loads(written.read_text())
+        assert data["model"] == "gpt-4o"
+
+    def test_sanitizes_model_name(self, tmp_path):
+        """Test that model names with special chars are sanitized in filenames."""
+        from gitbench.cli import write_output_dir
+
+        envelope = {
+            "version": 1,
+            "timestamp": "2026-04-25T13:30:00+00:00",
+            "model": "anthropic/claude-3.5:latest",
+            "profile": "(inline)",
+            "summary": {},
+            "results": [],
+        }
+
+        written = write_output_dir(envelope, str(tmp_path))
+        assert "/" not in written.name
+        assert ":" not in written.name
+
+    def test_collision_avoids_overwrite(self, tmp_path):
+        """Test that same timestamp+model produces separate files instead of overwriting."""
+        from gitbench.cli import write_output_dir
+
+        envelope = {
+            "version": 1,
+            "timestamp": "2026-04-25T13:30:00+00:00",
+            "model": "gpt-4o",
+            "profile": "openai",
+            "summary": {"total_passed": 1},
+            "results": [],
+        }
+
+        first = write_output_dir(envelope, str(tmp_path))
+        second = write_output_dir(envelope, str(tmp_path))
+
+        # Both files should exist (no overwrite)
+        assert first.exists()
+        assert second.exists()
+        assert first != second
+
+        # First file should have base name, second should have _2 suffix
+        assert "gpt-4o" in first.name
+        assert "_2" in second.name
+
+        # Contents differ (different pass counts)
+        data_first = json.loads(first.read_text())
+        data_second = json.loads(second.read_text())
+        assert data_first["summary"]["total_passed"] == data_second["summary"]["total_passed"]
+
+    def test_three_collisions(self, tmp_path):
+        """Test that multiple collisions get _2, _3, etc."""
+        from gitbench.cli import write_output_dir
+
+        envelope = {
+            "version": 1,
+            "timestamp": "2026-04-25T13:30:00+00:00",
+            "model": "mock",
+            "profile": "(inline)",
+            "summary": {},
+            "results": [],
+        }
+
+        paths = [write_output_dir(envelope, str(tmp_path)) for _ in range(4)]
+        names = [p.name for p in paths]
+
+        assert names[0] == "2026-04-25T13-30-00_mock.json"
+        assert names[1] == "2026-04-25T13-30-00_mock_2.json"
+        assert names[2] == "2026-04-25T13-30-00_mock_3.json"
+        assert names[3] == "2026-04-25T13-30-00_mock_4.json"
+
+        # All files exist
+        for p in paths:
+            assert p.exists()
+
+
+class TestWriteJsonl:
+    """Tests for write_jsonl helper."""
+
+    def test_appends_to_file(self, tmp_path):
+        """Test that write_jsonl appends a line to the file."""
+        from gitbench.cli import write_jsonl
+
+        envelope = {
+            "version": 1,
+            "timestamp": "2026-04-25T13:30:00+00:00",
+            "model": "mock",
+            "profile": "(inline)",
+            "summary": {},
+            "results": [],
+        }
+
+        jsonl_path = tmp_path / "results.jsonl"
+        write_jsonl(envelope, str(jsonl_path))
+        write_jsonl(envelope, str(jsonl_path))
+
+        lines = jsonl_path.read_text().strip().split("\n")
+        assert len(lines) == 2
+
+        for line in lines:
+            data = json.loads(line)
+            assert data["model"] == "mock"
+
+    def test_creates_parent_directories(self, tmp_path):
+        """Test that write_jsonl creates parent directories if needed."""
+        from gitbench.cli import write_jsonl
+
+        envelope = {"version": 1, "model": "mock", "timestamp": "", "profile": "", "summary": {}, "results": []}
+        jsonl_path = tmp_path / "sub" / "dir" / "results.jsonl"
+        write_jsonl(envelope, str(jsonl_path))
+
+        assert jsonl_path.exists()

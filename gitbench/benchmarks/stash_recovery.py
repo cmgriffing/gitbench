@@ -24,7 +24,7 @@ class Benchmark(ABC):
         pass
 
     @abstractmethod
-    def score(self, fixture: Fixture, model_output: str) -> Score:
+    def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         pass
 
 
@@ -60,17 +60,18 @@ class StashRecoveryBenchmark(Benchmark):
         logger.info(f"Loaded {len(fixtures)} fixtures")
         return fixtures
 
-    def score(self, fixture: Fixture, model_output: str) -> Score:
+    def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         """Score the model's recovery answer against the expected value.
 
         Args:
             fixture: The fixture containing the expected recovery answer.
             model_output: The stash reference or recovery instruction produced by the model.
+            repo_path: Optional path to the git repository (for state_assertions scoring).
 
         Returns:
             A Score object with passed/failed status and similarity value.
         """
-        return self._scorer.score(fixture, model_output)
+        return self._scorer.score(fixture, model_output, repo_path=repo_path)
 
     def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
         """Set up a git repository for a stash recovery scenario.

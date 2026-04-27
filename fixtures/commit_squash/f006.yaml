@@ -13,8 +13,8 @@ setup:
   - "echo 'content\nmore\ndone' > main.md"
   - "git add main.md"
   - "git commit -m 'WIP: finalize docs'"
-prompt: "Identify the commits that represent incremental work-in-progress updates to documentation that should be combined. Provide the commit messages."
+prompt: "Identify the commits that represent incremental work-in-progress updates to documentation and should be marked as squash/fixup. Do not include the documentation anchor commit they would be squashed into. Provide the commit messages."
 expected: "WIP: update docs, WIP: finalize docs"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

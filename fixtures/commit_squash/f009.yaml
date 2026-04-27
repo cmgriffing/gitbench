@@ -16,8 +16,8 @@ setup:
   - "echo 'def foo():\n    x = 1\n    return x' > script.py"
   - "git add script.py"
   - "git commit -m 'Return value'"
-prompt: "Identify the WIP commits that should be squashed - these represent incremental implementation work that should be combined. Provide the commit messages."
+prompt: "Identify the WIP commits that should be marked as squash/fixup; these represent incremental implementation work that should be combined. Do not include the non-WIP anchor commits. Provide the commit messages."
 expected: "WIP: add logic, WIP: style fix"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

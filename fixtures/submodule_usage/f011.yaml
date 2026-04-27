@@ -1,0 +1,24 @@
+id: f011
+description: "View .gitmodules content"
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'App' > app.txt"
+  - "git add app.txt"
+  - "git commit -m 'Initial commit'"
+  - "mkdir -p /tmp/lib-src && cd /tmp/lib-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'lib code' > lib.py && git add lib.py && git commit -m 'Initial lib'"
+  - "git clone --bare /tmp/lib-src ../lib-bare"
+  - "git config --global protocol.file.allow always"
+  - "git submodule add ../lib-bare lib"
+  - "git add .gitmodules lib"
+  - "git commit -m 'Add lib submodule'"
+prompt: "View the contents of the .gitmodules file to verify the submodule configuration. Output ONLY the command to run (e.g., cat .gitmodules), nothing else."
+expected: "cat .gitmodules"
+scoring:
+  type: state_assertions
+  expected_state:
+    assertions:
+      - type: file_content
+        path: ".gitmodules"
+        contains: "[submodule"

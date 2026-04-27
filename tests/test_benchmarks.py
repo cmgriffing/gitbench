@@ -6,6 +6,7 @@ import pytest
 
 from gitbench.benchmarks import Benchmark
 from gitbench.benchmarks.commit_messages import CommitMessagesBenchmark
+from gitbench.benchmarks.commit_squash import CommitSquashBenchmark
 from gitbench.benchmarks.merge_conflicts import MergeConflictsBenchmark
 from gitbench.benchmarks.cherry_pick import CherryPickBenchmark
 from gitbench.benchmarks.git_bisect import GitBisectBenchmark
@@ -204,6 +205,93 @@ class TestMergeConflictsBenchmark:
         assert isinstance(result, Score)
         assert result.fixture_id == fixture.id
         assert result.similarity > 0.8  # Should be very similar
+
+
+class TestCommitSquashBenchmark:
+    """Test the commit_squash benchmark implementation."""
+
+    def test_benchmark_has_name(self):
+        """Test that the benchmark has the expected name."""
+        assert CommitSquashBenchmark.name == "commit_squash"
+
+    def test_load_fixtures_returns_commit_selection_fixtures(self):
+        """Test that commit_squash fixtures use selection scoring."""
+        benchmark = CommitSquashBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        assert len(fixtures) >= 10
+        assert all(f.scoring["type"] == "commit_selection" for f in fixtures)
+
+    def test_verbose_correct_answer_passes(self):
+        """Test that correct verbose answers are not penalized."""
+        from gitbench.harness.types import Score
+
+        benchmark = CommitSquashBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+        output = (
+            "Use interactive rebase and mark these commits as squash:\n"
+            "- abc1234 WIP: add main.py\n"
+            "- def5678 WIP: continue work\n"
+            "Keep the final Complete feature commit as the clean message."
+        )
+
+        result = benchmark.score(fixture, output)
+
+        assert isinstance(result, Score)
+        assert result.passed is True
+        assert result.similarity == 1.0
+
+    def test_target_commit_context_is_allowed(self):
+        """Test that mentioning the squash target for context does not fail."""
+        benchmark = CommitSquashBenchmark()
+        fixture = benchmark.load_fixtures()[1]
+        output = (
+            "Commit to squash: fixup: Fix typo in hello.py. "
+            "It should be squashed into Add hello world program."
+        )
+
+        result = benchmark.score(fixture, output)
+
+        assert result.passed is True
+        assert result.similarity == 1.0
+
+    def test_missing_expected_commit_fails(self):
+        """Test that omitting an expected WIP commit fails."""
+        benchmark = CommitSquashBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+
+        result = benchmark.score(fixture, "Only squash WIP: add main.py")
+
+        assert result.passed is False
+        assert result.similarity == 0.5
+        assert "WIP: continue work" in result.error
+
+    def test_hash_only_correct_answer_passes(self):
+        """Test that answers using commit hashes instead of messages pass."""
+        import subprocess
+
+        benchmark = CommitSquashBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+        executor, repo_path = benchmark.setup_fixture(fixture)
+
+        try:
+            hashes = []
+            for subject in ("WIP: add main.py", "WIP: continue work"):
+                result = subprocess.run(
+                    ["git", "log", "--format=%h", "--grep", subject],
+                    cwd=repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                hashes.append(result.stdout.strip())
+
+            result = benchmark.score(fixture, ", ".join(hashes), repo_path=repo_path)
+
+            assert result.passed is True
+            assert result.similarity == 1.0
+        finally:
+            executor.cleanup()
 
 
 class TestCherryPickBenchmark:

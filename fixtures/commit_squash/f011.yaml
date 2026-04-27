@@ -16,8 +16,8 @@ setup:
   - "echo 'feat2a' > feature2.txt"
   - "git add feature2.txt"
   - "git commit -m 'Start feature 2'"
-prompt: "The second feature was done cleanly in one commit, but feature 1 has WIP commits that should be squashed. Identify the WIP commits for feature 1 that should be combined. Provide the commit messages."
+prompt: "The second feature was done cleanly in one commit, but feature 1 has WIP commits that should be marked as squash/fixup. Identify only the WIP commits for feature 1 that should be combined. Do not include the clean feature 2 commit. Provide the commit messages."
 expected: "WIP: start feature 1, WIP: continue feature 1"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

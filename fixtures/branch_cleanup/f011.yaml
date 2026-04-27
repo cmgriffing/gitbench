@@ -1,0 +1,13 @@
+id: f011
+description: "Only main branch"
+setup:
+  - "git init"
+  - "git config user.email 'test@test.com'"
+  - "git config user.name 'Test User'"
+  - "echo 'Hello' > hello.txt"
+  - "git add hello.txt"
+  - "git commit -m 'Initial commit'"
+prompt: "Look at the branches in this repository. Which branches should be deleted because they are fully merged into main? List ONLY the branch names to delete, one per line. If none, respond with 'none'."
+expected: "none"
+scoring:
+  type: exact_match

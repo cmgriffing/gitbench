@@ -16,8 +16,8 @@ setup:
   - 'echo ''{"debug": true, "port": 8080, "host": "localhost"}'' > config.json'
   - "git add config.json"
   - "git commit -m 'Finalize config'"
-prompt: "These commits show incremental configuration changes. Identify the WIP commits that should be squashed to combine all config work into a single meaningful commit. Provide the commit messages."
+prompt: "These commits show incremental configuration changes. Identify the WIP commits that should be marked as squash/fixup to combine all config work into a single meaningful commit. Do not include the initial or final config anchor commit. Provide the commit messages."
 expected: "WIP: add debug flag, WIP: add port"
 scoring:
-  type: similarity
-  threshold: 0.5
+  type: commit_selection
+  threshold: 1.0

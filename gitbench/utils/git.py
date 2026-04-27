@@ -24,6 +24,7 @@ class GitExecutor:
         """
         self._base_dir = base_dir or tempfile.gettempdir()
         self._repo_path: str | None = None
+        self._cleanup_targets: list[str] = []
 
         # Verify git is available
         git_path = shutil.which("git")
@@ -134,16 +135,37 @@ class GitExecutor:
         if result.stderr:
             logger.debug(f"Command stderr: {result.stderr}")
 
+    def register_cleanup(self, path: str) -> None:
+        """Register an additional path for cleanup.
+
+        Use for directories created outside the main repo (e.g., worktrees,
+        bare repos for submodules).
+
+        Args:
+            path: Absolute path to clean up during cleanup().
+        """
+        self._cleanup_targets.append(path)
+
     def cleanup(self) -> None:
-        """Remove the temporary repository directory tree.
+        """Remove the temporary repository directory tree and registered targets.
 
         Does nothing if no repo has been set up.
         """
-        if self._repo_path:
-            import shutil as shutil_cleanup
+        import shutil as shutil_cleanup
 
+        # Clean up registered targets (worktrees, bare repos, etc.)
+        for target in self._cleanup_targets:
+            target_path = Path(target)
+            if target_path.exists():
+                shutil_cleanup.rmtree(target_path)
+                logger.debug(f"Cleaned up target: {target}")
+
+        # Clean up the main repo
+        if self._repo_path:
             repo = Path(self._repo_path)
             if repo.exists():
                 shutil_cleanup.rmtree(repo)
                 logger.debug(f"Cleaned up repo: {self._repo_path}")
             self._repo_path = None
+
+        self._cleanup_targets.clear()
