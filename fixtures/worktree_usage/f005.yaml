@@ -17,3 +17,6 @@ scoring:
         path: "../new-feature"
       - type: branch_exists
         name: "new-feature"
+      - type: git_output
+        command: "git -C ../new-feature branch --show-current"
+        contains: "new-feature"

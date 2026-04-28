@@ -7,8 +7,12 @@ import logging
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
+from time import monotonic
+from typing import Protocol
 
 import click
 
@@ -19,7 +23,7 @@ from gitbench.harness.types import BenchmarkResult, ModelMessage, Score
 
 # Configure structured logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
@@ -227,7 +231,261 @@ def write_jsonl(envelope: dict, jsonl_path: str) -> Path:
     return file_path
 
 
-def run_benchmark(benchmark_name: str, model_client, verbose: bool = False) -> BenchmarkResult:
+def _progress_model_names(models: list[str]) -> list[str]:
+    """Return stable display names for progress rows, disambiguating duplicates."""
+    total_counts: dict[str, int] = {}
+    seen_counts: dict[str, int] = {}
+    for model in models:
+        total_counts[model] = total_counts.get(model, 0) + 1
+
+    display_names: list[str] = []
+    for model in models:
+        seen_counts[model] = seen_counts.get(model, 0) + 1
+        if total_counts[model] > 1:
+            display_names.append(f"{model} #{seen_counts[model]}")
+        else:
+            display_names.append(model)
+    return display_names
+
+
+def _progress_model_names_for_runs(runs: list[tuple[str, dict, list[str]]]) -> list[list[str]]:
+    """Return display names for every scheduled model across all run groups."""
+    raw_labels: list[str] = []
+    for _profile_name, _profile_conf, models in runs:
+        raw_labels.extend(models)
+
+    display_labels = _progress_model_names(raw_labels)
+    labels_by_run: list[list[str]] = []
+    offset = 0
+    for _profile_name, _profile_conf, models in runs:
+        labels_by_run.append(display_labels[offset : offset + len(models)])
+        offset += len(models)
+    return labels_by_run
+
+
+class RunProgress(Protocol):
+    """Progress sink used by benchmark runners."""
+
+    def model_started(self, model: str) -> None: ...
+
+    def benchmark_started(self, model: str, benchmark: str, total: int) -> None: ...
+
+    def fixture_finished(self, model: str, benchmark: str, passed: bool) -> None: ...
+
+    def benchmark_finished(self, model: str, benchmark: str, errors: int) -> None: ...
+
+    def model_finished(self, model: str, summary: dict) -> None: ...
+
+
+class TerminalProgressTable:
+    """Render a compact, updating progress table to stderr."""
+
+    def __init__(self, models: list[str], benchmarks: list[str], stream=None) -> None:
+        self.stream = stream or sys.stderr
+        self.enabled = bool(getattr(self.stream, "isatty", lambda: False)())
+        self._lock = Lock()
+        self._rendered_lines = 0
+        self._started_at = monotonic()
+        self._rows: dict[str, dict] = {
+            model: {
+                "model": model,
+                "current": "-",
+                "status": "pending",
+                "benchmarks_done": 0,
+                "benchmarks_total": len(benchmarks),
+                "fixtures_done": 0,
+                "fixtures_total": 0,
+                "passed": 0,
+                "errors": 0,
+            }
+            for model in models
+        }
+
+    def model_started(self, model: str) -> None:
+        with self._lock:
+            row = self._rows[model]
+            if row["status"] == "pending":
+                row["status"] = "queued"
+            self._render()
+
+    def benchmark_started(self, model: str, benchmark: str, total: int) -> None:
+        with self._lock:
+            row = self._rows[model]
+            row["current"] = benchmark
+            row["status"] = "running"
+            row["fixtures_total"] += total
+            self._render()
+
+    def fixture_finished(self, model: str, benchmark: str, passed: bool) -> None:
+        with self._lock:
+            row = self._rows[model]
+            row["current"] = benchmark
+            row["fixtures_done"] += 1
+            if passed:
+                row["passed"] += 1
+            self._render()
+
+    def benchmark_finished(self, model: str, benchmark: str, errors: int) -> None:
+        with self._lock:
+            row = self._rows[model]
+            row["current"] = benchmark
+            row["errors"] += errors
+            row["benchmarks_done"] += 1
+            row["status"] = "error" if row["errors"] else "running"
+            self._render()
+
+    def model_finished(self, model: str, summary: dict) -> None:
+        with self._lock:
+            row = self._rows[model]
+            if row["status"] in {"pending", "queued", "running", "error"}:
+                row["status"] = "error" if row["errors"] else "done"
+            self._render()
+
+    def close(self) -> None:
+        with self._lock:
+            self._render(final=True)
+
+    def _render(self, final: bool = False) -> None:
+        if not self.enabled:
+            return
+
+        lines = self._build_lines(final=final)
+        if self._rendered_lines:
+            for _ in range(self._rendered_lines):
+                self.stream.write("\x1b[1A\x1b[2K")
+
+        self.stream.write("\n".join(lines) + "\n")
+        self.stream.flush()
+        self._rendered_lines = len(lines)
+
+    def _build_lines(self, final: bool) -> list[str]:
+        width = shutil.get_terminal_size((100, 24)).columns
+        elapsed = self._format_seconds(monotonic() - self._started_at)
+        title = f"GitBench progress | elapsed {elapsed}"
+        if final:
+            title = f"GitBench complete | elapsed {elapsed}"
+
+        model_width = 24
+        benchmark_width = 22
+        fixed_width = model_width + benchmark_width + 57
+        if width < fixed_width:
+            overflow = fixed_width - width
+            benchmark_width = max(12, benchmark_width - overflow)
+
+        header = (
+            f"{'Model':<{model_width}}  {'Current':<{benchmark_width}}  "
+            f"{'Status':<8} {'Bench':>7} {'Fixtures':>9} {'Passed':>8} {'Err':>3}"
+        )
+        separator = "-" * min(width, len(header))
+
+        lines = [title[:width], header[:width], separator]
+        for row in self._rows.values():
+            benchmark_progress = f"{row['benchmarks_done']}/{row['benchmarks_total']}"
+            fixture_progress = f"{row['fixtures_done']}/{row['fixtures_total']}"
+            line = (
+                f"{self._truncate(row['model'], model_width):<{model_width}}  "
+                f"{self._truncate(row['current'], benchmark_width):<{benchmark_width}}  "
+                f"{row['status']:<8} {benchmark_progress:>7} "
+                f"{fixture_progress:>9} {row['passed']:>8} {row['errors']:>3}"
+            )
+            lines.append(line[:width])
+        return lines
+
+    @staticmethod
+    def _truncate(value: str, width: int) -> str:
+        if len(value) <= width:
+            return value
+        if width <= 1:
+            return value[:width]
+        return value[: width - 1] + "~"
+
+    @staticmethod
+    def _format_seconds(seconds: float) -> str:
+        seconds_int = int(seconds)
+        minutes, secs = divmod(seconds_int, 60)
+        if minutes:
+            return f"{minutes}m{secs:02d}s"
+        return f"{secs}s"
+
+
+def run_model_benchmarks(
+    current_model: str,
+    benchmarks_to_run: list[str],
+    *,
+    timeout: int,
+    retry_count: int,
+    base_url: str | None,
+    api_key: str | None,
+    provider: str | None,
+    verbose: bool = False,
+    progress: RunProgress | None = None,
+    progress_model_name: str | None = None,
+) -> dict:
+    """Run all selected benchmarks for one model."""
+    progress_model = progress_model_name or current_model
+    if progress:
+        progress.model_started(progress_model)
+
+    model_client = get_model_client(
+        current_model,
+        timeout=timeout,
+        retry_count=retry_count,
+        base_url=base_url,
+        api_key=api_key,
+        provider=provider,
+    )
+
+    results_list: list[dict] = []
+
+    for bench_name in benchmarks_to_run:
+        if bench_name not in _benchmark_registry:
+            results_list.append({
+                "benchmark": bench_name,
+                "error": f"Unknown benchmark '{bench_name}'",
+            })
+            continue
+
+        try:
+            result = run_benchmark(bench_name, model_client, verbose, progress, progress_model)
+            results_list.append(result.to_dict())
+        except Exception as e:
+            logger.error(f"Benchmark '{bench_name}' failed for model '{current_model}': {e}")
+            if progress:
+                progress.benchmark_finished(progress_model, bench_name, errors=1)
+            results_list.append({
+                "benchmark": bench_name,
+                "error": str(e),
+            })
+
+    total_benchmarks = len(results_list)
+    total_fixtures = sum(r.get("total", 0) for r in results_list)
+    total_passed = sum(r.get("passed", 0) for r in results_list)
+    overall_pass_at_k = round(total_passed / total_fixtures, 4) if total_fixtures > 0 else 0.0
+
+    model_result = {
+        "model": current_model,
+        "summary": {
+            "total_benchmarks": total_benchmarks,
+            "total_fixtures": total_fixtures,
+            "total_passed": total_passed,
+            "overall_pass_at_k": overall_pass_at_k,
+        },
+        "results": results_list,
+    }
+
+    if progress:
+        progress.model_finished(progress_model, model_result["summary"])
+
+    return model_result
+
+
+def run_benchmark(
+    benchmark_name: str,
+    model_client,
+    verbose: bool = False,
+    progress: RunProgress | None = None,
+    model_name: str | None = None,
+) -> BenchmarkResult:
     """Run a specific benchmark with the given model client.
 
     Args:
@@ -255,15 +513,19 @@ def run_benchmark(benchmark_name: str, model_client, verbose: bool = False) -> B
     benchmark_class = _benchmark_registry[benchmark_name]
     benchmark = benchmark_class()
 
-    logger.info(f"Loading fixtures for {benchmark_name}...")
+    logger.debug(f"Loading fixtures for {benchmark_name}...")
     fixtures = benchmark.load_fixtures()
-    logger.info(f"Loaded {len(fixtures)} fixtures")
+    logger.debug(f"Loaded {len(fixtures)} fixtures")
+
+    if progress and model_name:
+        progress.benchmark_started(model_name, benchmark_name, len(fixtures))
 
     scores: list[Score] = []
     errors = 0
 
     for fixture in fixtures:
-        logger.info(f"Processing fixture {fixture.id}...")
+        logger.debug(f"Processing fixture {fixture.id}...")
+        executor = None
 
         try:
             executor, repo_path = benchmark.setup_fixture(fixture)
@@ -281,6 +543,8 @@ def run_benchmark(benchmark_name: str, model_client, verbose: bool = False) -> B
 
             score = benchmark.score(fixture, model_output, repo_path=repo_path)
             scores.append(score)
+            if progress and model_name:
+                progress.fixture_finished(model_name, benchmark_name, score.passed)
 
             if verbose:
                 click.echo(
@@ -300,15 +564,20 @@ def run_benchmark(benchmark_name: str, model_client, verbose: bool = False) -> B
                 )
             )
             errors += 1
+            if progress and model_name:
+                progress.fixture_finished(model_name, benchmark_name, False)
 
         finally:
             # Clean up the temporary repo
-            if "executor" in locals():
+            if executor is not None:
                 executor.cleanup()
 
     total = len(fixtures)
     passed = sum(1 for s in scores if s.passed)
     pass_at_k = passed / total if total > 0 else 0.0
+
+    if progress and model_name:
+        progress.benchmark_finished(model_name, benchmark_name, errors)
 
     return BenchmarkResult(
         benchmark=benchmark_name,
@@ -420,7 +689,14 @@ def cli():
     type=int,
     help="Number of retries on model failure (default: 3)",
 )
-def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, profile: str | None, all_profiles: bool, all_models: bool, model: str | None, output: str | None, output_dir: str | None, jsonl_path: str | None, verbose: bool, timeout: int, retry_count: int, base_url: str | None, provider: str | None):
+@click.option(
+    "--model-workers",
+    default=1,
+    type=click.IntRange(1),
+    show_default=True,
+    help="Number of models to run concurrently.",
+)
+def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, profile: str | None, all_profiles: bool, all_models: bool, model: str | None, output: str | None, output_dir: str | None, jsonl_path: str | None, verbose: bool, timeout: int, retry_count: int, base_url: str | None, provider: str | None, model_workers: int):
     """Run one or all benchmarks against the specified model."""
     # -a means all benchmarks + all models (flat comparison), unless a specific model is given
     if run_all:
@@ -521,136 +797,234 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
     else:
         benchmarks_to_run = [benchmark_name]
 
+    unknown_benchmarks = [name for name in benchmarks_to_run if name not in _benchmark_registry]
+    if unknown_benchmarks:
+        available = list(_benchmark_registry.keys())
+        raise click.ClickException(
+            f"Unknown benchmark: {unknown_benchmarks[0]}. Available: {available}"
+        )
+
     try:
         # Run each (profile, models) entry
         all_profile_results: list[dict] = []
+        pending_outputs: list[tuple[str, dict]] = []
+        progress_model_names_by_run = _progress_model_names_for_runs(runs)
+        progress_table = TerminalProgressTable(
+            [name for names in progress_model_names_by_run for name in names],
+            benchmarks_to_run,
+        )
 
-        for profile_name, profile_conf, models_to_run in runs:
-            p_base_url = base_url or profile_conf.get("base_url")
-            p_api_key = profile_conf.get("api_key")
-            p_provider = provider or profile_conf.get("provider")
-            p_api_key_env = profile_conf.get("_api_key_env")
+        def announce_model(profile_label: str, models_to_run: list[str], current_model: str) -> None:
+            if progress_table.enabled:
+                return
+            if len(runs) > 1 or len(models_to_run) > 1:
+                parts = []
+                if profile_label:
+                    parts.append(profile_label)
+                parts.append(f"model '{current_model}'")
+                click.echo(f"\nRunning benchmarks ({', '.join(parts)})...", err=True)
+            for bench_name in benchmarks_to_run:
+                click.echo(f"  Running '{bench_name}'...", err=True)
 
-            # Validate api_key
-            has_real_models = any(m != "mock" for m in models_to_run)
-            if has_real_models and not p_api_key and p_api_key_env:
-                click.echo(f"Skipping profile '{profile_name}': env var {p_api_key_env} not set", err=True)
-                continue
+        def finish_model_result(model_result: dict) -> None:
+            summary = model_result["summary"]
+            logger.info(
+                "Model '%s' completed: %d/%d fixtures passed",
+                model_result["model"],
+                summary["total_passed"],
+                summary["total_fixtures"],
+            )
 
-            profile_label = f"profile '{profile_name}'" if len(runs) > 1 else ""
+        def append_pending_output(profile_name: str, model_result: dict) -> None:
+            if output_dir or jsonl_path:
+                envelope = build_run_envelope(
+                    model=model_result["model"],
+                    profile=profile_name,
+                    results=model_result["results"],
+                )
+                pending_outputs.append((profile_name, envelope))
 
-            all_model_results: list[dict] = []
+        def append_profile_result(profile_name: str, all_model_results: list[dict]) -> None:
+            profile_fixtures = sum(r["summary"]["total_fixtures"] for r in all_model_results)
+            profile_passed = sum(r["summary"]["total_passed"] for r in all_model_results)
+            all_profile_results.append({
+                "profile": profile_name,
+                "summary": {
+                    "total_models": len(all_model_results),
+                    "total_fixtures": profile_fixtures,
+                    "total_passed": profile_passed,
+                    "overall_pass_at_k": round(profile_passed / profile_fixtures, 4) if profile_fixtures > 0 else 0.0,
+                },
+                "models": all_model_results,
+            })
 
-            for current_model in models_to_run:
-                model_client = get_model_client(current_model, timeout=timeout, retry_count=retry_count, base_url=p_base_url, api_key=p_api_key, provider=p_provider)
+        if all_models and model_workers > 1 and total_models > 1:
+            worker_count = min(model_workers, total_models)
+            click.echo(f"Running up to {worker_count} model(s) concurrently.", err=True)
+            ordered_results: list[dict | None] = [None] * len(runs)
 
-                if len(runs) > 1 or len(models_to_run) > 1:
-                    parts = []
-                    if profile_label:
-                        parts.append(profile_label)
-                    parts.append(f"model '{current_model}'")
-                    click.echo(f"\nRunning benchmarks ({', '.join(parts)})...", err=True)
-
-                results_list: list[dict] = []
-
-                for bench_name in benchmarks_to_run:
-                    if bench_name not in _benchmark_registry:
-                        click.echo(f"  Unknown benchmark '{bench_name}', skipping", err=True)
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                future_to_run_index = {}
+                for run_index, (profile_name, profile_conf, models_to_run) in enumerate(runs):
+                    if not models_to_run:
                         continue
 
-                    click.echo(f"  Running '{bench_name}'...", err=True)
-                    try:
-                        result = run_benchmark(bench_name, model_client, verbose)
-                        results_list.append(result.to_dict())
-                    except Exception as e:
-                        logger.error(f"Benchmark '{bench_name}' failed: {e}")
-                        click.echo(f"  Error running '{bench_name}': {e}", err=True)
-                        results_list.append({
-                            "benchmark": bench_name,
-                            "error": str(e),
-                        })
+                    current_model = models_to_run[0]
+                    p_base_url = base_url or profile_conf.get("base_url")
+                    p_api_key = profile_conf.get("api_key")
+                    p_provider = provider or profile_conf.get("provider")
+                    p_api_key_env = profile_conf.get("_api_key_env")
 
-                total_benchmarks = len(results_list)
-                total_fixtures = sum(r.get("total", 0) for r in results_list)
-                total_passed = sum(r.get("passed", 0) for r in results_list)
-                overall_pass_at_k = round(total_passed / total_fixtures, 4) if total_fixtures > 0 else 0.0
+                    if current_model != "mock" and not p_api_key and p_api_key_env:
+                        click.echo(f"Skipping profile '{profile_name}': env var {p_api_key_env} not set", err=True)
+                        continue
 
-                all_model_results.append({
-                    "model": current_model,
-                    "summary": {
-                        "total_benchmarks": total_benchmarks,
-                        "total_fixtures": total_fixtures,
-                        "total_passed": total_passed,
-                        "overall_pass_at_k": overall_pass_at_k,
-                    },
-                    "results": results_list,
-                })
-
-                logger.info(f"Model '{current_model}' completed: {total_passed}/{total_fixtures} fixtures passed")
-
-                # Write structured output (per-model envelope)
-                if output_dir or jsonl_path:
-                    envelope = build_run_envelope(
-                        model=current_model,
-                        profile=profile_name,
-                        results=results_list,
+                    profile_label = f"profile '{profile_name}'" if len(runs) > 1 else ""
+                    announce_model(profile_label, models_to_run, current_model)
+                    future = executor.submit(
+                        run_model_benchmarks,
+                        current_model,
+                        benchmarks_to_run,
+                        timeout=timeout,
+                        retry_count=retry_count,
+                        base_url=p_base_url,
+                        api_key=p_api_key,
+                        provider=p_provider,
+                        verbose=verbose,
+                        progress=progress_table,
+                        progress_model_name=progress_model_names_by_run[run_index][0],
                     )
+                    future_to_run_index[future] = run_index
 
-                    if output_dir:
-                        written = write_output_dir(envelope, output_dir)
-                        click.echo(f"  Saved: {written}", err=True)
+                for future in as_completed(future_to_run_index):
+                    run_index = future_to_run_index[future]
+                    ordered_results[run_index] = future.result()
 
-                    if jsonl_path:
-                        written = write_jsonl(envelope, jsonl_path)
-                        click.echo(f"  Appended: {written}", err=True)
+            for run_index, model_result in enumerate(ordered_results):
+                if model_result is None:
+                    continue
+                profile_name, _profile_conf, _models_to_run = runs[run_index]
+                finish_model_result(model_result)
+                append_pending_output(profile_name, model_result)
+                append_profile_result(profile_name, [model_result])
 
-            # Build per-profile output
-            if len(runs) == 1:
-                # Single profile: keep backward-compat structure
-                if run_all_benchmarks:
-                    # --all-benchmarks: summary + results wrapper
-                    if len(all_model_results) == 1:
-                        combined = all_model_results[0]
-                        if "model" in combined:
-                            combined.pop("model")
-                    else:
-                        grand_fixtures = sum(r["summary"]["total_fixtures"] for r in all_model_results)
-                        grand_passed = sum(r["summary"]["total_passed"] for r in all_model_results)
-                        combined = {
-                            "summary": {
-                                "total_models": len(all_model_results),
-                                "total_fixtures": grand_fixtures,
-                                "total_passed": grand_passed,
-                                "overall_pass_at_k": round(grand_passed / grand_fixtures, 4) if grand_fixtures > 0 else 0.0,
-                            },
-                            "models": all_model_results,
-                        }
+        else:
+            for run_index, (profile_name, profile_conf, models_to_run) in enumerate(runs):
+                p_base_url = base_url or profile_conf.get("base_url")
+                p_api_key = profile_conf.get("api_key")
+                p_provider = provider or profile_conf.get("provider")
+                p_api_key_env = profile_conf.get("_api_key_env")
+
+                # Validate api_key
+                has_real_models = any(m != "mock" for m in models_to_run)
+                if has_real_models and not p_api_key and p_api_key_env:
+                    click.echo(f"Skipping profile '{profile_name}': env var {p_api_key_env} not set", err=True)
+                    continue
+
+                profile_label = f"profile '{profile_name}'" if len(runs) > 1 else ""
+
+                all_model_results: list[dict] = []
+                progress_model_names = progress_model_names_by_run[run_index]
+
+                if model_workers > 1 and len(models_to_run) > 1:
+                    worker_count = min(model_workers, len(models_to_run))
+                    click.echo(f"Running up to {worker_count} model(s) concurrently.", err=True)
+                    ordered_results: list[dict | None] = [None] * len(models_to_run)
+                    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                        future_to_index = {}
+                        for index, current_model in enumerate(models_to_run):
+                            announce_model(profile_label, models_to_run, current_model)
+                            future = executor.submit(
+                                run_model_benchmarks,
+                                current_model,
+                                benchmarks_to_run,
+                                timeout=timeout,
+                                retry_count=retry_count,
+                                base_url=p_base_url,
+                                api_key=p_api_key,
+                                provider=p_provider,
+                                verbose=verbose,
+                                progress=progress_table,
+                                progress_model_name=progress_model_names[index],
+                            )
+                            future_to_index[future] = index
+
+                        for future in as_completed(future_to_index):
+                            index = future_to_index[future]
+                            ordered_results[index] = future.result()
+
+                    for model_result in ordered_results:
+                        if model_result is not None:
+                            all_model_results.append(model_result)
+                            finish_model_result(model_result)
                 else:
-                    # Single benchmark: flat result(s)
-                    if len(all_model_results) == 1 and len(all_model_results[0]["results"]) == 1:
-                        # Single model, single benchmark: raw BenchmarkResult dict
-                        combined = all_model_results[0]["results"][0]
+                    for index, current_model in enumerate(models_to_run):
+                        announce_model(profile_label, models_to_run, current_model)
+                        model_result = run_model_benchmarks(
+                            current_model,
+                            benchmarks_to_run,
+                            timeout=timeout,
+                            retry_count=retry_count,
+                            base_url=p_base_url,
+                            api_key=p_api_key,
+                            provider=p_provider,
+                            verbose=verbose,
+                            progress=progress_table,
+                            progress_model_name=progress_model_names[index],
+                        )
+                        all_model_results.append(model_result)
+                        finish_model_result(model_result)
+
+                for model_result in all_model_results:
+                    append_pending_output(profile_name, model_result)
+
+                # Build per-profile output
+                if len(runs) == 1:
+                    # Single profile: keep backward-compat structure
+                    if run_all_benchmarks:
+                        # --all-benchmarks: summary + results wrapper
+                        if len(all_model_results) == 1:
+                            combined = all_model_results[0]
+                            if "model" in combined:
+                                combined.pop("model")
+                        else:
+                            grand_fixtures = sum(r["summary"]["total_fixtures"] for r in all_model_results)
+                            grand_passed = sum(r["summary"]["total_passed"] for r in all_model_results)
+                            combined = {
+                                "summary": {
+                                    "total_models": len(all_model_results),
+                                    "total_fixtures": grand_fixtures,
+                                    "total_passed": grand_passed,
+                                    "overall_pass_at_k": round(grand_passed / grand_fixtures, 4) if grand_fixtures > 0 else 0.0,
+                                },
+                                "models": all_model_results,
+                            }
                     else:
-                        # Single benchmark, multiple models: list of results with model key
-                        single_results = []
-                        for mr in all_model_results:
-                            for r in mr["results"]:
-                                single_results.append({"model": mr["model"], **r})
-                        combined = single_results if len(single_results) > 1 else single_results[0]
-            else:
-                # Multiple profiles: nest under profile name
-                profile_fixtures = sum(r["summary"]["total_fixtures"] for r in all_model_results)
-                profile_passed = sum(r["summary"]["total_passed"] for r in all_model_results)
-                all_profile_results.append({
-                    "profile": profile_name,
-                    "summary": {
-                        "total_models": len(all_model_results),
-                        "total_fixtures": profile_fixtures,
-                        "total_passed": profile_passed,
-                        "overall_pass_at_k": round(profile_passed / profile_fixtures, 4) if profile_fixtures > 0 else 0.0,
-                    },
-                    "models": all_model_results,
-                })
+                        # Single benchmark: flat result(s)
+                        if len(all_model_results) == 1 and len(all_model_results[0]["results"]) == 1:
+                            # Single model, single benchmark: raw BenchmarkResult dict
+                            combined = all_model_results[0]["results"][0]
+                        else:
+                            # Single benchmark, multiple models: list of results with model key
+                            single_results = []
+                            for mr in all_model_results:
+                                for r in mr["results"]:
+                                    single_results.append({"model": mr["model"], **r})
+                            combined = single_results if len(single_results) > 1 else single_results[0]
+                else:
+                    # Multiple profiles: nest under profile name
+                    append_profile_result(profile_name, all_model_results)
+
+        progress_table.close()
+
+        for _profile_name, envelope in pending_outputs:
+            if output_dir:
+                written = write_output_dir(envelope, output_dir)
+                click.echo(f"  Saved: {written}", err=True)
+
+            if jsonl_path:
+                written = write_jsonl(envelope, jsonl_path)
+                click.echo(f"  Appended: {written}", err=True)
 
         # Final output assembly
         if len(runs) > 1:

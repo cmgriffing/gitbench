@@ -23,6 +23,7 @@ class GitExecutor:
             RuntimeError: If git is not available in PATH.
         """
         self._base_dir = base_dir or tempfile.gettempdir()
+        self._workspace_path: str | None = None
         self._repo_path: str | None = None
         self._cleanup_targets: list[str] = []
 
@@ -53,7 +54,12 @@ class GitExecutor:
         Raises:
             RuntimeError: If a command fails (non-zero exit).
         """
-        repo_dir = Path(self._base_dir) / name
+        if self._workspace_path is not None:
+            self.cleanup()
+
+        workspace_dir = Path(tempfile.mkdtemp(prefix=f"{name}_", dir=self._base_dir))
+        self._workspace_path = str(workspace_dir)
+        repo_dir = workspace_dir / name
         repo_dir.mkdir(parents=True, exist_ok=True)
         self._repo_path = str(repo_dir)
 
@@ -167,5 +173,12 @@ class GitExecutor:
                 shutil_cleanup.rmtree(repo)
                 logger.debug(f"Cleaned up repo: {self._repo_path}")
             self._repo_path = None
+
+        if self._workspace_path:
+            workspace = Path(self._workspace_path)
+            if workspace.exists():
+                shutil_cleanup.rmtree(workspace)
+                logger.debug(f"Cleaned up workspace: {self._workspace_path}")
+            self._workspace_path = None
 
         self._cleanup_targets.clear()

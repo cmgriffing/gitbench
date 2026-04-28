@@ -21,4 +21,6 @@ scoring:
     assertions:
       - type: git_output
         command: "git worktree list"
-        contains: "feature-wt"
+        not_contains: "feature-wt"
+      - type: dir_not_exists
+        path: "../feature-wt"

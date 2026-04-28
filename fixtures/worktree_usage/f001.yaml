@@ -23,6 +23,9 @@ scoring:
       - type: branch_exists
         name: "feature"
         in_worktree: "../feature-wt"
+      - type: git_output
+        command: "git -C ../feature-wt branch --show-current"
+        contains: "feature"
       - type: file_content
         path: "../feature-wt/feature.txt"
         value: "Feature code"

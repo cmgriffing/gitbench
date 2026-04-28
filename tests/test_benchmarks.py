@@ -13,6 +13,8 @@ from gitbench.benchmarks.git_bisect import GitBisectBenchmark
 from gitbench.benchmarks.rebase import RebaseBenchmark
 from gitbench.benchmarks.reflog import ReflogBenchmark
 from gitbench.benchmarks.stash_recovery import StashRecoveryBenchmark
+from gitbench.benchmarks.submodule_usage import SubmoduleUsageBenchmark
+from gitbench.benchmarks.worktree_usage import WorktreeUsageBenchmark
 
 
 class TestBenchmarkABC:
@@ -843,6 +845,104 @@ class TestStashRecoveryBenchmark:
 
             assert fixture.expected == "stash@{1}"
             assert "stash@{1}: On main: keep-this" in diff
+        finally:
+            executor.cleanup()
+
+
+class TestSubmoduleUsageBenchmark:
+    """Test the submodule_usage benchmark against its real fixtures."""
+
+    def test_load_fixtures_returns_stateful_submodule_fixtures(self):
+        benchmark = SubmoduleUsageBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        assert len(fixtures) == 12
+        assert {fixture.id for fixture in fixtures} == {f"f{i:03d}" for i in range(1, 13)}
+        assert all(fixture.scoring["type"] in {"state_assertions", "exact_match"} for fixture in fixtures)
+
+    @pytest.mark.parametrize("fixture_id", [f"f{i:03d}" for i in range(1, 13)])
+    def test_expected_answer_passes_fixture_state_checks(self, fixture_id):
+        benchmark = SubmoduleUsageBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == fixture_id)
+        executor, repo_path = benchmark.setup_fixture(fixture)
+
+        try:
+            result = benchmark.score(fixture, fixture.expected, repo_path=repo_path)
+
+            assert result.passed is True, result.error
+            assert result.similarity == 1.0
+        finally:
+            executor.cleanup()
+
+    @pytest.mark.parametrize("fixture_id", [f"f{i:03d}" for i in range(1, 13)])
+    def test_noop_answer_fails_fixture_state_checks(self, fixture_id):
+        benchmark = SubmoduleUsageBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == fixture_id)
+        executor, repo_path = benchmark.setup_fixture(fixture)
+
+        try:
+            result = benchmark.score(fixture, "git status", repo_path=repo_path)
+
+            assert result.passed is False
+        finally:
+            executor.cleanup()
+
+    def test_sync_fixture_starts_with_stale_local_url(self):
+        benchmark = SubmoduleUsageBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == "f009")
+        executor, repo_path = benchmark.setup_fixture(fixture)
+
+        try:
+            import subprocess
+
+            result = subprocess.run(
+                ["git", "config", "--get", "submodule.lib.url"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            assert result.stdout.strip() == "../wrong-bare"
+        finally:
+            executor.cleanup()
+
+
+class TestWorktreeUsageBenchmark:
+    """Test the worktree_usage benchmark against its real fixtures."""
+
+    def test_load_fixtures_returns_stateful_worktree_fixtures(self):
+        benchmark = WorktreeUsageBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        assert len(fixtures) == 12
+        assert {fixture.id for fixture in fixtures} == {f"f{i:03d}" for i in range(1, 13)}
+        assert all(fixture.scoring["type"] in {"state_assertions", "exact_match"} for fixture in fixtures)
+
+    @pytest.mark.parametrize("fixture_id", [f"f{i:03d}" for i in range(1, 13)])
+    def test_expected_answer_passes_fixture_state_checks(self, fixture_id):
+        benchmark = WorktreeUsageBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == fixture_id)
+        executor, repo_path = benchmark.setup_fixture(fixture)
+
+        try:
+            result = benchmark.score(fixture, fixture.expected, repo_path=repo_path)
+
+            assert result.passed is True, result.error
+            assert result.similarity == 1.0
+        finally:
+            executor.cleanup()
+
+    @pytest.mark.parametrize("fixture_id", [f"f{i:03d}" for i in range(1, 13)])
+    def test_noop_answer_fails_fixture_state_checks(self, fixture_id):
+        benchmark = WorktreeUsageBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == fixture_id)
+        executor, repo_path = benchmark.setup_fixture(fixture)
+
+        try:
+            result = benchmark.score(fixture, "git status", repo_path=repo_path)
+
+            assert result.passed is False
         finally:
             executor.cleanup()
 

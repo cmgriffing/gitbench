@@ -7,18 +7,13 @@ setup:
   - "echo 'App' > app.txt"
   - "git add app.txt"
   - "git commit -m 'Initial commit'"
-  - "mkdir -p /tmp/lib-src && cd /tmp/lib-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'lib code' > lib.py && git add lib.py && git commit -m 'Initial lib'"
-  - "git clone --bare /tmp/lib-src ../lib-bare"
-  - "git config --global protocol.file.allow always"
-  - "git submodule add ../lib-bare lib"
+  - "mkdir -p ../lib-src && cd ../lib-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'lib code' > lib.py && git add lib.py && git commit -m 'Initial lib'"
+  - "git clone --bare ../lib-src ../lib-bare"
+  - "git config protocol.file.allow always"
+  - "git -c protocol.file.allow=always submodule add ../lib-bare lib"
   - "git add .gitmodules lib"
   - "git commit -m 'Add lib submodule'"
 prompt: "Run the command to list all configured submodules. Output ONLY the git command, nothing else."
 expected: "git submodule"
 scoring:
-  type: state_assertions
-  expected_state:
-    assertions:
-      - type: git_output
-        command: "git submodule"
-        contains: "lib"
+  type: exact_match

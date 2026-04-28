@@ -31,3 +31,4 @@ coverage/
 tmp/
 gitbench.json
 .gitbench.json
+results/

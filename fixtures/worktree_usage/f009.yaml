@@ -22,4 +22,4 @@ scoring:
     assertions:
       - type: git_output
         command: "git worktree list"
-        contains: "feature-wt"
+        not_contains: "feature-wt"

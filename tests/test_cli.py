@@ -2,13 +2,21 @@
 
 import json
 import sys
+import time
 from io import StringIO
 from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
-from gitbench.cli import cli, check_git_availability, get_model_client
+from gitbench.cli import (
+    TerminalProgressTable,
+    _progress_model_names,
+    _progress_model_names_for_runs,
+    check_git_availability,
+    cli,
+    get_model_client,
+)
 
 
 @pytest.fixture
@@ -290,6 +298,200 @@ class TestRunCommand:
             assert len(list(output_dir.glob("*.json"))) == 1
             assert jsonl_path.exists()
             assert len(jsonl_path.read_text().strip().split("\n")) == 1
+
+    def test_run_profile_models_with_model_workers(self, runner, tmp_path):
+        """Test that multiple profile models can run with model workers."""
+        output_dir = tmp_path / "parallel-results"
+        jsonl_path = tmp_path / "parallel-results.jsonl"
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            config = {
+                "models": {
+                    "parallel": {
+                        "models": ["mock", "mock"],
+                    }
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "--benchmark",
+                        "commit_messages",
+                        "--profile",
+                        "parallel",
+                        "--model-workers",
+                        "2",
+                        "--output-dir",
+                        str(output_dir),
+                        "--jsonl",
+                        str(jsonl_path),
+                    ],
+                )
+
+        assert result.exit_code == 0
+        json_start = result.output.find("[")
+        assert json_start != -1
+        data = json.loads(result.output[json_start:])
+        assert len(data) == 2
+        assert all(item["model"] == "mock" for item in data)
+        assert len(list(output_dir.glob("*.json"))) == 2
+        assert len(jsonl_path.read_text().strip().split("\n")) == 2
+
+    def test_run_all_models_with_workers_runs_across_profiles_concurrently(self, runner, tmp_path):
+        """Test that -a parallelizes all-model runs across provider profiles."""
+        starts = []
+        ends = []
+        providers = {}
+
+        def fake_run_model_benchmarks(current_model, benchmarks_to_run, **kwargs):
+            starts.append((current_model, time.monotonic()))
+            providers[current_model] = kwargs["provider"]
+            time.sleep(0.2)
+            ends.append((current_model, time.monotonic()))
+            results = [
+                {
+                    "benchmark": bench_name,
+                    "total": 1,
+                    "passed": 1,
+                    "pass_at_k": 1.0,
+                    "scores": [],
+                    "errors": 0,
+                }
+                for bench_name in benchmarks_to_run
+            ]
+            return {
+                "model": current_model,
+                "summary": {
+                    "total_benchmarks": len(results),
+                    "total_fixtures": len(results),
+                    "total_passed": len(results),
+                    "overall_pass_at_k": 1.0,
+                },
+                "results": results,
+            }
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            config = {
+                "models": {
+                    "remote": {
+                        "models": ["remote-model"],
+                        "provider": "openai",
+                        "base_url": "https://example.invalid/v1",
+                    },
+                    "local": {
+                        "models": ["local-model"],
+                        "provider": "ollama",
+                        "base_url": "http://localhost:11434",
+                    },
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.cli._benchmark_registry", {"commit_messages": object()}), \
+                 patch("gitbench.cli.run_model_benchmarks", side_effect=fake_run_model_benchmarks):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "-a",
+                        "--model-workers",
+                        "2",
+                    ],
+                )
+
+        assert result.exit_code == 0
+        assert providers == {"remote-model": "openai", "local-model": "ollama"}
+        assert len(starts) == 2
+        assert len(ends) == 2
+        assert starts[1][1] < ends[0][1]
+
+        json_start = result.output.find("{")
+        assert json_start != -1
+        data = json.loads(result.output[json_start:])
+        assert data["summary"]["total_models"] == 2
+
+
+class TtyStringIO(StringIO):
+    """StringIO that behaves like an interactive terminal."""
+
+    def isatty(self):
+        return True
+
+
+class TestTerminalProgressTable:
+    """Tests for consolidated live progress output."""
+
+    def test_progress_model_names_disambiguates_duplicates(self):
+        assert _progress_model_names(["mock", "gpt-4o", "mock"]) == [
+            "mock #1",
+            "gpt-4o",
+            "mock #2",
+        ]
+
+    def test_progress_model_names_for_runs_uses_model_names_only(self):
+        runs = [
+            ("local", {}, ["mock"]),
+            ("remote", {}, ["mock", "gpt-4o", "claude"]),
+        ]
+
+        assert _progress_model_names_for_runs(runs) == [
+            ["mock #1"],
+            ["mock #2", "gpt-4o", "claude"],
+        ]
+
+    def test_table_renders_updates_in_place_for_tty(self):
+        stream = TtyStringIO()
+        table = TerminalProgressTable(["mock"], ["commit_messages"], stream=stream)
+
+        table.model_started("mock")
+        table.benchmark_started("mock", "commit_messages", 2)
+        table.fixture_finished("mock", "commit_messages", True)
+        table.benchmark_finished("mock", "commit_messages", 0)
+        table.close()
+
+        output = stream.getvalue()
+        assert "GitBench progress" in output
+        assert "GitBench complete" in output
+        assert "Model" in output
+        assert "Current" in output
+        assert "commit_messages" in output
+        assert "1/2" in output
+        assert "\x1b[1A\x1b[2K" in output
+
+    def test_table_condenses_benchmarks_into_one_model_row(self):
+        table = TerminalProgressTable(["mock"], ["commit_messages", "rebase"], stream=StringIO())
+
+        table.model_started("mock")
+        table.benchmark_started("mock", "commit_messages", 2)
+        table.fixture_finished("mock", "commit_messages", True)
+        table.benchmark_finished("mock", "commit_messages", 0)
+        table.benchmark_started("mock", "rebase", 3)
+        table.fixture_finished("mock", "rebase", False)
+
+        lines = table._build_lines(final=False)
+        assert len(lines) == 4
+        assert "mock" in lines[-1]
+        assert "rebase" in lines[-1]
+        assert "1/2" in lines[-1]
+        assert "2/5" in lines[-1]
+
+    def test_table_is_quiet_for_non_tty(self):
+        stream = StringIO()
+        table = TerminalProgressTable(["mock"], ["commit_messages"], stream=stream)
+
+        table.model_started("mock")
+        table.benchmark_started("mock", "commit_messages", 1)
+        table.fixture_finished("mock", "commit_messages", True)
+        table.close()
+
+        assert stream.getvalue() == ""
 
 
 class TestBuildRunEnvelope:

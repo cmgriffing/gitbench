@@ -21,5 +21,5 @@ scoring:
   expected_state:
     assertions:
       - type: git_output
-        command: "git worktree list"
-        contains: "feature-wt"
+        command: "git worktree list --porcelain"
+        not_contains: "locked"

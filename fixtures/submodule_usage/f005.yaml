@@ -7,9 +7,9 @@ setup:
   - "echo 'App' > app.txt"
   - "git add app.txt"
   - "git commit -m 'Initial commit'"
-  - "mkdir -p /tmp/lib-src && cd /tmp/lib-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'lib code' > lib.py && git add lib.py && git commit -m 'Initial lib'"
-  - "git clone --bare /tmp/lib-src ../lib-bare"
-  - "git config --global protocol.file.allow always"
+  - "mkdir -p ../lib-src && cd ../lib-src && git init && git config user.email 'test@test.com' && git config user.name 'Test User' && echo 'lib code' > lib.py && git add lib.py && git commit -m 'Initial lib'"
+  - "git clone --bare ../lib-src ../lib-bare"
+  - "git config protocol.file.allow always"
 prompt: "Add the repository at '../lib-bare' as a git submodule at path 'lib', then add and commit the changes. Output ONLY the commands to run, one per line."
 expected: "git submodule add ../lib-bare lib\ngit add .gitmodules lib\ngit commit -m 'Add lib submodule'"
 scoring:

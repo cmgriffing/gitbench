@@ -27,19 +27,41 @@ def _check_assertion(assertion: dict[str, Any], repo_path: str) -> bool:
         path = os.path.join(repo_path, assertion["path"])
         return os.path.isfile(path)
 
+    elif assertion_type == "file_not_exists":
+        path = os.path.join(repo_path, assertion["path"])
+        return not os.path.isfile(path)
+
     elif assertion_type == "dir_exists":
         path = os.path.join(repo_path, assertion["path"])
         return os.path.isdir(path)
+
+    elif assertion_type == "dir_not_exists":
+        path = os.path.join(repo_path, assertion["path"])
+        return not os.path.isdir(path)
 
     elif assertion_type == "file_content":
         path = os.path.join(repo_path, assertion["path"])
         if not os.path.isfile(path):
             return False
         actual = open(path).read()
-        expected = assertion["value"]
-        if assertion.get("contains", False):
+        expected = assertion.get("value")
+        contains = assertion.get("contains", False)
+        if isinstance(contains, str):
+            return contains in actual
+        if contains:
+            expected = expected or ""
             return expected in actual
+        if expected is None:
+            return False
         return actual.strip() == expected.strip()
+
+    elif assertion_type == "file_not_contains":
+        path = os.path.join(repo_path, assertion["path"])
+        if not os.path.isfile(path):
+            return True
+        actual = open(path).read()
+        unexpected = assertion["value"]
+        return unexpected not in actual
 
     elif assertion_type == "branch_exists":
         name = assertion["name"]
@@ -67,7 +89,6 @@ def _check_assertion(assertion: dict[str, Any], repo_path: str) -> bool:
 
     elif assertion_type == "git_output":
         command = assertion["command"]
-        contains = assertion["contains"]
         # Run command relative to repo
         parts = command.split()
         result = subprocess.run(
@@ -77,7 +98,11 @@ def _check_assertion(assertion: dict[str, Any], repo_path: str) -> bool:
             text=True,
         )
         output = result.stdout + result.stderr
-        return contains in output
+        if "contains" in assertion:
+            return assertion["contains"] in output
+        if "not_contains" in assertion:
+            return assertion["not_contains"] not in output
+        return result.returncode == 0
 
     else:
         logger.warning(f"Unknown assertion type: {assertion_type}")

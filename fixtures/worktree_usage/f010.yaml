@@ -14,11 +14,14 @@ setup:
   - "git checkout main"
   - "git worktree add ../feature-wt feature"
 prompt: "Lock the worktree at '../feature-wt' with the reason 'do not delete'. Output ONLY the git command, nothing else."
-expected: "git worktree lock ../feature-wt 'do not delete'"
+expected: "git worktree lock --reason 'do not delete' ../feature-wt"
 scoring:
   type: state_assertions
   expected_state:
     assertions:
       - type: git_output
-        command: "git worktree list"
+        command: "git worktree list --porcelain"
         contains: "locked"
+      - type: git_output
+        command: "git worktree list --porcelain"
+        contains: "do not delete"

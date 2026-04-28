@@ -64,9 +64,9 @@ class SubmoduleUsageBenchmark(Benchmark):
             bare_path = os.path.join(parent_dir, bare_name)
             executor.register_cleanup(bare_path)
 
-        # Also clean up temp source dirs used in setup
+        # Also clean up source dirs used in setup
         for tmp_name in ["lib-src", "utils-src", "plugins-src", "deps-src"]:
-            tmp_path = os.path.join("/tmp", tmp_name)
+            tmp_path = os.path.join(parent_dir, tmp_name)
             executor.register_cleanup(tmp_path)
 
         logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
@@ -113,10 +113,13 @@ class SubmoduleUsageBenchmark(Benchmark):
         for line in lines:
             logger.info(f"Executing: {line}")
             try:
+                env = os.environ.copy()
+                env["GIT_ALLOW_PROTOCOL"] = "file:git:ssh:https"
                 result = subprocess.run(
                     line,
                     shell=True,
                     cwd=repo_path,
+                    env=env,
                     capture_output=True,
                     text=True,
                     timeout=30,

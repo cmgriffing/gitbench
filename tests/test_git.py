@@ -90,6 +90,26 @@ class TestGitExecutor:
         executor.cleanup()
         executor.cleanup()  # Should not raise
 
+    def test_same_repo_name_uses_isolated_workspaces(self, tmp_path):
+        """Test that same-named repos do not share sibling temp paths."""
+        repo_name = "same_fixture_name"
+        first = GitExecutor(base_dir=str(tmp_path))
+        second = GitExecutor(base_dir=str(tmp_path))
+
+        first_path = first.setup_repo(repo_name, ['echo "first" > ../sibling.txt'])
+        second_path = second.setup_repo(repo_name, ['echo "second" > ../sibling.txt'])
+
+        first_parent = Path(first_path).parent
+        second_parent = Path(second_path).parent
+        assert first_parent != second_parent
+        assert (first_parent / "sibling.txt").read_text().strip() == "first"
+        assert (second_parent / "sibling.txt").read_text().strip() == "second"
+
+        first.cleanup()
+        second.cleanup()
+        assert not first_parent.exists()
+        assert not second_parent.exists()
+
     def test_setup_repo_command_failure(self, tmp_path, capsys):
         """Test that a failing command raises RuntimeError."""
         executor = GitExecutor(base_dir=str(tmp_path))
