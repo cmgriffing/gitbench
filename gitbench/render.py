@@ -238,123 +238,605 @@ def render_html(data: dict[str, Any], title: str = "GitBench Report") -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
   :root {{
-    --bg: #0f172a;
-    --card: #1e293b;
-    --border: #334155;
-    --text: #e2e8f0;
-    --text-dim: #94a3b8;
-    --accent: #3b82f6;
+    --bg: #07090f;
+    --surface: #0d1117;
+    --card: #0f1520;
+    --card-hover: #141d2e;
+    --border: rgba(255,255,255,0.07);
+    --border-accent: rgba(6,182,212,0.35);
+    --text: #e8f0ff;
+    --text-dim: #5a6a88;
+    --text-mid: #8898b8;
+    --accent: #06b6d4;
+    --accent-glow: rgba(6,182,212,0.12);
     --pass: #10b981;
-    --fail: #ef4444;
+    --pass-bg: rgba(16,185,129,0.12);
+    --pass-border: rgba(16,185,129,0.35);
+    --warn: #f59e0b;
+    --warn-bg: rgba(245,158,11,0.12);
+    --warn-border: rgba(245,158,11,0.35);
+    --fail: #f43f5e;
+    --fail-bg: rgba(244,63,94,0.12);
+    --fail-border: rgba(244,63,94,0.3);
+    --font-display: 'Manrope', sans-serif;
+    --font-mono: 'DM Mono', monospace;
   }}
+
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+
+  html {{ scroll-behavior: smooth; }}
+
   body {{
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--font-display);
     background: var(--bg);
     color: var(--text);
-    padding: 2rem;
+    min-height: 100vh;
     line-height: 1.6;
+    background-image:
+      radial-gradient(ellipse 70% 40% at 60% -10%, rgba(6,182,212,0.07), transparent),
+      radial-gradient(ellipse 50% 60% at -10% 80%, rgba(16,185,129,0.05), transparent);
   }}
-  h1 {{ font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem; }}
-  h2 {{ font-size: 1.3rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-dim); }}
-  h3 {{ font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; }}
-  .meta {{ color: var(--text-dim); font-size: 0.85rem; margin-bottom: 2rem; }}
-  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }}
-  .card {{
+
+  body::before {{
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }}
+
+  .page-wrapper {{
+    position: relative;
+    z-index: 1;
+    max-width: 1440px;
+    margin: 0 auto;
+  }}
+
+  /* ── HEADER ── */
+  .header {{
+    padding: 3rem 3.5rem 2.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 2rem;
+    flex-wrap: wrap;
+  }}
+
+  .header-eyebrow {{
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.22em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 0.6rem;
+    opacity: 0.8;
+  }}
+
+  h1 {{
+    font-size: clamp(2.2rem, 4vw, 3.2rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--text);
+  }}
+
+  h1 .accent {{ color: var(--accent); }}
+
+  .header-badges {{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+  }}
+
+  .badge {{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.28rem 0.8rem;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-mid);
+    letter-spacing: 0.04em;
+  }}
+
+  .badge-pulse {{
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }}
+
+  @keyframes pulse {{
+    0%, 100% {{ opacity: 1; box-shadow: 0 0 8px var(--accent); }}
+    50% {{ opacity: 0.5; box-shadow: 0 0 4px var(--accent); }}
+  }}
+
+  /* ── MAIN LAYOUT ── */
+  .main {{
+    padding: 3rem 3.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }}
+
+  /* ── SECTION LABELS ── */
+  .section-label {{
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }}
+
+  .section-label span {{
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }}
+
+  .section-label::after {{
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(to right, var(--border), transparent);
+  }}
+
+  /* ── SUMMARY CARDS ── */
+  .summary-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+    gap: 1rem;
+  }}
+
+  .summary-card {{
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1.25rem;
+    border-radius: 14px;
+    padding: 1.4rem 1.3rem 1.1rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+    cursor: default;
+    animation: fadeUp 0.5s ease backwards;
   }}
-  .card .label {{ font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }}
-  .card .value {{ font-size: 2rem; font-weight: 700; margin-top: 0.25rem; }}
-  .card .value.pass {{ color: var(--pass); }}
-  .card .value.fail {{ color: var(--fail); }}
-  .card .sub {{ font-size: 0.8rem; color: var(--text-dim); margin-top: 0.25rem; }}
-  .chart-row {{ display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; margin-bottom: 2rem; }}
+
+  .summary-card:hover {{
+    transform: translateY(-3px);
+    border-color: var(--border-accent);
+    box-shadow: 0 8px 32px rgba(6,182,212,0.08), 0 0 0 1px rgba(6,182,212,0.1);
+  }}
+
+  .summary-card::after {{
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--_bar-color, var(--border));
+    opacity: 0.9;
+  }}
+
+  .card-eyebrow {{
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.6rem;
+  }}
+
+  .card-value {{
+    font-size: 2.6rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }}
+
+  .card-value.high {{ color: var(--pass); }}
+  .card-value.mid {{ color: var(--warn); }}
+  .card-value.low {{ color: var(--fail); }}
+
+  .card-sub {{
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    margin-top: 0.55rem;
+    letter-spacing: 0.03em;
+  }}
+
+  /* ── CHARTS ── */
+  .charts-row {{
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }}
+
   .chart-card {{
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 1.5rem;
+    border-radius: 14px;
+    padding: 1.75rem;
   }}
-  canvas {{ max-height: 350px; }}
+
+  .chart-label {{
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    margin-bottom: 1.5rem;
+  }}
+
+  canvas {{ max-height: 340px; }}
+
+  /* ── MATRIX ── */
+  .matrix-card {{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }}
+
+  .matrix-inner {{
+    overflow-x: auto;
+    padding: 1.75rem;
+  }}
+
   table {{
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.9rem;
   }}
-  th, td {{
-    padding: 0.6rem 0.8rem;
+
+  th {{
+    font-family: var(--font-mono);
+    font-size: 0.63rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    padding: 0.55rem 0.9rem;
     text-align: left;
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    font-weight: 400;
   }}
-  th {{ color: var(--text-dim); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }}
-  td.pass {{ color: var(--pass); }}
-  td.fail {{ color: var(--fail); }}
-  .bar {{
-    display: inline-block;
-    height: 8px;
-    border-radius: 4px;
-    background: var(--accent);
+
+  td {{
+    padding: 0.5rem 0.9rem;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    white-space: nowrap;
     vertical-align: middle;
-    margin-left: 0.5rem;
   }}
-  .section {{ margin-bottom: 2.5rem; }}
-  @media (max-width: 768px) {{
-    .chart-row {{ grid-template-columns: 1fr; }}
-    body {{ padding: 1rem; }}
+
+  tr:last-child td {{ border-bottom: none; }}
+
+  tr:hover td {{ background: rgba(255,255,255,0.015); }}
+
+  .bench-name {{
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-mid);
+    font-weight: 300;
+  }}
+
+  .heat-pill {{
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.55rem;
+    border-radius: 5px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }}
+
+  .cell-count {{
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-left: 0.3rem;
+    letter-spacing: 0.02em;
+  }}
+
+  .heat-na {{
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    opacity: 0.5;
+  }}
+
+  /* ── FIXTURE ACCORDION ── */
+  .fixture-list {{
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }}
+
+  details.fx-model {{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }}
+
+  details.fx-model[open] {{
+    border-color: rgba(6,182,212,0.2);
+  }}
+
+  summary.fx-summary {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.1rem 1.5rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    transition: background 0.15s;
+  }}
+
+  summary.fx-summary::-webkit-details-marker {{ display: none; }}
+  summary.fx-summary::marker {{ display: none; }}
+  summary.fx-summary:hover {{ background: rgba(255,255,255,0.02); }}
+
+  .fx-model-name {{
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }}
+
+  .fx-right {{
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }}
+
+  .fx-chevron {{
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }}
+
+  details.fx-model[open] .fx-chevron {{
+    background: var(--accent-glow);
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: rotate(45deg);
+  }}
+
+  .fx-body {{
+    padding: 0 1.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }}
+
+  .fx-bench-header {{
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    padding-bottom: 0.45rem;
+    border-bottom: 1px solid rgba(6,182,212,0.15);
+    margin-bottom: 0.1rem;
+    opacity: 0.75;
+  }}
+
+  .fx-row {{
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.38rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }}
+
+  .fx-row:last-child {{ border-bottom: none; }}
+
+  .fx-id {{
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-mid);
+    font-weight: 300;
+  }}
+
+  .fx-sim {{
+    font-family: var(--font-mono);
+    font-size: 0.73rem;
+    color: var(--text-dim);
+    text-align: right;
+  }}
+
+  .result-pill {{
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding: 0.18rem 0.55rem;
+    border-radius: 4px;
+    min-width: 42px;
+    text-align: center;
+  }}
+
+  .result-pill.pass {{
+    background: var(--pass-bg);
+    color: var(--pass);
+    border: 1px solid var(--pass-border);
+  }}
+
+  .result-pill.fail {{
+    background: var(--fail-bg);
+    color: var(--fail);
+    border: 1px solid var(--fail-border);
+  }}
+
+  /* ── RUN HISTORY ── */
+  .runs-card {{
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    padding: 1.75rem;
+  }}
+
+  .runs-card table th {{ font-weight: 400; }}
+
+  .runs-card table td {{
+    font-family: var(--font-mono);
+    font-size: 0.77rem;
+    color: var(--text-mid);
+  }}
+
+  .sha-text {{
+    color: var(--accent);
+    opacity: 0.6;
+  }}
+
+  /* ── FOOTER ── */
+  .footer {{
+    padding: 1.5rem 3.5rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }}
+
+  .footer span {{
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.6;
+  }}
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {{
+    from {{ opacity: 0; transform: translateY(10px); }}
+    to {{ opacity: 1; transform: translateY(0); }}
+  }}
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 960px) {{
+    .header {{ padding: 2rem 1.75rem 1.75rem; }}
+    .main {{ padding: 2rem 1.75rem; }}
+    .charts-row {{ grid-template-columns: 1fr; }}
+    .footer {{ padding: 1.25rem 1.75rem; }}
+  }}
+
+  @media (max-width: 600px) {{
+    .header {{ padding: 1.5rem 1.25rem 1.25rem; }}
+    .main {{ padding: 1.5rem 1.25rem; }}
   }}
 </style>
 </head>
 <body>
+<div class="page-wrapper">
 
-<h1>{title}</h1>
-<div class="meta">Generated {generated} &middot; {len(data['runs_meta'])} run(s) &middot; {len(models)} model(s) &middot; {len(benchmarks)} benchmark(s)</div>
+  <header class="header">
+    <div>
+      <div class="header-eyebrow">// benchmark report</div>
+      <h1>Git<span class="accent">Bench</span></h1>
+      <div class="header-badges">
+        <span class="badge"><span class="badge-pulse"></span>Generated {generated}</span>
+        <span class="badge">{len(data['runs_meta'])} run(s)</span>
+        <span class="badge">{len(models)} model(s)</span>
+        <span class="badge">{len(benchmarks)} benchmark(s)</span>
+      </div>
+    </div>
+  </header>
 
-<!-- Summary cards -->
-<div class="grid" id="summary-cards"></div>
+  <main class="main">
 
-<!-- Charts -->
-<div class="chart-row">
-  <div class="chart-card">
-    <h3>Overall Pass Rate</h3>
-    <canvas id="summaryChart"></canvas>
-  </div>
-  <div class="chart-card">
-    <h3>Per-Benchmark Comparison</h3>
-    <canvas id="benchChart"></canvas>
-  </div>
+    <!-- Summary Cards -->
+    <section>
+      <div class="section-label"><span>Model Summary</span></div>
+      <div class="summary-grid" id="summary-cards"></div>
+    </section>
+
+    <!-- Charts -->
+    <section>
+      <div class="section-label"><span>Performance Charts</span></div>
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-label">Per-Benchmark Comparison</div>
+          <canvas id="benchChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Matrix -->
+    <section>
+      <div class="section-label"><span>Results Matrix</span></div>
+      <div class="matrix-card">
+        <div class="matrix-inner">
+          <table id="matrix-table">
+            <thead><tr id="matrix-header"></tr></thead>
+            <tbody id="matrix-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Fixture Details -->
+    <section>
+      <div class="section-label"><span>Fixture Details</span></div>
+      <div class="fixture-list" id="fixture-details"></div>
+    </section>
+
+    <!-- Run History -->
+    <section>
+      <div class="section-label"><span>Run History</span></div>
+      <div class="runs-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th><th>Model</th><th>Profile</th><th>Git SHA</th>
+            </tr>
+          </thead>
+          <tbody id="runs-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>GitBench &mdash; Automated Git Task Benchmark</span>
+    <span>{generated}</span>
+  </footer>
+
 </div>
-
-<!-- Matrix table -->
-<div class="section">
-  <div class="chart-card">
-    <h3>Results Matrix</h3>
-    <table id="matrix-table">
-      <thead><tr id="matrix-header"></tr></thead>
-      <tbody id="matrix-body"></tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Per-fixture details -->
-<div class="section" id="fixture-details"></div>
-
-<!-- Run metadata -->
-<div class="section">
-  <div class="chart-card">
-    <h3>Run History</h3>
-    <table>
-      <thead><tr><th>Timestamp</th><th>Model</th><th>Profile</th><th>Git SHA</th></tr></thead>
-      <tbody id="runs-body"></tbody>
-    </table>
-  </div>
-</div>
-
 <script>
 const models = {summary_labels};
 const benchmarks = {bench_labels_json};
@@ -365,45 +847,53 @@ const matrix = {json.dumps(matrix)};
 const runsMeta = {runs_meta_json};
 const modelSummaries = {json.dumps(model_summaries)};
 
+function heatStyle(ratio) {{
+  if (ratio >= 0.8) return {{ bg: 'var(--pass-bg)', color: 'var(--pass)', border: 'var(--pass-border)' }};
+  if (ratio >= 0.5) return {{ bg: 'var(--warn-bg)', color: 'var(--warn)', border: 'var(--warn-border)' }};
+  return {{ bg: 'var(--fail-bg)', color: 'var(--fail)', border: 'var(--fail-border)' }};
+}}
+
 // Summary cards
 const cardsEl = document.getElementById('summary-cards');
-models.forEach(m => {{
+models.forEach((m, i) => {{
   const s = modelSummaries[m];
   const pct = (s.pass_at_k * 100).toFixed(1);
-  const cls = s.pass_at_k >= 0.8 ? 'pass' : s.pass_at_k < 0.5 ? 'fail' : '';
+  const cls = s.pass_at_k >= 0.8 ? 'high' : s.pass_at_k < 0.5 ? 'low' : 'mid';
+  const barColor = s.pass_at_k >= 0.8 ? 'var(--pass)' : s.pass_at_k < 0.5 ? 'var(--fail)' : 'var(--warn)';
   cardsEl.innerHTML += `
-    <div class="card">
-      <div class="label">${{m}}</div>
-      <div class="value ${{cls}}">${{pct}}%</div>
-      <div class="sub">${{s.total_passed}}/${{s.total_fixtures}} fixtures</div>
+    <div class="summary-card" style="animation-delay:${{i * 55}}ms;--_bar-color:${{barColor}}">
+      <div class="card-eyebrow">${{m}}</div>
+      <div class="card-value ${{cls}}">${{pct}}%</div>
+      <div class="card-sub">${{s.total_passed}} / ${{s.total_fixtures}} fixtures</div>
     </div>`;
 }});
 
-// Summary bar chart
-new Chart(document.getElementById('summaryChart'), {{
-  type: 'bar',
-  data: {{
-    labels: models,
-    datasets: [{{ label: 'Pass %', data: summaryValues, backgroundColor: '#3b82f6' }}]
-  }},
-  options: {{
-    indexAxis: 'y',
-    scales: {{ x: {{ max: 100, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }} }}, y: {{ ticks: {{ color: '#e2e8f0' }}, grid: {{ display: false }} }} }},
-    plugins: {{ legend: {{ display: false }} }},
-    responsive: true,
-  }}
-}});
+// Chart global defaults
+Chart.defaults.color = '#5a6a88';
+Chart.defaults.font.family = "'DM Mono', monospace";
+Chart.defaults.font.size = 11;
 
-// Bench comparison chart
+// Per-benchmark grouped bar chart
+const benchColors = ['#06b6d4','#10b981','#f59e0b','#f43f5e','#8b5cf6','#ec4899','#0ea5e9','#84cc16','#fb923c','#a78bfa'];
+const styledDatasets = benchDatasets.map((ds, i) => ({{
+  ...ds,
+  backgroundColor: benchColors[i % benchColors.length] + '99',
+  borderColor: benchColors[i % benchColors.length],
+  borderWidth: 1,
+  borderRadius: 3,
+}}));
+
 new Chart(document.getElementById('benchChart'), {{
   type: 'bar',
-  data: {{ labels: benchmarks, datasets: benchDatasets }},
+  data: {{ labels: benchmarks, datasets: styledDatasets }},
   options: {{
     scales: {{
-      y: {{ max: 100, ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#334155' }} }},
-      x: {{ ticks: {{ color: '#e2e8f0', maxRotation: 45 }}, grid: {{ display: false }} }}
+      y: {{ max: 100, ticks: {{ color: '#5a6a88', callback: v => v + '%' }}, grid: {{ color: 'rgba(255,255,255,0.04)' }}, border: {{ display: false }} }},
+      x: {{ ticks: {{ color: '#8898b8', maxRotation: 40 }}, grid: {{ display: false }}, border: {{ display: false }} }}
     }},
-    plugins: {{ legend: {{ labels: {{ color: '#e2e8f0' }} }} }},
+    plugins: {{
+      legend: {{ labels: {{ color: '#8898b8', boxWidth: 8, boxHeight: 8, usePointStyle: true, pointStyle: 'rect' }} }}
+    }},
     responsive: true,
   }}
 }});
@@ -414,39 +904,58 @@ headerEl.innerHTML = '<th>Benchmark</th>' + models.map(m => `<th>${{m}}</th>`).j
 
 const bodyEl = document.getElementById('matrix-body');
 benchmarks.forEach(bench => {{
-  let row = `<td>${{bench}}</td>`;
+  let row = `<td class="bench-name">${{bench}}</td>`;
   models.forEach(m => {{
     const cell = matrix[m]?.[bench];
     if (cell) {{
       const pct = (cell.pass_at_k * 100).toFixed(1);
-      const cls = cell.pass_at_k >= 0.8 ? 'pass' : cell.pass_at_k < 0.5 ? 'fail' : '';
-      const barW = Math.round(cell.pass_at_k * 80);
-      row += `<td class="${{cls}}">${{pct}}% <span class="bar" style="width:${{barW}}px"></span> <span style="color:#94a3b8;font-size:0.8rem">${{cell.passed}}/${{cell.total}}</span></td>`;
+      const h = heatStyle(cell.pass_at_k);
+      row += `<td>
+        <span class="heat-pill" style="background:${{h.bg}};color:${{h.color}};border:1px solid ${{h.border}}">${{pct}}%</span>
+        <span class="cell-count">${{cell.passed}}/${{cell.total}}</span>
+      </td>`;
     }} else {{
-      row += '<td style="color:#94a3b8">—</td>';
+      row += '<td><span class="heat-na">—</span></td>';
     }}
   }});
   bodyEl.innerHTML += `<tr>${{row}}</tr>`;
 }});
 
-// Fixture details per model
+// Fixture accordion
 const detailsEl = document.getElementById('fixture-details');
-models.forEach(m => {{
-  let html = `<div class="chart-card" style="margin-bottom:1rem"><h3>${{m}} — Fixture Details</h3>`;
+models.forEach((m, mi) => {{
+  const s = modelSummaries[m];
+  const pct = (s.pass_at_k * 100).toFixed(1);
+  const h = heatStyle(s.pass_at_k);
+
+  let benchHTML = '';
   benchmarks.forEach(bench => {{
     const fl = simData[m]?.[bench] || [];
-    if (fl.length === 0) return;
-    html += `<table style="margin-bottom:1rem"><thead><tr><th colspan="3">${{bench}}</th></tr>
-      <tr><th>Fixture</th><th>Similarity</th><th>Result</th></tr></thead><tbody>`;
+    if (!fl.length) return;
+    benchHTML += `<div>
+      <div class="fx-bench-header">${{bench}}</div>`;
     fl.forEach(f => {{
       const cls = f.passed ? 'pass' : 'fail';
-      const label = f.passed ? 'PASS' : 'FAIL';
-      html += `<tr><td>${{f.id}}</td><td>${{f.sim}}%</td><td class="${{cls}}">${{label}}</td></tr>`;
+      benchHTML += `<div class="fx-row">
+        <div class="fx-id">${{f.id}}</div>
+        <div class="fx-sim">${{f.sim}}%</div>
+        <div class="result-pill ${{cls}}">${{f.passed ? 'PASS' : 'FAIL'}}</div>
+      </div>`;
     }});
-    html += '</tbody></table>';
+    benchHTML += '</div>';
   }});
-  html += '</div>';
-  detailsEl.innerHTML += html;
+
+  detailsEl.innerHTML += `
+    <details class="fx-model">
+      <summary class="fx-summary">
+        <span class="fx-model-name">${{m}}</span>
+        <div class="fx-right">
+          <span class="heat-pill" style="background:${{h.bg}};color:${{h.color}};border:1px solid ${{h.border}}">${{pct}}%</span>
+          <div class="fx-chevron">+</div>
+        </div>
+      </summary>
+      <div class="fx-body">${{benchHTML}}</div>
+    </details>`;
 }});
 
 // Run history
@@ -454,7 +963,12 @@ const runsBody = document.getElementById('runs-body');
 runsMeta.forEach(r => {{
   const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
   const sha = r.git_sha ? r.git_sha.slice(0, 8) : '—';
-  runsBody.innerHTML += `<tr><td>${{ts}}</td><td>${{r.model}}</td><td>${{r.profile}}</td><td style="font-family:monospace">${{sha}}</td></tr>`;
+  runsBody.innerHTML += `<tr>
+    <td>${{ts}}</td>
+    <td>${{r.model}}</td>
+    <td>${{r.profile || '—'}}</td>
+    <td class="sha-text">${{sha}}</td>
+  </tr>`;
 }});
 </script>
 
