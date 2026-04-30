@@ -17,6 +17,7 @@ from gitbench.benchmarks.submodule_usage import SubmoduleUsageBenchmark
 from gitbench.benchmarks.tag_management import TagManagementBenchmark
 from gitbench.benchmarks.worktree_usage import WorktreeUsageBenchmark
 from gitbench.benchmarks.git_log_format import GitLogFormatBenchmark
+from gitbench.benchmarks.git_show import GitShowBenchmark
 
 
 class TestBenchmarkABC:
@@ -1138,3 +1139,82 @@ class TestBenchmarkFixtureLoading:
             f"Expected at least 30 total setup commands across fixtures, "
             f"got {total_commands}"
         )
+
+
+class TestGitShowBenchmark:
+    """Test the git_show benchmark implementation."""
+
+    def test_benchmark_inherits_from_benchmark_abc(self):
+        """Test that GitShowBenchmark is a subclass of Benchmark."""
+        assert issubclass(GitShowBenchmark, Benchmark)
+
+    def test_benchmark_has_name(self):
+        """Test that the benchmark has the expected name."""
+        assert GitShowBenchmark.name == "git_show"
+
+    def test_benchmark_has_description(self):
+        """Test that the benchmark has a description."""
+        assert isinstance(GitShowBenchmark.description, str)
+        assert len(GitShowBenchmark.description) > 0
+
+    def test_benchmark_can_be_instantiated(self):
+        """Test that GitShowBenchmark can be instantiated."""
+        benchmark = GitShowBenchmark()
+        assert benchmark is not None
+
+    def test_load_fixtures_returns_list(self):
+        """Test that load_fixtures returns a list of fixtures."""
+        benchmark = GitShowBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert isinstance(fixtures, list)
+
+    def test_fixture_count_at_least_10(self):
+        """Test that at least 10 fixtures are loaded."""
+        benchmark = GitShowBenchmark()
+        fixtures = benchmark.load_fixtures()
+        assert len(fixtures) >= 10, f"Expected at least 10 fixtures, got {len(fixtures)}"
+
+    @pytest.mark.parametrize("fixture", GitShowBenchmark().load_fixtures(), ids=lambda f: f.id)
+    def test_fixtures_have_required_fields(self, fixture):
+        """Test that all fixtures have required fields."""
+        assert hasattr(fixture, "id")
+        assert hasattr(fixture, "description")
+        assert hasattr(fixture, "setup")
+        assert hasattr(fixture, "prompt")
+        assert hasattr(fixture, "expected")
+        assert hasattr(fixture, "scoring")
+
+        assert isinstance(fixture.id, str)
+        assert isinstance(fixture.setup, list)
+        assert isinstance(fixture.prompt, str)
+        assert isinstance(fixture.expected, str)
+        assert isinstance(fixture.scoring, dict)
+
+    def test_fixture_ids_are_unique(self):
+        """Test that all fixture IDs are unique."""
+        benchmark = GitShowBenchmark()
+        fixtures = benchmark.load_fixtures()
+
+        ids = [f.id for f in fixtures]
+        assert len(ids) == len(set(ids)), f"Duplicate fixture IDs found: {ids}"
+
+    def test_score_exact_match_passes(self):
+        """Test that an exact match scores as passed."""
+        from gitbench.harness.types import Score
+
+        benchmark = GitShowBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+        result = benchmark.score(fixture, fixture.expected)
+
+        assert isinstance(result, Score)
+        assert result.passed is True
+        assert result.similarity == 1.0
+
+    def test_score_wrong_answer_fails(self):
+        """Test that a wrong answer scores as failed."""
+        benchmark = GitShowBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+        result = benchmark.score(fixture, "definitely-wrong@answer.com")
+
+        assert result.passed is False
+        assert result.similarity == 0.0
