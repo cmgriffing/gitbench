@@ -766,7 +766,7 @@ def render_html(data: dict[str, Any], title: str = "GitBench Report") -> str:
   <header class="header">
     <div>
       <div class="header-eyebrow">// benchmark report</div>
-      <h1>Git<span class="accent">Bench</span></h1>
+      <h1>{title}</h1>
       <div class="header-badges">
         <span class="badge"><span class="badge-pulse"></span>Generated {generated}</span>
         <span class="badge">{len(data['runs_meta'])} run(s)</span>
