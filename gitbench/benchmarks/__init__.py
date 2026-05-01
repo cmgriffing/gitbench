@@ -9,5 +9,6 @@ from gitbench.benchmarks.commit_squash import CommitSquashBenchmark
 from gitbench.benchmarks.tag_management import TagManagementBenchmark
 from gitbench.benchmarks.git_clean import GitCleanBenchmark
 from gitbench.benchmarks.git_grep import GitGrepBenchmark
+from gitbench.benchmarks.git_log_format import GitLogFormatBenchmark
 
-__all__ = ["Benchmark", "StashRecoveryBenchmark", "CommitSquashBenchmark", "TagManagementBenchmark", "GitCleanBenchmark", "GitGrepBenchmark"]
+__all__ = ["Benchmark", "StashRecoveryBenchmark", "CommitSquashBenchmark", "TagManagementBenchmark", "GitCleanBenchmark", "GitGrepBenchmark", "GitLogFormatBenchmark"]
