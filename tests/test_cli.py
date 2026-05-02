@@ -10,12 +10,14 @@ import pytest
 from click.testing import CliRunner
 
 from gitbench.cli import (
+    SummaryTable,
     TerminalProgressTable,
     _progress_model_names,
     _progress_model_names_for_runs,
     check_git_availability,
     cli,
     get_model_client,
+    should_use_colors,
 )
 
 
@@ -492,6 +494,171 @@ class TestTerminalProgressTable:
         table.close()
 
         assert stream.getvalue() == ""
+
+
+class TestShouldUseColors:
+    """Tests for color detection utility."""
+
+    def test_no_color_env_var_disables_colors(self):
+        """NO_COLOR env var should disable colors."""
+        with patch.dict("os.environ", {"NO_COLOR": "1"}, clear=False):
+            import gitbench.cli as cli_module
+
+            # Reset the cached value
+            cli_module._use_colors = None
+            result = should_use_colors()
+            assert result is False
+
+    def test_term_dumb_disables_colors(self):
+        """TERM=dumb should disable colors."""
+        with patch.dict("os.environ", {"TERM": "dumb"}, clear=False):
+            import gitbench.cli as cli_module
+
+            cli_module._use_colors = None
+            result = should_use_colors()
+            assert result is False
+
+    def test_tty_stream_enables_colors(self):
+        """TTY stream should enable colors."""
+        stream = TtyStringIO()
+        import gitbench.cli as cli_module
+
+        cli_module._use_colors = None
+        result = should_use_colors(stream)
+        assert result is True
+
+    def test_non_tty_stream_disables_colors(self):
+        """Non-TTY stream should disable colors."""
+        stream = StringIO()
+        import gitbench.cli as cli_module
+
+        cli_module._use_colors = None
+        result = should_use_colors(stream)
+        assert result is False
+
+    def test_result_is_cached(self):
+        """Result should be cached after first call."""
+        import gitbench.cli as cli_module
+
+        cli_module._use_colors = None
+        stream = TtyStringIO()
+
+        first = should_use_colors(stream)
+        second = should_use_colors(stream)
+
+        assert first == second
+        assert cli_module._use_colors is not None
+
+
+class TestSummaryTable:
+    """Tests for SummaryTable class."""
+
+    def setup_method(self):
+        """Reset cached color state before each test."""
+        import gitbench.cli as cli_module
+        cli_module._use_colors = None
+
+    def test_render_returns_none_when_disabled(self):
+        """render() should return None when stdout is not a TTY."""
+        import gitbench.cli as cli_module
+
+        cli_module._use_colors = None
+        stream = StringIO()
+        results = [
+            {"benchmark": "commit_messages", "total": 10, "passed": 8, "pass_at_k": 0.8},
+        ]
+        table = SummaryTable(results, stream=stream)
+        result = table.render()
+        assert result is None
+        assert stream.getvalue() == ""
+
+    def test_render_writes_table_when_enabled(self):
+        """render() should write colored table to stream when TTY."""
+        stream = TtyStringIO()
+        results = [
+            {"benchmark": "commit_messages", "total": 10, "passed": 8, "pass_at_k": 0.8},
+            {"benchmark": "rebase", "total": 5, "passed": 2, "pass_at_k": 0.4},
+        ]
+        table = SummaryTable(results, stream=stream)
+        result = table.render()
+
+        assert result is not None
+        output = stream.getvalue()
+        assert "Benchmark" in output
+        assert "Pass@1" in output
+        assert "Passed/Fail" in output
+
+    def test_rows_sorted_alphabetically(self):
+        """Results should be sorted alphabetically by benchmark name."""
+        stream = TtyStringIO()
+        results = [
+            {"benchmark": "zebra", "total": 5, "passed": 5, "pass_at_k": 1.0},
+            {"benchmark": "alpha", "total": 5, "passed": 3, "pass_at_k": 0.6},
+            {"benchmark": "middle", "total": 5, "passed": 2, "pass_at_k": 0.4},
+        ]
+        table = SummaryTable(results, stream=stream)
+        table.render()
+
+        output = stream.getvalue()
+        alpha_pos = output.find("alpha")
+        middle_pos = output.find("middle")
+        zebra_pos = output.find("zebra")
+        assert alpha_pos < middle_pos < zebra_pos
+
+    def test_summary_row_contains_totals(self):
+        """Summary row should show overall pass@1 and total fixtures."""
+        stream = TtyStringIO()
+        results = [
+            {"benchmark": "commit_messages", "total": 10, "passed": 8, "pass_at_k": 0.8},
+            {"benchmark": "rebase", "total": 5, "passed": 2, "pass_at_k": 0.4},
+        ]
+        table = SummaryTable(results, stream=stream)
+        table.render()
+
+        output = stream.getvalue()
+        assert "TOTAL" in output
+        # 10 passed + 2 passed = 12, total = 15, pass@1 = 0.8
+        assert "8/10" in output or "10/15" in output
+
+    def test_color_coding_thresholds(self):
+        """Color should be green >= 0.8, yellow >= 0.5, red < 0.5."""
+        stream = TtyStringIO()
+
+        # Green (>= 0.8)
+        results_green = [{"benchmark": "green", "total": 10, "passed": 9, "pass_at_k": 0.9}]
+        table_green = SummaryTable(results_green, stream=stream)
+        table_green.render()
+        output_green = stream.getvalue()
+        assert "\x1b[32m" in output_green  # Green
+
+        # Yellow (>= 0.5)
+        stream2 = TtyStringIO()
+        results_yellow = [{"benchmark": "yellow", "total": 10, "passed": 6, "pass_at_k": 0.6}]
+        table_yellow = SummaryTable(results_yellow, stream=stream2)
+        table_yellow.render()
+        output_yellow = stream2.getvalue()
+        assert "\x1b[33m" in output_yellow  # Yellow
+
+        # Red (< 0.5)
+        stream3 = TtyStringIO()
+        results_red = [{"benchmark": "red", "total": 10, "passed": 4, "pass_at_k": 0.4}]
+        table_red = SummaryTable(results_red, stream=stream3)
+        table_red.render()
+        output_red = stream3.getvalue()
+        assert "\x1b[31m" in output_red  # Red
+
+    def test_passed_fail_column_format(self):
+        """Passed/Fail column should show passed/failed counts."""
+        stream = TtyStringIO()
+        results = [
+            {"benchmark": "test", "total": 10, "passed": 7, "pass_at_k": 0.7},
+        ]
+        table = SummaryTable(results, stream=stream)
+        table.render()
+
+        output = stream.getvalue()
+        # Should show 7 passed, 3 failed
+        assert "7/3" in output
 
 
 class TestBuildRunEnvelope:

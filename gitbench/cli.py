@@ -4,6 +4,7 @@ import importlib
 import inspect
 import json
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -614,6 +615,157 @@ def run_benchmark(
     )
 
 
+# ANSI color codes
+RED = "\x1b[31m"
+GREEN = "\x1b[32m"
+YELLOW = "\x1b[33m"
+RESET = "\x1b[0m"
+BOLD = "\x1b[1m"
+
+# Cached color detection result
+_use_colors: bool | None = None
+
+
+def should_use_colors(stream=None) -> bool:
+    """Determine whether to use colored terminal output.
+
+    Checks:
+    - NO_COLOR environment variable (per https://no-color.org/)
+    - TERM environment variable set to 'dumb'
+    - Whether the stream is a TTY
+
+    Result is cached after first call for performance.
+
+    Args:
+        stream: Stream to check TTY status against. Defaults to sys.stdout.
+
+    Returns:
+        True if colors should be used, False otherwise.
+    """
+    global _use_colors
+
+    if _use_colors is not None:
+        return _use_colors
+
+    # Respect NO_COLOR env var
+    if os.environ.get("NO_COLOR"):
+        _use_colors = False
+        return False
+
+    # Respect TERM=dumb
+    if os.environ.get("TERM") == "dumb":
+        _use_colors = False
+        return False
+
+    # Check if stream is a TTY
+    check_stream = stream or sys.stdout
+    is_tty = getattr(check_stream, "isatty", lambda: False)()
+    _use_colors = bool(is_tty)
+    return _use_colors
+
+
+class SummaryTable:
+    """Render a colored summary table of benchmark results to stdout.
+
+    Only renders when stdout is a TTY (colored output suppressed when piped).
+    Uses ANSI escape codes when color is enabled, plain text otherwise.
+    Color coding for pass@1: green >= 0.8, yellow >= 0.5, red < 0.5.
+    """
+
+    def __init__(self, results: list[dict], stream=None) -> None:
+        """Initialize summary table with benchmark results.
+
+        Args:
+            results: List of BenchmarkResult dicts with benchmark, total, passed, pass_at_k keys.
+            stream: Output stream. Defaults to sys.stdout.
+        """
+        self.stream = stream or sys.stdout
+        self.results = results
+        self.enabled = should_use_colors(self.stream)
+
+    def _color(self, text: str, color: str) -> str:
+        """Wrap text in ANSI color codes if colors are enabled."""
+        if self.enabled:
+            return f"{color}{text}{RESET}"
+        return text
+
+    def _bold(self, text: str) -> str:
+        """Wrap text in ANSI bold code if colors are enabled."""
+        if self.enabled:
+            return f"{BOLD}{text}{RESET}"
+        return text
+
+    def _pass_at_k_color(self, pass_at_k: float) -> str:
+        """Return color for a pass@1 value."""
+        if pass_at_k >= 0.8:
+            return GREEN
+        elif pass_at_k >= 0.5:
+            return YELLOW
+        else:
+            return RED
+
+    def render(self) -> str | None:
+        """Render the summary table and write to stream.
+
+        Returns:
+            The table string, or None if stdout is not a TTY (table suppressed).
+        """
+        if not self.enabled:
+            return None
+
+        # Sort results alphabetically by benchmark name
+        sorted_results = sorted(self.results, key=lambda r: r.get("benchmark", ""))
+
+        # Calculate totals
+        total_fixtures = sum(r.get("total", 0) for r in sorted_results)
+        total_passed = sum(r.get("passed", 0) for r in sorted_results)
+        overall_pass_at_k = round(total_passed / total_fixtures, 4) if total_fixtures > 0 else 0.0
+
+        # Build table lines
+        lines: list[str] = []
+
+        # Header
+        header = f"{'Benchmark':<30} {'Pass@1':>8} {'Passed/Fail':>12}"
+        lines.append(self._bold(header))
+        lines.append("-" * 54)
+
+        # Data rows
+        for r in sorted_results:
+            benchmark = r.get("benchmark", "?")
+            total = r.get("total", 0)
+            passed = r.get("passed", 0)
+            failed = total - passed
+            pass_at_k = r.get("pass_at_k", 0.0)
+            pass_at_k_str = f"{pass_at_k:.1%}"
+
+            color = self._pass_at_k_color(pass_at_k)
+            pass_at_k_colored = self._color(pass_at_k_str, color)
+            passed_fail = f"{passed}/{failed}"
+
+            line = f"{benchmark:<30} {pass_at_k_colored:>8} {passed_fail:>12}"
+            lines.append(line)
+
+        # Separator before summary
+        lines.append("-" * 54)
+
+        # Summary row
+        summary_pass_at_k_str = f"{overall_pass_at_k:.1%}"
+        summary_color = self._pass_at_k_color(overall_pass_at_k)
+        summary_pass_at_k_colored = self._color(summary_pass_at_k_str, summary_color)
+        total_str = f"{total_passed}/{total_fixtures}"
+
+        summary_line = f"{'TOTAL':<30} {summary_pass_at_k_colored:>8} {total_str:>12}"
+        lines.append(self._bold(summary_line))
+
+        table = "\n".join(lines) + "\n"
+
+        # Write to stream
+        self.stream.write(table)
+        self.stream.flush()
+
+        return table
+
+
 @click.group()
 def cli():
     """GitBench: Benchmark harness for evaluating LLM-generated git commit messages."""
@@ -941,6 +1093,8 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
                 append_pending_output(profile_name, model_result)
                 append_profile_result(profile_name, [model_result])
 
+            all_model_results = [mr for mr in ordered_results if mr is not None]
+
         else:
             for run_index, (profile_name, profile_conf, models_to_run) in enumerate(runs):
                 p_base_url = base_url or profile_conf.get("base_url")
@@ -958,6 +1112,8 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
 
                 all_model_results: list[dict] = []
                 progress_model_names = progress_model_names_by_run[run_index]
+
+                all_model_results: list[dict] = []
 
                 if model_workers > 1 and len(models_to_run) > 1:
                     worker_count = min(model_workers, len(models_to_run))
@@ -1052,6 +1208,17 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
 
         progress_table.close()
 
+        # Collect all results for summary table
+        all_results: list[dict] = []
+        for model_result in all_model_results:
+            for r in model_result.get("results", []):
+                all_results.append(r)
+
+        # Print summary table to stdout (suppressed when piped)
+        if all_results:
+            summary_table = SummaryTable(all_results)
+            summary_table.render()
+
         for _profile_name, envelope in pending_outputs:
             if output_dir:
                 written = write_output_dir(envelope, output_dir)
@@ -1076,6 +1243,9 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
                 },
                 "profiles": all_profile_results,
             }
+        else:
+            # Single profile: combined was built inside the run loop
+            pass
 
         output_json = json.dumps(combined, indent=2)
 
