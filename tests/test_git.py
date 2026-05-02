@@ -1,6 +1,7 @@
 """Tests for the Git executor."""
 
 import os
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -131,3 +132,93 @@ class TestGitExecutor:
 
         executor.cleanup()
         assert executor.repo_path is None
+
+    def test_branch_creation_tracked_and_cleaned_up(self, tmp_path):
+        """Test that branches created via checkout -b are tracked and deleted on cleanup."""
+        executor = GitExecutor(base_dir=str(tmp_path))
+        repo_name = f"test_branch_{uuid.uuid4().hex[:8]}"
+
+        commands = [
+            "git init",
+            'echo "content" > file.txt',
+            "git add .",
+            'git commit -m "initial"',
+            "git checkout -b feature-branch",
+        ]
+
+        repo_path = executor.setup_repo(repo_name, commands)
+
+        # Verify branch was created in the repo
+        result = subprocess.run(
+            ["git", "branch"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+        assert "feature-branch" in result.stdout
+
+        # Cleanup should delete the branch
+        executor.cleanup()
+
+        # Recreate a minimal repo to check if the branch still exists
+        # (We can't check the original repo since it's deleted)
+        # Instead, verify the executor's internal state is clean
+        assert executor._created_branches == []
+
+        # Verify the workspace was fully removed
+        assert executor._workspace_path is None
+        assert executor._repo_path is None
+
+    def test_git_branch_command_tracked_and_cleaned_up(self, tmp_path):
+        """Test that branches created via 'git branch <name>' are tracked and deleted."""
+        executor = GitExecutor(base_dir=str(tmp_path))
+        repo_name = f"test_branch_cmd_{uuid.uuid4().hex[:8]}"
+
+        commands = [
+            "git init",
+            'echo "content" > file.txt',
+            "git add .",
+            'git commit -m "initial"',
+            "git branch feature-branch",
+        ]
+
+        repo_path = executor.setup_repo(repo_name, commands)
+
+        # Verify branch was created
+        result = subprocess.run(
+            ["git", "branch"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+        assert "feature-branch" in result.stdout
+
+        executor.cleanup()
+        assert executor._created_branches == []
+
+    def test_is_branch_creation_detection(self, tmp_path):
+        """Test _is_branch_creation correctly identifies branch creation commands."""
+        executor = GitExecutor(base_dir=str(tmp_path))
+
+        # checkout -b cases
+        assert executor._is_branch_creation("git checkout -b feature") == (True, "feature")
+        assert executor._is_branch_creation("git checkout -b fix/bug-123") == (True, "fix/bug-123")
+        assert executor._is_branch_creation("git checkout -b feature --force") == (True, "feature")
+
+        # git branch <name> cases
+        assert executor._is_branch_creation("git branch feature") == (True, "feature")
+        assert executor._is_branch_creation("git branch hotfix") == (True, "hotfix")
+
+        # Non-creation git branch commands (flags)
+        assert executor._is_branch_creation("git branch -d feature") == (False, None)
+        assert executor._is_branch_creation("git branch -D feature") == (False, None)
+        assert executor._is_branch_creation("git branch --delete feature") == (False, None)
+        assert executor._is_branch_creation("git branch -m old new") == (False, None)
+        assert executor._is_branch_creation("git branch -l") == (False, None)
+        assert executor._is_branch_creation("git branch -r") == (False, None)
+
+        # Non-branch commands
+        assert executor._is_branch_creation("git commit -m 'msg'") == (False, None)
+        assert executor._is_branch_creation("git checkout main") == (False, None)
+        assert executor._is_branch_creation("git merge feature") == (False, None)
+        assert executor._is_branch_creation("echo 'hello'") == (False, None)

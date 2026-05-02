@@ -26,6 +26,7 @@ class GitExecutor:
         self._workspace_path: str | None = None
         self._repo_path: str | None = None
         self._cleanup_targets: list[str] = []
+        self._created_branches: list[str] = []
 
         # Verify git is available
         git_path = shutil.which("git")
@@ -64,6 +65,12 @@ class GitExecutor:
         self._repo_path = str(repo_dir)
 
         for command in commands:
+            # Track branch creation commands
+            is_branch, branch_name = self._is_branch_creation(command)
+            if is_branch and branch_name:
+                self._created_branches.append(branch_name)
+                logger.debug(f"Tracking branch creation: {branch_name}")
+
             # git merge, rebase, and cherry-pick return exit code 1 when there are
             # conflicts, which is the expected outcome for conflict fixtures.
             if (
@@ -141,6 +148,37 @@ class GitExecutor:
         if result.stderr:
             logger.debug(f"Command stderr: {result.stderr}")
 
+    def _is_branch_creation(self, command: str) -> tuple[bool, str | None]:
+        """Detect branch creation commands and extract the branch name.
+
+        Args:
+            command: The command string to parse.
+
+        Returns:
+            A tuple of (is_branch_creation, branch_name).
+            branch_name is None if not a branch creation command.
+        """
+        tokens = command.split()
+
+        # git checkout -b <branch>
+        if (
+            len(tokens) >= 4
+            and tokens[0] == "git"
+            and tokens[1] == "checkout"
+            and tokens[2] == "-b"
+        ):
+            return (True, tokens[3])
+
+        # git branch <name> (not -d, -D, --delete, -m, -M, -r, -l, etc.)
+        if len(tokens) >= 3 and tokens[0] == "git" and tokens[1] == "branch":
+            branch_name = tokens[2]
+            # Skip flags that make this not a creation
+            if branch_name.startswith("-"):
+                return (False, None)
+            return (True, branch_name)
+
+        return (False, None)
+
     def register_cleanup(self, path: str) -> None:
         """Register an additional path for cleanup.
 
@@ -158,6 +196,24 @@ class GitExecutor:
         Does nothing if no repo has been set up.
         """
         import shutil as shutil_cleanup
+
+        # Delete tracked branches before removing the repo directory
+        for branch_name in self._created_branches:
+            if self._repo_path:
+                result = subprocess.run(
+                    ["git", "branch", "-D", branch_name],
+                    cwd=self._repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    logger.debug(f"Deleted branch: {branch_name}")
+                else:
+                    logger.debug(
+                        f"Branch {branch_name} already deleted or not found: "
+                        f"{result.stderr.strip()}"
+                    )
 
         # Clean up registered targets (worktrees, bare repos, etc.)
         for target in self._cleanup_targets:
@@ -182,3 +238,4 @@ class GitExecutor:
             self._workspace_path = None
 
         self._cleanup_targets.clear()
+        self._created_branches = []
