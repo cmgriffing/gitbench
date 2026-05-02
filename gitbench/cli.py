@@ -19,7 +19,7 @@ import click
 from gitbench.benchmarks import Benchmark
 from gitbench.config import find_profile_for_model, load_config, resolve_profile
 from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter
-from gitbench.harness.types import BenchmarkResult, ModelMessage, Score
+from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
 
 # Configure structured logging
 logging.basicConfig(
@@ -420,6 +420,7 @@ def run_model_benchmarks(
     verbose: bool = False,
     progress: RunProgress | None = None,
     progress_model_name: str | None = None,
+    fixture_workers: int = 1,
 ) -> dict:
     """Run all selected benchmarks for one model."""
     progress_model = progress_model_name or current_model
@@ -446,7 +447,7 @@ def run_model_benchmarks(
             continue
 
         try:
-            result = run_benchmark(bench_name, model_client, verbose, progress, progress_model)
+            result = run_benchmark(bench_name, model_client, verbose, progress, progress_model, fixture_workers)
             results_list.append(result.to_dict())
         except Exception as e:
             logger.error(f"Benchmark '{bench_name}' failed for model '{current_model}': {e}")
@@ -485,6 +486,7 @@ def run_benchmark(
     verbose: bool = False,
     progress: RunProgress | None = None,
     model_name: str | None = None,
+    fixture_workers: int = 1,
 ) -> BenchmarkResult:
     """Run a specific benchmark with the given model client.
 
@@ -492,6 +494,9 @@ def run_benchmark(
         benchmark_name: Name of the benchmark to run.
         model_client: The model client to use for generating outputs.
         verbose: Whether to print verbose output.
+        progress: Progress callback.
+        model_name: Name to use in progress callbacks.
+        fixture_workers: Number of worker threads for parallel fixture execution.
 
     Returns:
         The benchmark result.
@@ -520,13 +525,9 @@ def run_benchmark(
     if progress and model_name:
         progress.benchmark_started(model_name, benchmark_name, len(fixtures))
 
-    scores: list[Score] = []
-    errors = 0
-
-    for fixture in fixtures:
-        logger.debug(f"Processing fixture {fixture.id}...")
+    # Worker function: runs inside a thread, manages its own executor lifecycle
+    def _run_fixture(fixture: Fixture) -> tuple[int, Score]:
         executor = None
-
         try:
             executor, repo_path = benchmark.setup_fixture(fixture)
             diff = benchmark.get_diff(repo_path)
@@ -542,42 +543,66 @@ def run_benchmark(
                 model_output = str(response)
 
             score = benchmark.score(fixture, model_output, repo_path=repo_path)
+            return fixture.id, score
+        except Exception as e:
+            logger.error(f"Error processing fixture {fixture.id}: {e}")
+            return fixture.id, Score(
+                fixture_id=fixture.id,
+                passed=False,
+                similarity=0.0,
+                model_output="",
+                error=str(e),
+            )
+        finally:
+            if executor is not None:
+                executor.cleanup()
+
+    if fixture_workers > 1 and len(fixtures) > 1:
+        # Parallel execution: collect results, sort back into fixture order
+        ordered_scores: list[Score | None] = [None] * len(fixtures)
+        ordered_ids: list[str] = [f.id for f in fixtures]
+
+        with ThreadPoolExecutor(max_workers=fixture_workers) as executor:
+            futures = {executor.submit(_run_fixture, f): i for i, f in enumerate(fixtures)}
+            for future in as_completed(futures):
+                idx = futures[future]
+                fixture_id, score = future.result()
+                ordered_scores[idx] = score
+                if progress and model_name:
+                    progress.fixture_finished(model_name, benchmark_name, score.passed)
+                if verbose:
+                    click.echo(
+                        f"  {fixture_id}: passed={score.passed}, "
+                        f"similarity={score.similarity:.4f}"
+                    )
+
+        # Sort scores back into fixture order (order matters for deterministic output)
+        fixture_index = {fid: i for i, fid in enumerate(ordered_ids)}
+        scores = [ordered_scores[fixture_index[s.fixture_id]] for s in ordered_scores if s is not None]
+    else:
+        # Sequential fallback
+        scores: list[Score] = []
+        errors = 0
+
+        for fixture in fixtures:
+            logger.debug(f"Processing fixture {fixture.id}...")
+            _, score = _run_fixture(fixture)
             scores.append(score)
             if progress and model_name:
                 progress.fixture_finished(model_name, benchmark_name, score.passed)
-
             if verbose:
                 click.echo(
                     f"  {fixture.id}: passed={score.passed}, "
                     f"similarity={score.similarity:.4f}"
                 )
-
-        except Exception as e:
-            logger.error(f"Error processing fixture {fixture.id}: {e}")
-            scores.append(
-                Score(
-                    fixture_id=fixture.id,
-                    passed=False,
-                    similarity=0.0,
-                    model_output="",
-                    error=str(e),
-                )
-            )
-            errors += 1
-            if progress and model_name:
-                progress.fixture_finished(model_name, benchmark_name, False)
-
-        finally:
-            # Clean up the temporary repo
-            if executor is not None:
-                executor.cleanup()
+        errors = sum(1 for s in scores if s.error)
 
     total = len(fixtures)
     passed = sum(1 for s in scores if s.passed)
     pass_at_k = passed / total if total > 0 else 0.0
 
     if progress and model_name:
-        progress.benchmark_finished(model_name, benchmark_name, errors)
+        progress.benchmark_finished(model_name, benchmark_name, sum(1 for s in scores if s.error))
 
     return BenchmarkResult(
         benchmark=benchmark_name,
@@ -585,7 +610,7 @@ def run_benchmark(
         passed=passed,
         pass_at_k=round(pass_at_k, 4),
         scores=scores,
-        errors=errors,
+        errors=sum(1 for s in scores if s.error),
     )
 
 
@@ -696,7 +721,14 @@ def cli():
     show_default=True,
     help="Number of models to run concurrently.",
 )
-def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, profile: str | None, all_profiles: bool, all_models: bool, model: str | None, output: str | None, output_dir: str | None, jsonl_path: str | None, verbose: bool, timeout: int, retry_count: int, base_url: str | None, provider: str | None, model_workers: int):
+@click.option(
+    "--fixture-workers",
+    default=1,
+    type=click.IntRange(1),
+    show_default=True,
+    help="Number of fixtures to run concurrently within a benchmark.",
+)
+def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, profile: str | None, all_profiles: bool, all_models: bool, model: str | None, output: str | None, output_dir: str | None, jsonl_path: str | None, verbose: bool, timeout: int, retry_count: int, base_url: str | None, provider: str | None, model_workers: int, fixture_workers: int):
     """Run one or all benchmarks against the specified model."""
     # -a means all benchmarks + all models (flat comparison), unless a specific model is given
     if run_all:
@@ -893,6 +925,7 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
                         verbose=verbose,
                         progress=progress_table,
                         progress_model_name=progress_model_names_by_run[run_index][0],
+                        fixture_workers=fixture_workers,
                     )
                     future_to_run_index[future] = run_index
 
@@ -946,6 +979,7 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
                                 verbose=verbose,
                                 progress=progress_table,
                                 progress_model_name=progress_model_names[index],
+                                fixture_workers=fixture_workers,
                             )
                             future_to_index[future] = index
 
@@ -971,6 +1005,7 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
                             verbose=verbose,
                             progress=progress_table,
                             progress_model_name=progress_model_names[index],
+                            fixture_workers=fixture_workers,
                         )
                         all_model_results.append(model_result)
                         finish_model_result(model_result)
