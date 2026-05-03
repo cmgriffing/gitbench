@@ -1,0 +1,13 @@
+benchmark,fixture_id,model,passed,similarity,model_output,error,timestamp,git_sha,profile
+commit_messages,f001,mock,0,0.2917,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f002,mock,0,0.2632,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f003,mock,0,0.2174,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f004,mock,0,0.303,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f005,mock,0,0.186,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f006,mock,0,0.1667,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f007,mock,0,0.25,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f008,mock,0,0.1622,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f009,mock,0,0.1509,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f010,mock,0,0.2609,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f011,mock,0,0.1702,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)
+commit_messages,f012,mock,0,0.2553,Mock response,,2026-05-03T00:52:41.135976+00:00,119b7d91e95d124b934427dacc0aa122d3410654,(inline)

@@ -18,6 +18,7 @@ from typing import Protocol
 import click
 
 from gitbench.benchmarks import Benchmark
+from gitbench.export import FORMAT_REGISTRY, get_available_formats
 from gitbench.config import find_profile_for_model, load_config, resolve_profile
 from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
@@ -869,6 +870,25 @@ def cli():
     help="Append run results as a JSON line to this file (for accumulating runs)",
 )
 @click.option(
+    "--export",
+    "-e",
+    "export_list",
+    multiple=True,
+    default=[],
+    help="Export file format(s): csv, json (can be specified multiple times)",
+)
+@click.option(
+    "--export-format",
+    default="artificialanalysis",
+    help="Schema for export (e.g. artificialanalysis). Overridden per --export item.",
+)
+@click.option(
+    "--export-path",
+    type=click.Path(),
+    default=None,
+    help="Path to write export file. If not specified, derives from model + timestamp.",
+)
+@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -902,7 +922,7 @@ def cli():
     show_default=True,
     help="Number of fixtures to run concurrently within a benchmark.",
 )
-def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, profile: str | None, all_profiles: bool, all_models: bool, model: str | None, output: str | None, output_dir: str | None, jsonl_path: str | None, verbose: bool, timeout: int, retry_count: int, base_url: str | None, provider: str | None, model_workers: int, fixture_workers: int):
+def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, profile: str | None, all_profiles: bool, all_models: bool, model: str | None, output: str | None, output_dir: str | None, jsonl_path: str | None, export_list: list[str], export_format: str, export_path: str | None, verbose: bool, timeout: int, retry_count: int, base_url: str | None, provider: str | None, model_workers: int, fixture_workers: int):
     """Run one or all benchmarks against the specified model."""
     # -a means all benchmarks + all models (flat comparison), unless a specific model is given
     if run_all:
@@ -1250,8 +1270,58 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
                 written = write_jsonl(envelope, jsonl_path)
                 click.echo(f"  Appended: {written}", err=True)
 
-        # Final output assembly
-        if len(runs) > 1:
+        # ── Build run envelope (shared by exports + HTML) ──────────────────────────
+        # Compute profile name before building envelope
+        if len(runs) == 1:
+            _profile_name_for_env = runs[0][0]
+        elif all_profile_results:
+            _profile_name_for_env = "(multi-profile)"
+        else:
+            _profile_name_for_env = "(unknown)"
+
+        if all_model_results:
+            _envelope = build_run_envelope(
+                model=all_model_results[0]["model"],
+                profile=_profile_name_for_env,
+                results=[
+                    r
+                    for mr in all_model_results
+                    for r in mr.get("results", [])
+                ],
+            )
+        else:
+            _envelope = build_run_envelope(
+                model="unknown",
+                profile=_profile_name_for_env,
+                results=[],
+            )
+
+        # ── Export files ────────────────────────────────────────────────────────
+
+        if export_list:
+            for export_file_format in export_list:
+                try:
+                    export_func = FORMAT_REGISTRY[export_file_format]
+                    if export_path:
+                        target_path = export_path
+                    else:
+                        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+                        model_name = all_model_results[0]["model"] if all_model_results else "unknown"
+                        safe_model = _sanitize_filename(model_name)
+                        ext = export_file_format  # csv → .csv, json → .json
+                        target_path = f"gitbench_export_{safe_model}_{ts}.{ext}"
+                    content = export_func(_envelope)
+                    Path(target_path).write_text(content)
+                    click.echo(f"  Exported: {target_path}", err=True)
+                except KeyError:
+                    available = get_available_formats()
+                    click.echo(
+                        f"Unknown export format: '{export_file_format}'. "
+                        f"Available: {', '.join(available)}",
+                        err=True,
+                    )
+                    sys.exit(1)
+
             grand_fixtures = sum(p["summary"]["total_fixtures"] for p in all_profile_results)
             grand_passed = sum(p["summary"]["total_passed"] for p in all_profile_results)
             grand_models = sum(p["summary"]["total_models"] for p in all_profile_results)
@@ -1275,7 +1345,6 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
         if len(runs) == 1:
             _profile_name_for_env = runs[0][0]
         elif all_profile_results:
-            # Multi-profile case: use "(multi-profile)" as label
             _profile_name_for_env = "(multi-profile)"
         else:
             _profile_name_for_env = "(unknown)"
@@ -1283,16 +1352,6 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
         is_html_output = output and output.lower().endswith(".html")
 
         if is_html_output:
-            # Build the run envelope for HTML rendering
-            _envelope = build_run_envelope(
-                model=all_model_results[0]["model"] if all_model_results else "unknown",
-                profile=_profile_name_for_env,
-                results=[
-                    r
-                    for mr in all_model_results
-                    for r in mr.get("results", [])
-                ],
-            )
             try:
                 html = render_html_from_envelope(_envelope, title="GitBench Report")
                 if html:
