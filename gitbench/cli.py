@@ -22,7 +22,10 @@ from gitbench.export import FORMAT_REGISTRY, get_available_formats
 from gitbench.config import find_profile_for_model, load_config, resolve_profile
 from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
-from gitbench.render import render_html_from_envelope
+from gitbench.render import aggregate_runs, render_html, render_html_from_envelope
+
+DEFAULT_JSON_OUTPUT_PATH = "gitbench-results/{timestamp}/results.json"
+DEFAULT_HTML_OUTPUT_PATH = "gitbench-results/{timestamp}/report.html"
 
 # Configure structured logging
 logging.basicConfig(
@@ -240,6 +243,66 @@ def write_text_file(path: str, content: str) -> Path:
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(content)
     return file_path
+
+
+def _get_config_output_path(config: dict, kind: str) -> str | None:
+    """Return a configured output path for kind ('json' or 'html'), if set."""
+    outputs = config.get("outputs") or config.get("output") or {}
+    if not isinstance(outputs, dict):
+        return None
+
+    configured = outputs.get(kind)
+    if configured:
+        return str(configured)
+
+    configured = outputs.get(f"{kind}_path")
+    if configured:
+        return str(configured)
+
+    return None
+
+
+def _default_output_timestamp() -> str:
+    """Return the timestamp fragment used for default run output paths."""
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _format_default_output_path(path_template: str, timestamp: str) -> str:
+    """Format a default output path template with the run timestamp."""
+    return path_template.format(timestamp=timestamp)
+
+
+def resolve_run_output_paths(
+    config: dict,
+    *,
+    output: str | None,
+    json_output: str | None,
+    html_output: str | None,
+    default_timestamp: str | None = None,
+) -> tuple[str, str]:
+    """Resolve run JSON/HTML output paths.
+
+    Precedence is explicit format-specific CLI option, legacy --output for its
+    matching extension, config file, then built-in default.
+    """
+    default_timestamp = default_timestamp or _default_output_timestamp()
+    output_json = output if output and not output.lower().endswith(".html") else None
+    output_html = output if output and output.lower().endswith(".html") else None
+
+    resolved_json = (
+        json_output
+        or output_json
+        or _get_config_output_path(config, "json")
+        or _format_default_output_path(DEFAULT_JSON_OUTPUT_PATH, default_timestamp)
+    )
+    resolved_html = (
+        html_output
+        or output_html
+        or _get_config_output_path(config, "html")
+        or _format_default_output_path(DEFAULT_HTML_OUTPUT_PATH, default_timestamp)
+    )
+
+    return resolved_json, resolved_html
 
 
 def _progress_model_names(models: list[str]) -> list[str]:
@@ -860,7 +923,19 @@ def cli():
     "--output",
     "-o",
     type=click.Path(),
-    help="Output file path. When path ends with .html, writes a self-contained HTML report. Otherwise writes JSON (defaults to stdout).",
+    help="Legacy output file path. .html overrides the HTML report path; any other extension overrides the JSON path.",
+)
+@click.option(
+    "--json-output",
+    type=click.Path(),
+    default=None,
+    help=f"JSON output file path (default: {DEFAULT_JSON_OUTPUT_PATH}, configurable via gitbench.json outputs.json).",
+)
+@click.option(
+    "--html-output",
+    type=click.Path(),
+    default=None,
+    help=f"HTML report output file path (default: {DEFAULT_HTML_OUTPUT_PATH}, configurable via gitbench.json outputs.html).",
 )
 @click.option(
     "--output-dir",
@@ -930,7 +1005,30 @@ def cli():
     show_default=True,
     help="Number of fixtures to run concurrently within a benchmark.",
 )
-def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, profile: str | None, all_profiles: bool, all_models: bool, model: str | None, output: str | None, output_dir: str | None, jsonl_path: str | None, export_list: list[str], export_format: str, export_path: str | None, verbose: bool, timeout: int, retry_count: int, base_url: str | None, provider: str | None, model_workers: int, fixture_workers: int):
+def run(
+    run_all: bool,
+    all_benchmarks_flag: bool,
+    benchmark_name: str | None,
+    profile: str | None,
+    all_profiles: bool,
+    all_models: bool,
+    model: str | None,
+    output: str | None,
+    json_output: str | None,
+    html_output: str | None,
+    output_dir: str | None,
+    jsonl_path: str | None,
+    export_list: list[str],
+    export_format: str,
+    export_path: str | None,
+    verbose: bool,
+    timeout: int,
+    retry_count: int,
+    base_url: str | None,
+    provider: str | None,
+    model_workers: int,
+    fixture_workers: int,
+):
     """Run one or all benchmarks against the specified model."""
     # -a means all benchmarks + all models (flat comparison), unless a specific model is given
     if run_all:
@@ -962,6 +1060,19 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
         sys.exit(1)
 
     config = load_config()
+    resolved_json_output, resolved_html_output = resolve_run_output_paths(
+        config,
+        output=output,
+        json_output=json_output,
+        html_output=html_output,
+    )
+    stdout_json_enabled = (
+        output is None
+        and json_output is None
+        and html_output is None
+        and _get_config_output_path(config, "json") is None
+        and _get_config_output_path(config, "html") is None
+    )
 
     # Build the list of (profile_name, resolved_profile_dict, models_list) tuples to run
     runs: list[tuple[str, dict, list[str]]] = []
@@ -1070,13 +1181,12 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
             )
 
         def append_pending_output(profile_name: str, model_result: dict) -> None:
-            if output_dir or jsonl_path:
-                envelope = build_run_envelope(
-                    model=model_result["model"],
-                    profile=profile_name,
-                    results=model_result["results"],
-                )
-                pending_outputs.append((profile_name, envelope))
+            envelope = build_run_envelope(
+                model=model_result["model"],
+                profile=profile_name,
+                results=model_result["results"],
+            )
+            pending_outputs.append((profile_name, envelope))
 
         def append_profile_result(profile_name: str, all_model_results: list[dict]) -> None:
             profile_fixtures = sum(r["summary"]["total_fixtures"] for r in all_model_results)
@@ -1355,29 +1465,29 @@ def run(run_all: bool, all_benchmarks_flag: bool, benchmark_name: str | None, pr
         else:
             _profile_name_for_env = "(unknown)"
 
-        is_html_output = output and output.lower().endswith(".html")
+        write_text_file(resolved_json_output, output_json)
+        click.echo(f"\nJSON results written to: {resolved_json_output}", err=True)
 
-        if is_html_output:
-            try:
-                html = render_html_from_envelope(_envelope, title="GitBench Report")
-                if html:
-                    write_text_file(output, html)
-                    click.echo(f"HTML report written to: {output}", err=True)
-                else:
-                    # render_html_from_envelope returned empty string — fall back to JSON
-                    write_text_file(output, output_json)
-                    click.echo(f"Results written to: {output}", err=True)
-            except Exception as _html_exc:
-                logger.warning("HTML generation failed (%s), falling back to JSON: %s", type(_html_exc).__name__, _html_exc)
-                click.echo(f"Warning: HTML generation failed, writing JSON instead: {_html_exc}", err=True)
-                write_text_file(output, output_json)
-                click.echo(f"Results written to: {output}", err=True)
-        else:
-            if output:
-                write_text_file(output, output_json)
-                click.echo(f"\nResults written to: {output}", err=True)
+        try:
+            envelopes_for_html = [envelope for _profile_name, envelope in pending_outputs]
+            if len(envelopes_for_html) > 1:
+                html = render_html(aggregate_runs(envelopes_for_html), title="GitBench Report")
             else:
-                click.echo(output_json)
+                html = render_html_from_envelope(
+                    envelopes_for_html[0] if envelopes_for_html else _envelope,
+                    title="GitBench Report",
+                )
+            if html:
+                write_text_file(resolved_html_output, html)
+                click.echo(f"HTML report written to: {resolved_html_output}", err=True)
+            else:
+                click.echo("Warning: HTML generation returned no content; HTML report was not written.", err=True)
+        except Exception as _html_exc:
+            logger.warning("HTML generation failed (%s): %s", type(_html_exc).__name__, _html_exc)
+            click.echo(f"Warning: HTML generation failed: {_html_exc}", err=True)
+
+        if stdout_json_enabled:
+            click.echo(output_json)
 
     except Exception as e:
         logger.error(f"Benchmark failed: {e}")

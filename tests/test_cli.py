@@ -4,12 +4,15 @@ import json
 import sys
 import time
 from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
 from gitbench.cli import (
+    DEFAULT_HTML_OUTPUT_PATH,
+    DEFAULT_JSON_OUTPUT_PATH,
     SummaryTable,
     TerminalProgressTable,
     _progress_model_names,
@@ -17,6 +20,7 @@ from gitbench.cli import (
     check_git_availability,
     cli,
     get_model_client,
+    resolve_run_output_paths,
     should_use_colors,
 )
 
@@ -201,6 +205,127 @@ class TestRunCommand:
             content = output_path.read_text()
             data = json.loads(content)
             assert "benchmark" in data
+
+    def test_run_writes_default_json_and_html_outputs(self, runner, tmp_path):
+        """Test that run writes JSON and HTML artifacts by default."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            cwd = Path.cwd()
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "mock"],
+            )
+
+            assert result.exit_code == 0
+            run_dirs = list((cwd / "gitbench-results").iterdir())
+            assert len(run_dirs) == 1
+            assert run_dirs[0].name.endswith("Z")
+            json_path = run_dirs[0] / "results.json"
+            html_path = run_dirs[0] / "report.html"
+            assert json_path.exists()
+            assert html_path.exists()
+            assert json.loads(json_path.read_text())["benchmark"] == "commit_messages"
+            assert html_path.read_text().startswith("<!DOCTYPE html>")
+
+    def test_run_json_and_html_output_cli_overrides_defaults(self, runner, tmp_path):
+        """Test that explicit JSON and HTML output paths override defaults."""
+        json_path = tmp_path / "custom" / "results.json"
+        html_path = tmp_path / "custom" / "report.html"
+
+        with patch("gitbench.cli.check_git_availability", return_value=True):
+            result = runner.invoke(
+                cli,
+                [
+                    "run",
+                    "--benchmark",
+                    "commit_messages",
+                    "--model",
+                    "mock",
+                    "--json-output",
+                    str(json_path),
+                    "--html-output",
+                    str(html_path),
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert json.loads(json_path.read_text())["benchmark"] == "commit_messages"
+        assert html_path.read_text().startswith("<!DOCTYPE html>")
+
+    def test_run_output_json_alias_still_writes_default_html(self, runner, tmp_path):
+        """Test that legacy --output JSON path overrides only JSON output."""
+        output_path = tmp_path / "legacy.json"
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            cwd = Path.cwd()
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "--benchmark",
+                        "commit_messages",
+                        "--model",
+                        "mock",
+                        "--output",
+                        str(output_path),
+                    ],
+                )
+
+            assert result.exit_code == 0
+            assert json.loads(output_path.read_text())["benchmark"] == "commit_messages"
+            html_reports = list((cwd / "gitbench-results").glob("*/report.html"))
+            assert len(html_reports) == 1
+            assert html_reports[0].read_text().startswith("<!DOCTYPE html>")
+
+    def test_run_output_html_alias_still_writes_default_json(self, runner, tmp_path):
+        """Test that legacy --output HTML path overrides only HTML output."""
+        output_path = tmp_path / "legacy.html"
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            cwd = Path.cwd()
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "--benchmark",
+                        "commit_messages",
+                        "--model",
+                        "mock",
+                        "--output",
+                        str(output_path),
+                    ],
+                )
+
+            assert result.exit_code == 0
+            assert output_path.read_text().startswith("<!DOCTYPE html>")
+            json_results = list((cwd / "gitbench-results").glob("*/results.json"))
+            assert len(json_results) == 1
+            assert json.loads(json_results[0].read_text())["benchmark"] == "commit_messages"
+
+    def test_run_uses_configured_json_and_html_output_paths(self, runner, tmp_path):
+        """Test that gitbench.json can override default output paths."""
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            cwd = Path.cwd()
+            config = {
+                "outputs": {
+                    "json": "configured/results.json",
+                    "html": "configured/report.html",
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "mock"],
+                )
+
+            assert result.exit_code == 0
+            assert json.loads((cwd / "configured/results.json").read_text())["benchmark"] == "commit_messages"
+            assert (cwd / "configured/report.html").read_text().startswith("<!DOCTYPE html>")
 
     def test_run_with_nested_json_output_file(self, runner, tmp_path):
         """Test that --output creates parent directories for JSON output."""
@@ -897,6 +1022,59 @@ class TestWriteJsonl:
         for line in lines:
             data = json.loads(line)
             assert data["model"] == "mock"
+
+
+class TestResolveRunOutputPaths:
+    """Tests for resolving run artifact output paths."""
+
+    def test_defaults(self):
+        assert resolve_run_output_paths(
+            {},
+            output=None,
+            json_output=None,
+            html_output=None,
+            default_timestamp="20260504T010203Z",
+        ) == (
+            DEFAULT_JSON_OUTPUT_PATH.format(timestamp="20260504T010203Z"),
+            DEFAULT_HTML_OUTPUT_PATH.format(timestamp="20260504T010203Z"),
+        )
+
+    def test_config_outputs(self):
+        config = {"outputs": {"json": "runs/latest.json", "html": "runs/latest.html"}}
+        assert resolve_run_output_paths(config, output=None, json_output=None, html_output=None) == (
+            "runs/latest.json",
+            "runs/latest.html",
+        )
+
+    def test_cli_options_win_over_config(self):
+        config = {"outputs": {"json": "config.json", "html": "config.html"}}
+        assert resolve_run_output_paths(
+            config,
+            output=None,
+            json_output="cli.json",
+            html_output="cli.html",
+            default_timestamp="20260504T010203Z",
+        ) == ("cli.json", "cli.html")
+
+    def test_legacy_output_json_overrides_only_json(self):
+        config = {"outputs": {"json": "config.json", "html": "config.html"}}
+        assert resolve_run_output_paths(
+            config,
+            output="legacy.json",
+            json_output=None,
+            html_output=None,
+            default_timestamp="20260504T010203Z",
+        ) == ("legacy.json", "config.html")
+
+    def test_legacy_output_html_overrides_only_html(self):
+        config = {"outputs": {"json": "config.json", "html": "config.html"}}
+        assert resolve_run_output_paths(
+            config,
+            output="legacy.html",
+            json_output=None,
+            html_output=None,
+            default_timestamp="20260504T010203Z",
+        ) == ("config.json", "legacy.html")
 
     def test_creates_parent_directories(self, tmp_path):
         """Test that write_jsonl creates parent directories if needed."""
