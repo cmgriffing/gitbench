@@ -1,0 +1,3 @@
+# Benchmark conformance tests parameterized via `TestBenchmarkContract`
+
+Every benchmark test class duplicated the same ~7 conformance checks (inherits from ABC, has name/description, can instantiate, fixtures valid, IDs unique). We replaced them with a single `TestBenchmarkContract` class that uses `@pytest.mark.parametrize` over all 17 discovered benchmark classes. Individual test classes now only contain benchmark-specific behaviour tests (custom scoring logic, `setup_fixture` edge cases, diff format assertions). Three benchmarks (blame_forensics, branch_cleanup, git_grep) that previously had no test class now receive full conformance coverage through the contract. Net -395 lines of test code.
