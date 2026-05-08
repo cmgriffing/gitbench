@@ -1,0 +1,3 @@
+# `setup_fixture`, `get_diff`, and `format_prompt` are now part of the Benchmark ABC contract
+
+Previously the ABC only required `load_fixtures` and `score`, but the harness called three additional methods (`setup_fixture`, `get_diff`, `format_prompt`) that existed only by convention. We formalised these: `get_diff` is abstract (every benchmark produces different git context), while `setup_fixture` (temp repo creation) and `format_prompt` (join prompt + diff) have defaults that work for most benchmarks. The 16 identical `setup_fixture` implementations and 9 identical `format_prompt` implementations were removed; `worktree_usage` overrides `setup_fixture` for extra cleanup registration, and 8 benchmarks override `format_prompt` to add a context label.
