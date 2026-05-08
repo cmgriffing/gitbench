@@ -312,12 +312,8 @@ class TestScorer:
 class TestVerboseOutput:
     """Test that verbose output works correctly."""
 
-    def test_verbose_flag_accepted(self):
-        """Verify --verbose flag is accepted and produces structured output.
-
-        Per-fixture verbose output was moved to the harness runner and will
-        be restored via the progress-callback mechanism (see candidate #5).
-        """
+    def test_verbose_flag_produces_per_fixture_output(self):
+        """Verify --verbose flag produces per-fixture output on stderr."""
         result = subprocess.run(
             [sys.executable, "-m", "gitbench.cli", "run", "--benchmark", "commit_messages", "--model", "mock", "--verbose"],
             capture_output=True,
@@ -325,8 +321,8 @@ class TestVerboseOutput:
             cwd=Path(__file__).parent.parent,
         )
         assert result.returncode == 0
-        # structured output still produced
-        assert "benchmark" in result.stdout
+        assert "passed=" in result.stderr, "Verbose output should contain 'passed='"
+        assert "similarity=" in result.stderr, "Verbose output should contain 'similarity='"
 
 
 class TestEndToEndPipeline:
