@@ -1,0 +1,3 @@
+# `TerminalProgressTable` and `SummaryTable` extracted to `gitbench/ui/`
+
+Two substantial UI modules (~220 lines total) were embedded in `cli.py` alongside Click commands and CLI wiring. We extracted them into `gitbench/ui/progress.py` (TerminalProgressTable, which implements RunProgress) and `gitbench/ui/summary.py` (SummaryTable, with ANSI color-coded pass@1 output). Terminal utilities (ANSI color constants, `should_use_colors`, `is_output_suppressed`) were pulled into `gitbench/ui/terminal.py`. The CLI now imports from `gitbench.ui.*` rather than owning the rendering internals. Existing tests for these modules remain in `test_cli.py` and should eventually move to `test_ui.py`.
