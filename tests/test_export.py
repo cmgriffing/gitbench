@@ -73,6 +73,7 @@ def test_csv_export_valid_format():
         "git_sha",
         "profile",
         "benchmark_suite_version",
+        "reasoning_level",
     ]
     assert headers == expected, f"Expected {expected}, got {headers}"
 
@@ -104,6 +105,7 @@ def test_artificialanalysis_export_fields():
         "provider",
         "profile",
         "benchmark_suite_version",
+        "reasoning_level",
     ]
     assert headers == expected, f"Expected {expected}, got {headers}"
 
@@ -205,3 +207,107 @@ def test_export_single_fixture():
     assert row["model_output"] == "chore: init"
     assert row["model"] == "gpt-4"
     assert row["git_sha"] == "deadbeef"
+
+
+def test_csv_reasoning_level_in_score():
+    """CSV row includes reasoning_level from score."""
+    envelope = {
+        "version": 1,
+        "timestamp": "2026-05-03T00:00:00+00:00",
+        "git_sha": "abc1234",
+        "model": "o3-mini#high",
+        "profile": "(inline)",
+        "results": [
+            {
+                "benchmark": "commit_messages",
+                "total": 1,
+                "passed": 1,
+                "pass_at_k": 1.0,
+                "scores": [
+                    {
+                        "fixture_id": "f1",
+                        "passed": True,
+                        "similarity": 0.9,
+                        "model_output": "fix: test",
+                        "error": None,
+                        "reasoning_level": "high",
+                    },
+                ],
+                "errors": 0,
+            }
+        ],
+    }
+
+    csv_str = export_csv(envelope)
+    reader = csv.DictReader(io.StringIO(csv_str))
+    rows = list(reader)
+    assert rows[0]["reasoning_level"] == "high"
+
+
+def test_csv_reasoning_level_absent():
+    """CSV reasoning_level is empty string when score has none."""
+    envelope = {
+        "version": 1,
+        "timestamp": "2026-05-03T00:00:00+00:00",
+        "git_sha": "abc1234",
+        "model": "gpt-4o",
+        "profile": "(inline)",
+        "results": [
+            {
+                "benchmark": "commit_messages",
+                "total": 1,
+                "passed": 1,
+                "pass_at_k": 1.0,
+                "scores": [
+                    {
+                        "fixture_id": "f1",
+                        "passed": True,
+                        "similarity": 0.9,
+                        "model_output": "fix: test",
+                        "error": None,
+                    },
+                ],
+                "errors": 0,
+            }
+        ],
+    }
+
+    csv_str = export_csv(envelope)
+    reader = csv.DictReader(io.StringIO(csv_str))
+    rows = list(reader)
+    assert rows[0]["reasoning_level"] == ""
+
+
+def test_artificialanalysis_reasoning_level():
+    """artificialanalyanalysis CSV includes reasoning_level from first score."""
+    envelope = {
+        "version": 1,
+        "timestamp": "2026-05-03T00:00:00+00:00",
+        "git_sha": "abc1234",
+        "model": "o3-mini#medium",
+        "profile": "(inline)",
+        "results": [
+            {
+                "benchmark": "commit_messages",
+                "total": 1,
+                "passed": 1,
+                "pass_at_k": 1.0,
+                "scores": [
+                    {
+                        "fixture_id": "f1",
+                        "passed": True,
+                        "similarity": 0.9,
+                        "model_output": "fix: test",
+                        "error": None,
+                        "reasoning_level": "medium",
+                    },
+                ],
+                "errors": 0,
+            }
+        ],
+    }
+
+    csv_str = export_artificialanalysis(envelope)
+    reader = csv.DictReader(io.StringIO(csv_str))
+    rows = list(reader)
+    assert rows[0]["reasoning_level"] == "medium"

@@ -13,6 +13,25 @@ from .types import ModelMessage
 logger = logging.getLogger(__name__)
 
 
+def parse_model_name(model: str) -> tuple[str, str | None]:
+    """Split a model name into base name and optional reasoning level.
+
+    Syntax: ``base_model`` or ``base_model#level``.
+    If multiple ``#`` are present, only the last one delimits the level.
+
+    Args:
+        model: Full model name, optionally with ``#level`` suffix.
+
+    Returns:
+        A tuple of ``(base_model, reasoning_level)`` where
+        ``reasoning_level`` is ``None`` when no ``#`` is present.
+    """
+    if "#" in model:
+        idx = model.rfind("#")
+        return model[:idx], model[idx + 1:]
+    return model, None
+
+
 class ModelResponseError(RuntimeError):
     """Raised when a provider response cannot be parsed as model text."""
 
@@ -81,13 +100,17 @@ class OpenAIAdapter(ModelInterface):
         """Initialize the OpenAI adapter.
 
         Args:
-            model: The model identifier (default: gpt-4o-mini).
+            model: The model identifier (default: gpt-4o-mini). May include
+                   ``#level`` suffix for reasoning effort (e.g. ``o3-mini#high``).
             api_key: Optional API key. If not provided, reads from OPENAI_API_KEY env var.
             timeout: Timeout in seconds for model generation (default: 30).
             retry_count: Number of retries on failure (default: 3).
             base_url: Optional API base URL for OpenAI-compatible providers (e.g. OpenRouter).
         """
-        self.model = model
+        self._full_model = model
+        base_model, parsed_level = parse_model_name(model)
+        self.model = base_model
+        self.reasoning_level = parsed_level
         self.timeout = timeout
         self.retry_count = retry_count
         self._api_key = api_key
@@ -138,6 +161,9 @@ class OpenAIAdapter(ModelInterface):
 
         model_messages = [msg.to_dict() for msg in messages]
         last_error: Exception | None = None
+
+        if self.reasoning_level:
+            kwargs["reasoning_effort"] = self.reasoning_level
 
         for attempt in range(1, self.retry_count + 1):
             try:
@@ -232,11 +258,15 @@ class OllamaAdapter(ModelInterface):
 
         Args:
             model: Ollama model name (e.g. 'llama3.1:8b', 'gemma4:26b').
+                   May include ``#level`` suffix (logged but ignored).
             base_url: Ollama server base URL (default: http://localhost:11434).
             timeout: Timeout in seconds for model generation (default: 120).
             retry_count: Number of retries on failure (default: 3).
         """
-        self.model = model
+        self._full_model = model
+        base_model, parsed_level = parse_model_name(model)
+        self.model = base_model
+        self.reasoning_level = parsed_level
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.retry_count = retry_count
@@ -256,6 +286,12 @@ class OllamaAdapter(ModelInterface):
             ConnectionError: If the Ollama server is unreachable.
             RuntimeError: If the API returns an error.
         """
+        if self.reasoning_level:
+            logger.debug(
+                "Reasoning level '%s' is not supported by Ollama — ignoring",
+                self.reasoning_level,
+            )
+
         ollama_messages = [msg.to_dict() for msg in messages]
         request_body = json.dumps({
             "model": self.model,
@@ -339,6 +375,8 @@ class OllamaAdapter(ModelInterface):
 
 class MockModelClient(ModelInterface):
     """Mock model client for testing."""
+
+    reasoning_level: str | None = None
 
     def __init__(self, response: str = "Mock response", timeout: int = 30, retry_count: int = 3):
         """Initialize with a fixed response.

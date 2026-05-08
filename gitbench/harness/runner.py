@@ -215,6 +215,9 @@ class BenchmarkRunner:
                 model_output = str(response)
 
             score = benchmark.score(fixture, model_output, repo_path=repo_path)
+            score.reasoning_level = getattr(
+                self._model_client, "reasoning_level", None
+            )
             return fixture.id, score
         except Exception as exc:
             logger.error("Error processing fixture %s: %s", fixture.id, exc)
@@ -224,6 +227,9 @@ class BenchmarkRunner:
                 similarity=0.0,
                 model_output="",
                 error=str(exc),
+                reasoning_level=getattr(
+                    self._model_client, "reasoning_level", None
+                ),
             )
         finally:
             if executor is not None:

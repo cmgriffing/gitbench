@@ -51,10 +51,14 @@ class Score:
     similarity: float
     model_output: str
     error: str | None = None
+    reasoning_level: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
-        return asdict(self)
+        result = asdict(self)
+        if self.reasoning_level is None:
+            del result["reasoning_level"]
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "Score":

@@ -330,3 +330,48 @@ class TestRenderCommand:
         result = runner.invoke(cli, ["render", "--input", str(jsonl)])
         assert result.exit_code == 0
         assert (tmp_path / "gitbench-report.html").exists()
+
+
+class TestRenderReasoningLevel:
+    """Tests for reasoning level in HTML reports."""
+
+    def test_runs_meta_includes_reasoning_level_from_model_name(self):
+        """runs_meta parses reasoning level from model name # suffix."""
+        run = _make_envelope(model="o3-mini#high")
+        data = aggregate_runs([run])
+
+        meta = data["runs_meta"][0]
+        assert meta["reasoning_level"] == "high"
+        assert meta["model"] == "o3-mini#high"
+
+    def test_runs_meta_reasoning_level_empty_when_absent(self):
+        """runs_meta reasoning_level is empty string when no # suffix."""
+        run = _make_envelope(model="gpt-4o")
+        data = aggregate_runs([run])
+
+        meta = data["runs_meta"][0]
+        assert meta["reasoning_level"] == ""
+
+    def test_html_includes_reasoning_column(self):
+        """HTML report includes Reasoning column header."""
+        runs = [_make_envelope(model="o3-mini#low")]
+        data = aggregate_runs(runs)
+        html = render_html(data)
+
+        assert "<th>Reasoning</th>" in html
+
+    def test_html_displays_reasoning_level(self):
+        """HTML report displays the reasoning level value."""
+        runs = [_make_envelope(model="o3-mini#medium")]
+        data = aggregate_runs(runs)
+        html = render_html(data)
+
+        assert "medium" in html
+
+    def test_html_placeholder_when_no_reasoning(self):
+        """HTML report shows em-dash placeholder when no reasoning level."""
+        runs = [_make_envelope(model="gpt-4o")]
+        data = aggregate_runs(runs)
+        html = render_html(data)
+
+        assert "—" in html

@@ -114,7 +114,7 @@ def get_model_client(model: str, timeout: int = 600, retry_count: int = 3, base_
     Returns:
         The appropriate model client instance.
     """
-    if model == "mock":
+    if model == "mock" or model.startswith("mock#"):
         return MockModelClient()
 
     # Determine provider: explicit param wins, then infer from base_url
@@ -556,7 +556,7 @@ def run(
 
         if profile:
             profile_values = resolve_profile(config, profile)
-        elif model and model != "mock":
+        elif model and not model.startswith("mock"):
             profile_values = find_profile_for_model(config, model)
 
         profile_models: list[str] = profile_values.get("models", [])
@@ -572,7 +572,7 @@ def run(
         resolved_api_key = profile_values.get("api_key")
         resolved_provider = provider or profile_values.get("provider")
 
-        has_real_models = any(m != "mock" for m in models_to_run)
+        has_real_models = any(not m.startswith("mock") for m in models_to_run)
         if has_real_models and not resolved_api_key and profile_values.get("_api_key_env"):
             raise click.ClickException(
                 f"Environment variable {profile_values['_api_key_env']} is not set "
@@ -677,7 +677,7 @@ def run(
                     p_provider = provider or profile_conf.get("provider")
                     p_api_key_env = profile_conf.get("_api_key_env")
 
-                    if current_model != "mock" and not p_api_key and p_api_key_env:
+                    if not current_model.startswith("mock") and not p_api_key and p_api_key_env:
                         click.echo(f"Skipping profile '{profile_name}': env var {p_api_key_env} not set", err=True)
                         continue
 
@@ -724,7 +724,7 @@ def run(
                 p_api_key_env = profile_conf.get("_api_key_env")
 
                 # Validate api_key
-                has_real_models = any(m != "mock" for m in models_to_run)
+                has_real_models = any(not m.startswith("mock") for m in models_to_run)
                 if has_real_models and not p_api_key and p_api_key_env:
                     click.echo(f"Skipping profile '{profile_name}': env var {p_api_key_env} not set", err=True)
                     continue

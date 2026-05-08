@@ -27,7 +27,7 @@ def export_csv(envelope: dict) -> str:
     fieldnames = [
         "benchmark", "fixture_id", "model", "passed", "similarity",
         "model_output", "error", "timestamp", "git_sha", "profile",
-        "benchmark_suite_version",
+        "benchmark_suite_version", "reasoning_level",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -35,7 +35,6 @@ def export_csv(envelope: dict) -> str:
 
     for result in envelope.get("results", []):
         if "error" in result and result.get("benchmark") is None:
-            # Skip error-only entries with no benchmark
             continue
         benchmark = result.get("benchmark", "")
         for score in result.get("scores", []):
@@ -51,6 +50,7 @@ def export_csv(envelope: dict) -> str:
                 "git_sha": envelope.get("git_sha", ""),
                 "profile": envelope.get("profile", ""),
                 "benchmark_suite_version": envelope.get("benchmark_suite_version", ""),
+                "reasoning_level": score.get("reasoning_level", ""),
             })
 
     return output.getvalue()
@@ -74,7 +74,7 @@ def export_artificialanalysis(envelope: dict) -> str:
     fieldnames = [
         "model", "benchmark", "score", "total", "passed",
         "timestamp", "git_sha", "provider", "profile",
-        "benchmark_suite_version",
+        "benchmark_suite_version", "reasoning_level",
     ]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
@@ -86,8 +86,9 @@ def export_artificialanalysis(envelope: dict) -> str:
         benchmark = result.get("benchmark", "")
         total = result.get("total", 0)
         passed = result.get("passed", 0)
-        # pass_at_k is pre-rounded in the envelope; fallback to computed
         score = result.get("pass_at_k", round(passed / total, 4) if total > 0 else 0.0)
+        scores = result.get("scores", [])
+        reasoning_level = scores[0].get("reasoning_level", "") if scores else ""
         writer.writerow({
             "model": envelope.get("model", ""),
             "benchmark": benchmark,
@@ -96,10 +97,10 @@ def export_artificialanalysis(envelope: dict) -> str:
             "passed": passed,
             "timestamp": envelope.get("timestamp", ""),
             "git_sha": envelope.get("git_sha", ""),
-            # provider is not in the envelope; leave blank to match the column
             "provider": "",
             "profile": envelope.get("profile", ""),
             "benchmark_suite_version": envelope.get("benchmark_suite_version", ""),
+            "reasoning_level": reasoning_level,
         })
 
     return output.getvalue()

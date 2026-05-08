@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from gitbench.harness.model import parse_model_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -95,7 +97,7 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
         - model_summaries: {model: {total_runs, total_fixtures, total_passed, pass_at_k}}
         - matrix: {model: {benchmark: {pass_at_k, total, passed, avg_similarity}}}
         - fixtures: {model: {benchmark: [{fixture_id, passed, similarity, error}]}}
-        - runs_meta: [{timestamp, model, profile, git_sha, benchmark_suite_version}]
+        - runs_meta: [{timestamp, model, profile, git_sha, benchmark_suite_version, reasoning_level}]
     """
     models_set: set[str] = set()
     benchmarks_set: set[str] = set()
@@ -184,12 +186,15 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
 
     runs_meta = []
     for run in runs:
+        model_name = run.get("model", "")
+        _, rl = parse_model_name(model_name)
         runs_meta.append({
             "timestamp": run.get("timestamp", ""),
             "model": run.get("model", ""),
             "profile": run.get("profile", ""),
             "git_sha": run.get("git_sha", ""),
             "benchmark_suite_version": run.get("benchmark_suite_version", ""),
+            "reasoning_level": rl or "",
         })
 
     return {
@@ -845,7 +850,7 @@ def render_html(data: dict[str, Any], title: str = "GitBench Report") -> str:
         <table>
           <thead>
             <tr>
-              <th>Timestamp</th><th>Model</th><th>Profile</th><th>Suite</th><th>Git SHA</th>
+              <th>Timestamp</th><th>Model</th><th>Profile</th><th>Reasoning</th><th>Suite</th><th>Git SHA</th>
             </tr>
           </thead>
           <tbody id="runs-body"></tbody>
@@ -987,10 +992,12 @@ const runsBody = document.getElementById('runs-body');
 runsMeta.forEach(r => {{
   const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
   const sha = r.git_sha ? r.git_sha.slice(0, 8) : '—';
+  const rl = r.reasoning_level || '—';
   runsBody.innerHTML += `<tr>
     <td>${{ts}}</td>
     <td>${{r.model}}</td>
     <td>${{r.profile || '—'}}</td>
+    <td>${{rl}}</td>
     <td>${{r.benchmark_suite_version || '—'}}</td>
     <td class="sha-text">${{sha}}</td>
   </tr>`;

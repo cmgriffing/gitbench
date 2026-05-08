@@ -1047,3 +1047,68 @@ class TestResolveRunOutputPaths:
         write_jsonl(envelope, str(jsonl_path))
 
         assert jsonl_path.exists()
+
+
+class TestRunnerReasoningLevel:
+    """Tests for BenchmarkRunner reasoning_level into Score."""
+
+    def test_runner_populates_reasoning_level_in_score(self):
+        """Score gets reasoning_level from the adapter."""
+        from gitbench.harness.runner import BenchmarkRunner
+        from gitbench.harness.model import MockModelClient
+        from gitbench.harness.types import Fixture
+
+        client = MockModelClient(response="test output")
+        client.reasoning_level = "high"
+
+        runner = BenchmarkRunner({}, client)
+
+        class FakeBench:
+            def load_fixtures(self):
+                return []
+            def setup_fixture(self, fixture):
+                return None, None
+            def get_diff(self, repo_path):
+                return ""
+            def format_prompt(self, fixture, diff):
+                return ""
+            def score(self, fixture, output, repo_path=None):
+                from gitbench.harness.types import Score
+                return Score(fixture_id="f1", passed=True, similarity=1.0, model_output="test")
+
+        fixture = Fixture(
+            id="f1", description="test", setup=[], prompt="",
+            expected="", scoring={"type": "exact_match", "threshold": 1.0},
+        )
+        _, score = runner._run_fixture(FakeBench(), fixture)
+        assert score.reasoning_level == "high"
+
+    def test_runner_score_none_when_no_reasoning(self):
+        """Score reasoning_level is None when adapter has none."""
+        from gitbench.harness.runner import BenchmarkRunner
+        from gitbench.harness.model import MockModelClient
+        from gitbench.harness.types import Fixture
+
+        client = MockModelClient(response="test output")
+
+        runner = BenchmarkRunner({}, client)
+
+        class FakeBench:
+            def load_fixtures(self):
+                return []
+            def setup_fixture(self, fixture):
+                return None, None
+            def get_diff(self, repo_path):
+                return ""
+            def format_prompt(self, fixture, diff):
+                return ""
+            def score(self, fixture, output, repo_path=None):
+                from gitbench.harness.types import Score
+                return Score(fixture_id="f1", passed=True, similarity=1.0, model_output="test")
+
+        fixture = Fixture(
+            id="f1", description="test", setup=[], prompt="",
+            expected="", scoring={"type": "exact_match", "threshold": 1.0},
+        )
+        _, score = runner._run_fixture(FakeBench(), fixture)
+        assert score.reasoning_level is None

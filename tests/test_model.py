@@ -12,6 +12,7 @@ from gitbench.harness.model import (
     ModelResponseError,
     OllamaAdapter,
     OpenAIAdapter,
+    parse_model_name,
 )
 from gitbench.harness.types import ModelMessage
 
@@ -402,3 +403,154 @@ class TestOpenAIAdapter:
         messages = [ModelMessage(role="user", content="Test")]
         with pytest.raises(ModelResponseError, match="upstream provider overloaded"):
             adapter.generate(messages)
+
+
+class TestParseModelName:
+    """Tests for parse_model_name utility."""
+
+    def test_bare_name(self):
+        """Bare model name returns itself with no reasoning level."""
+        base, level = parse_model_name("gpt-4o")
+        assert base == "gpt-4o"
+        assert level is None
+
+    def test_with_reasoning_level(self):
+        """Model name with #level parses base and level."""
+        base, level = parse_model_name("o3-mini#high")
+        assert base == "o3-mini"
+        assert level == "high"
+
+    def test_multiple_hash_chars_uses_last(self):
+        """Multiple # chars — only last delimits reasoning level."""
+        base, level = parse_model_name("model#extra#low")
+        assert base == "model#extra"
+        assert level == "low"
+
+    def test_empty_level(self):
+        """Trailing # with no text yields empty string level."""
+        base, level = parse_model_name("model#")
+        assert base == "model"
+        assert level == ""
+
+    def test_no_hash(self):
+        """No hash — returns name and None."""
+        base, level = parse_model_name("llama3.1:8b")
+        assert base == "llama3.1:8b"
+        assert level is None
+
+
+class TestOpenAIAdapterReasoning:
+    """Tests for OpenAIAdapter reasoning level handling."""
+
+    def test_parses_model_with_reasoning_level(self):
+        """Model o3-mini#high stores base model and reasoning level."""
+        adapter = OpenAIAdapter(model="o3-mini#high", api_key="test-key")
+        assert adapter.model == "o3-mini"
+        assert adapter.reasoning_level == "high"
+        assert adapter._full_model == "o3-mini#high"
+
+    def test_no_reasoning_level_is_none(self):
+        """Model without # suffix has reasoning_level None."""
+        adapter = OpenAIAdapter(model="gpt-4o", api_key="test-key")
+        assert adapter.model == "gpt-4o"
+        assert adapter.reasoning_level is None
+        assert adapter._full_model == "gpt-4o"
+
+    @patch("openai.OpenAI")
+    def test_generate_forwards_reasoning_as_effort(self, mock_openai_class):
+        """reasoning_level is forwarded as reasoning_effort."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.error = None
+        mock_response.choices[0].message.content = "Output"
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai_class.return_value = mock_client
+
+        adapter = OpenAIAdapter(model="o3-mini#high", api_key="test-key")
+        adapter._client = mock_client
+
+        messages = [ModelMessage(role="user", content="Hi")]
+        adapter.generate(messages)
+
+        call_kwargs = mock_client.chat.completions.create.call_args
+        assert call_kwargs.kwargs["reasoning_effort"] == "high"
+        assert call_kwargs.kwargs["model"] == "o3-mini"
+
+    @patch("openai.OpenAI")
+    def test_generate_without_reasoning_omits_effort(self, mock_openai_class):
+        """No reasoning_level means no reasoning_effort is sent."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.error = None
+        mock_response.choices[0].message.content = "Output"
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai_class.return_value = mock_client
+
+        adapter = OpenAIAdapter(model="gpt-4o", api_key="test-key")
+        adapter._client = mock_client
+
+        messages = [ModelMessage(role="user", content="Hi")]
+        adapter.generate(messages)
+
+        call_kwargs = mock_client.chat.completions.create.call_args
+        assert "reasoning_effort" not in call_kwargs.kwargs
+
+
+class TestOllamaAdapterReasoning:
+    """Tests for OllamaAdapter reasoning level handling."""
+
+    def test_parses_model_with_reasoning_level(self):
+        """Model with #level stores base model and reasoning level."""
+        adapter = OllamaAdapter(model="llama3.1#medium")
+        assert adapter.model == "llama3.1"
+        assert adapter.reasoning_level == "medium"
+        assert adapter._full_model == "llama3.1#medium"
+
+    def test_no_reasoning_level_is_none(self):
+        """Model without # suffix has reasoning_level None."""
+        adapter = OllamaAdapter(model="llama3.1:8b")
+        assert adapter.model == "llama3.1:8b"
+        assert adapter.reasoning_level is None
+        assert adapter._full_model == "llama3.1:8b"
+
+    @patch("urllib.request.urlopen")
+    def test_generate_logs_debug_when_reasoning_present(self, mock_urlopen):
+        """Reasoning level triggers a debug log and the request uses base model."""
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "message": {"content": "output"},
+        }).encode("utf-8")
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=mock_response)
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+
+        adapter = OllamaAdapter(model="llama3.1#medium")
+        messages = [ModelMessage(role="user", content="Test")]
+
+        with patch("logging.Logger.debug") as mock_debug:
+            result = adapter.generate(messages)
+
+        assert result == "output"
+        request = mock_urlopen.call_args[0][0]
+        body = json.loads(request.data.decode("utf-8"))
+        assert body["model"] == "llama3.1"
+        assert "reasoning_level" not in body
+        mock_debug.assert_called_once()
+        assert "ignoring" in mock_debug.call_args[0][0].lower()
+
+
+class TestMockModelClientReasoning:
+    """Tests for MockModelClient reasoning level attribute."""
+
+    def test_has_reasoning_level_attribute(self):
+        """MockModelClient exposes reasoning_level for runner access."""
+        client = MockModelClient()
+        assert hasattr(client, "reasoning_level")
+        assert client.reasoning_level is None
+
+    def test_generate_works_with_reasoning_level(self):
+        """generate() works fine even with reasoning_level set."""
+        client = MockModelClient(response="Test")
+        client.reasoning_level = "high"
+        result = client.generate([ModelMessage(role="user", content="Hi")])
+        assert result == "Test"
+        assert client.call_count == 1
