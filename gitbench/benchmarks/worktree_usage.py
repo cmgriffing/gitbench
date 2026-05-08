@@ -188,15 +188,3 @@ class WorktreeUsageBenchmark(Benchmark):
         except Exception as e:
             logger.error(f"Error getting worktree list: {e}")
         return "(no worktrees)"
-
-    def format_prompt(self, fixture: Fixture, diff: str) -> str:
-        """Format the prompt with the fixture prompt and repo status.
-
-        Args:
-            fixture: The fixture containing the base prompt.
-            diff: The git worktree list output to include.
-
-        Returns:
-            The formatted prompt string.
-        """
-        return f"{fixture.prompt}\n\n{diff}"
