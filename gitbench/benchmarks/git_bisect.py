@@ -125,23 +125,6 @@ class GitBisectBenchmark(Benchmark):
                 commits.append((parts[0], parts[1], parts[2]))
         return commits
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository with a known bad commit in history.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-
-        Raises:
-            RuntimeError: If setup commands fail.
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"bisect_{fixture.id}", fixture.setup)
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def get_diff(self, repo_path: str) -> str:
         """Get git log output and test results for the repository.
 

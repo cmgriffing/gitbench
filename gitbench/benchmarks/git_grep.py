@@ -26,20 +26,6 @@ class GitGrepBenchmark(Benchmark):
     name = "git_grep"
     description = "Search repository content using git grep"
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository for a git grep scenario.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"git_grep_{fixture.id}", fixture.setup)
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         """Score a git grep answer against the expected value.
 

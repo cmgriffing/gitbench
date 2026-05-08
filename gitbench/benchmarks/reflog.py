@@ -136,23 +136,6 @@ class ReflogBenchmark(Benchmark):
                 )
         return entries
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository for a reflog recovery scenario.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-
-        Raises:
-            RuntimeError: If setup commands fail.
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"reflog_{fixture.id}", fixture.setup)
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def get_diff(self, repo_path: str) -> str:
         """Get git reflog output for the repository.
 

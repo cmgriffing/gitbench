@@ -26,29 +26,6 @@ class TagManagementBenchmark(Benchmark):
     name = "tag_management"
     description = "Manage git tags for release versioning"
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository for a tag management scenario.
-
-        Creates the repo and registers bare remotes for cleanup.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"tag_management_{fixture.id}", fixture.setup)
-
-        # Register sibling directories for cleanup (bare remotes, temp clones)
-        parent_dir = os.path.dirname(repo_path)
-        for bare_name in ["remote-bare", "remote", "clone"]:
-            bare_path = os.path.join(parent_dir, bare_name)
-            executor.register_cleanup(bare_path)
-
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         """Score the fixture by executing model output then checking state.
 

@@ -90,20 +90,6 @@ class BranchCleanupBenchmark(Benchmark):
             error=error,
         )
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository for a branch cleanup scenario.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"branch_cleanup_{fixture.id}", fixture.setup)
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def get_diff(self, repo_path: str) -> str:
         """Get the branch list for the repository.
 

@@ -26,34 +26,6 @@ class SubmoduleUsageBenchmark(Benchmark):
     name = "submodule_usage"
     description = "Manage git submodules for external dependencies"
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository for a submodule scenario.
-
-        Creates the parent repo and registers bare repos for cleanup.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"submodule_usage_{fixture.id}", fixture.setup)
-
-        # Register sibling directories for cleanup (bare repos, temp dirs)
-        parent_dir = os.path.dirname(repo_path)
-        for bare_name in ["lib-bare", "utils-bare", "plugins-bare", "deps-bare"]:
-            bare_path = os.path.join(parent_dir, bare_name)
-            executor.register_cleanup(bare_path)
-
-        # Also clean up source dirs used in setup
-        for tmp_name in ["lib-src", "utils-src", "plugins-src", "deps-src"]:
-            tmp_path = os.path.join(parent_dir, tmp_name)
-            executor.register_cleanup(tmp_path)
-
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         """Score the fixture by executing model output then checking state.
 

@@ -27,23 +27,6 @@ class GitCleanBenchmark(Benchmark):
     name = "git_clean"
     description = "Clean untracked and ignored files from a repository"
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository for a git clean scenario.
-
-        Creates the repo using the fixture's setup commands.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"git_clean_{fixture.id}", fixture.setup)
-
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         """Score the fixture by executing model output then checking state.
 

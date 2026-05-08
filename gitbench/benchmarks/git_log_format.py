@@ -37,20 +37,6 @@ class GitLogFormatBenchmark(Benchmark):
         """
         return self._scorer.score(fixture, model_output, repo_path=repo_path)
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository for a git log formatting scenario.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"git_log_format_{fixture.id}", fixture.setup)
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def get_diff(self, repo_path: str) -> str:
         """Get git log output in various formats for the repository.
 

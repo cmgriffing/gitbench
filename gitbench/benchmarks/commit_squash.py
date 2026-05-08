@@ -126,23 +126,6 @@ class CommitSquashBenchmark(Benchmark):
                 hashes_by_message[subject] = commit_hash.lower()
         return hashes_by_message
 
-    def setup_fixture(self, fixture: Fixture) -> tuple[GitExecutor, str]:
-        """Set up a git repository with a commit history for squash analysis.
-
-        Args:
-            fixture: The fixture containing setup commands.
-
-        Returns:
-            A tuple of (GitExecutor, repo_path).
-
-        Raises:
-            RuntimeError: If setup commands fail.
-        """
-        executor = GitExecutor()
-        repo_path = executor.setup_repo(f"squash_{fixture.id}", fixture.setup)
-        logger.debug(f"Set up fixture {fixture.id} at {repo_path}")
-        return executor, repo_path
-
     def get_diff(self, repo_path: str) -> str:
         """Get git log output for the repository.
 
