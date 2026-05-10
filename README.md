@@ -209,6 +209,12 @@ Quick start:
 ```yaml
 id: "f013"
 description: "My scenario"
+purpose: "Tests ability to generate a commit message for a new file. Evaluates basic diff comprehension."
+difficulty: easy
+tags:
+  - commit-message
+  - add
+  - basic
 setup:
   - "git init"
   - "git config user.email 'test@test.com'"

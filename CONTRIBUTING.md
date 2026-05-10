@@ -11,6 +11,12 @@ Fixtures live in `fixtures/<benchmark>/`. Each is a YAML file:
 ```yaml
 id: "f013"
 description: "What this fixture tests"
+purpose: "Tests ability to generate a commit message for a new file. Evaluates basic diff comprehension and summarization."
+difficulty: easy
+tags:
+  - commit-message
+  - single-file
+  - basic
 setup:
   - "git init"
   - "git config user.email 'test@test.com'"
@@ -31,7 +37,10 @@ scoring:
 - `expected` — correct answer for scoring
 
 **Optional fields:**
-- `description` — human-readable description
+- `description` — short human-readable description
+- `purpose` — 1–3 sentence explanation of what skill is tested and why it matters
+- `difficulty` — relative difficulty: `trivial`, `easy`, `medium`, `hard`, or `expert`
+- `tags` — list of searchable keywords (e.g., `["commit-message", "basic"]`)
 - `scoring.type` — scoring algorithm (`similarity` is the only one currently)
 - `scoring.threshold` — minimum similarity to pass (0.0–1.0, default 0.5)
 
@@ -59,6 +68,38 @@ scoring:
 4. **Realistic expected values** — Use conventional commit format when appropriate.
 5. **Appropriate thresholds** — Default 0.5 works for most text. Lower for lenient scoring, raise for exact-match requirements.
 6. **YAML gotcha** — Bare colons in strings (e.g., commit messages like "Fix: login") cause PyYAML to parse them as mapping keys. Use single quotes: `'Fix: login'` or explicit block scalars (`|`).
+
+### Fixture Metadata (Optional but Recommended)
+
+Fixtures support three optional metadata fields that help consumers of benchmark results understand what each fixture tests and why it matters:
+
+```yaml
+purpose: "Tests ability to resolve a simple single-line merge conflict. Evaluates basic conflict marker comprehension and merge strategy selection."
+difficulty: easy
+tags:
+  - merge-conflict
+  - single-line
+  - basic
+  - resolution
+```
+
+**`purpose`** (string): 1–3 sentences explaining what Git skill this fixture tests and why it matters for evaluating model competency. Write for a researcher or user reading benchmark results — they should understand the scenario without needing to read the YAML setup.
+
+**`difficulty`** (string, enum): One of:
+- `trivial` — Single straightforward git command with no edge cases (e.g., "list all tags", "remove a single untracked file")
+- `easy` — Simple multi-step operation with clear expected output (e.g., "add a submodule", "create a lightweight tag")
+- `medium` — Requires understanding of Git concepts or multi-branch workflows (e.g., "resolve a multi-line merge conflict", "recover a commit via reflog after amend")
+- `hard` — Complex scenarios, conflict resolution, or subtle Git behavior (e.g., "resolve three-way conflicts with multiple files", "find orphaned commits after mixed reset")
+- `expert` — Rare Git operations, advanced workflows, or scenarios requiring deep Git internals knowledge (e.g., "multi-branch reflog analysis across rebases")
+
+**`tags`** (list of strings): Searchable keywords describing the fixture's domain, operations, or concepts. Use lowercase, hyphen-separated terms. Examples: `["rebase", "conflict-resolution", "multi-file", "three-way"]`. Tags enable filtering and grouping across benchmark categories.
+
+**Tips for writing good `purpose` statements:**
+- Start with "Tests ability to..." or "Evaluates..."
+- Mention the specific Git operation or concept being tested
+- Explain why this scenario matters for real-world Git competency
+- Keep it concise — 1–3 sentences is usually enough
+- Example: "Tests ability to recover a commit from a deleted feature branch via reflog. Evaluates understanding of reflog-based recovery workflows, which are essential for disaster recovery in collaborative Git environments."
 
 ### Validating Fixtures
 
