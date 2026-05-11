@@ -1,0 +1,150 @@
+---
+import Layout from '../components/Layout.astro';
+import { loadDataSync } from '../lib/data';
+import type { GitBenchData } from '../lib/types';
+
+const data = loadDataSync();
+
+// Build tag list with counts
+const tagCounts: Record<string, number> = {};
+const allDiffs = new Set<string>();
+for (const fid in data.fixture_index) {
+  const fi = data.fixture_index[fid];
+  if (fi.difficulty) allDiffs.add(fi.difficulty);
+  for (const t of fi.tags) {
+    tagCounts[t] = (tagCounts[t] || 0) + 1;
+  }
+}
+
+const sortedTags = Object.entries(tagCounts).sort(([,a], [,b]) => b - a);
+const diffsSorted = Array.from(allDiffs).sort();
+
+// Build fixture list for client-side filtering
+const allFixtures = Object.values(data.fixture_index);
+---
+
+<Layout title="Explore">
+  <div style="margin-bottom: 2rem;">
+    <div class="section-label"><span>Tag Cloud</span></div>
+    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;" id="tag-cloud">
+      {sortedTags.map(([tag, count]) => {
+        const fontSize = Math.max(0.65, Math.min(1.2, 0.65 + (count / Math.max(...sortedTags.map(t => t[1]))) * 0.55));
+        return (
+          <span
+            class="tag-pill tag-cloud-item"
+            data-tag={tag}
+            style={`font-size: ${fontSize.toFixed(2)}rem;`}
+          >
+            {tag} ({count})
+          </span>
+        );
+      })}
+    </div>
+  </div>
+
+  <div style="margin-bottom: 2rem;">
+    <div class="section-label"><span>Filters</span></div>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;" id="filter-controls">
+      <select id="explore-tag" style="
+        background: var(--card); color: var(--text); border: 1px solid var(--border);
+        border-radius: 6px; padding: 0.35rem 0.6rem; font-family: var(--font-mono); font-size: 0.7rem;
+      ">
+        <option value="">Any tag</option>
+        {sortedTags.map(([tag]) => <option value={tag}>{tag}</option>)}
+      </select>
+      <select id="explore-diff" style="
+        background: var(--card); color: var(--text); border: 1px solid var(--border);
+        border-radius: 6px; padding: 0.35rem 0.6rem; font-family: var(--font-mono); font-size: 0.7rem;
+      ">
+        <option value="">Any difficulty</option>
+        {diffsSorted.map(d => <option value={d}>{d}</option>)}
+      </select>
+      <select id="explore-bench" style="
+        background: var(--card); color: var(--text); border: 1px solid var(--border);
+        border-radius: 6px; padding: 0.35rem 0.6rem; font-family: var(--font-mono); font-size: 0.7rem;
+      ">
+        <option value="">Any benchmark</option>
+        {data.benchmarks.map(b => <option value={b}>{b}</option>)}
+      </select>
+      <button onclick="resetExploreFilters()" style="
+        background: none; border: 1px solid var(--border); color: var(--text-dim);
+        border-radius: 6px; padding: 0.35rem 0.6rem; font-family: var(--font-mono);
+        font-size: 0.65rem; cursor: pointer;
+      ">Reset</button>
+    </div>
+  </div>
+
+  <section>
+    <div class="section-label"><span>Results</span> <span id="result-count" style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim);"></span></div>
+    <div style="display: flex; flex-direction: column; gap: 0.6rem;" id="explore-results">
+      {allFixtures.map(fi => (
+        <div class="card explore-result" data-tags={fi.tags.join(',')} data-diff={fi.difficulty} data-bench={fi.benchmark} style="padding: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; cursor: pointer;" onclick={`window.location='/fixtures/${encodeURIComponent(fi.benchmark)}/${fi.id}'`}>
+          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <span style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-mid); font-weight: 500;">{fi.id}</span>
+            <span class="tag-pill" style="font-size: 0.6rem;">{fi.benchmark}</span>
+            {fi.difficulty && <span class="result-pill pass" style="opacity: 0.5; font-size: 0.55rem;">{fi.difficulty}</span>}
+          </div>
+          <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+            {fi.tags.slice(0, 3).map(t => (
+              <span class="tag-pill" style="font-size: 0.55rem; padding: 0.1rem 0.35rem;">{t}</span>
+            ))}
+            {fi.tags.length > 3 && (
+              <span style="font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-dim);">+{fi.tags.length - 3}</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+</Layout>
+
+<script>
+  function applyExploreFilters() {
+    const tag = (document.getElementById('explore-tag') as HTMLSelectElement)?.value || '';
+    const diff = (document.getElementById('explore-diff') as HTMLSelectElement)?.value || '';
+    const bench = (document.getElementById('explore-bench') as HTMLSelectElement)?.value || '';
+    const results = document.querySelectorAll('.explore-result');
+    let visible = 0;
+    results.forEach((el: any) => {
+      const tags = (el.dataset.tags || '').split(',');
+      const d = el.dataset.diff || '';
+      const b = el.dataset.bench || '';
+      const show = (!tag || tags.includes(tag))
+        && (!diff || d === diff)
+        && (!bench || b === bench);
+      el.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    const countEl = document.getElementById('result-count');
+    if (countEl) countEl.textContent = `(${visible} fixture${visible !== 1 ? 's' : ''})`;
+  }
+  function resetExploreFilters() {
+    ['explore-tag', 'explore-diff', 'explore-bench'].forEach(id => {
+      const el = document.getElementById(id) as HTMLSelectElement;
+      if (el) el.value = '';
+    });
+    applyExploreFilters();
+  }
+  document.getElementById('explore-tag')?.addEventListener('change', applyExploreFilters);
+  document.getElementById('explore-diff')?.addEventListener('change', applyExploreFilters);
+  document.getElementById('explore-bench')?.addEventListener('change', applyExploreFilters);
+  document.querySelectorAll('.tag-cloud-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const tag = (el as HTMLElement).dataset.tag || '';
+      const select = document.getElementById('explore-tag') as HTMLSelectElement;
+      if (select) { select.value = tag; }
+      applyExploreFilters();
+    });
+  });
+  // Initial count
+  applyExploreFilters();
+
+  // Handle ?tag= query param
+  const params = new URLSearchParams(window.location.search);
+  const initialTag = params.get('tag');
+  if (initialTag) {
+    const select = document.getElementById('explore-tag') as HTMLSelectElement;
+    if (select) { select.value = initialTag; }
+    applyExploreFilters();
+  }
+</script>

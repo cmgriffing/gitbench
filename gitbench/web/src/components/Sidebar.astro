@@ -1,0 +1,34 @@
+---
+const currentPath = Astro.url.pathname;
+
+function isActive(path: string) {
+  if (path === '/') return currentPath === '/';
+  return currentPath.startsWith(path);
+}
+
+const links = [
+  { href: '/', label: 'Dashboard', icon: '◉' },
+  { href: '/models', label: 'Models', icon: '◇' },
+  { href: '/benchmarks', label: 'Benchmarks', icon: '▦' },
+  { href: '/explore', label: 'Explore', icon: '◎' },
+  { href: '/compare', label: 'Compare', icon: '⨯' },
+  { href: '/history', label: 'History', icon: '◷' },
+];
+---
+
+<aside class="app-sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-brand">Git<span class="accent">Bench</span></div>
+  </div>
+  <nav class="sidebar-nav">
+    {links.map(link => (
+      <a
+        href={link.href}
+        class={`sidebar-link${isActive(link.href) ? ' active' : ''}`}
+      >
+        <span class="icon">{link.icon}</span>
+        <span>{link.label}</span>
+      </a>
+    ))}
+  </nav>
+</aside>

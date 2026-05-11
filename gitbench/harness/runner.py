@@ -220,6 +220,9 @@ class BenchmarkRunner:
             score.reasoning_level = getattr(
                 self._model_client, "reasoning_level", None
             )
+            score.prompt = fixture.prompt
+            score.expected = fixture.expected
+            score.description = fixture.description
             if usage and isinstance(usage, dict):
                 score.input_tokens = usage.get("input_tokens")
                 score.output_tokens = usage.get("output_tokens")
@@ -236,6 +239,9 @@ class BenchmarkRunner:
                 reasoning_level=getattr(
                     self._model_client, "reasoning_level", None
                 ),
+                prompt=fixture.prompt,
+                expected=fixture.expected,
+                description=fixture.description,
             )
         finally:
             if executor is not None:

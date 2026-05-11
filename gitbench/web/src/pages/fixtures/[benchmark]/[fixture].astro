@@ -1,0 +1,99 @@
+---
+import Layout from '../../../components/Layout.astro';
+import PromptBlock from '../../../components/fixtures/PromptBlock.astro';
+import ExpectedBlock from '../../../components/fixtures/ExpectedBlock.astro';
+import ModelOutputCard from '../../../components/fixtures/ModelOutputCard.astro';
+import { loadDataSync } from '../../../lib/data';
+import type { GitBenchData } from '../../../lib/types';
+
+export function getStaticPaths() {
+  const data = loadDataSync();
+  return Object.keys(data.fixture_index).map(key => {
+    const [benchmark, fixture] = key.split('/');
+    return {
+      params: { benchmark, fixture },
+      props: { benchmark, fixtureId: fixture, data },
+    };
+  });
+}
+
+const { benchmark, fixtureId, data } = Astro.props as { benchmark: string; fixtureId: string; data: GitBenchData };
+const fi = data.fixture_index[`${benchmark}/${fixtureId}`];
+if (!fi) {
+  return new Response('Fixture not found', { status: 404 });
+}
+
+// Collect all model outputs for this fixture
+const modelOutputs: { model: string; passed: boolean; similarity: number; output: string; error: string | null }[] = [];
+for (const m of data.models) {
+  const results = data.fixtures[m.name]?.[fi.benchmark] || [];
+  const fr = results.find(r => r.fixture_id === fixtureId);
+  if (fr) {
+    modelOutputs.push({
+      model: m.name,
+      passed: fr.passed,
+      similarity: Math.round(fr.similarity * 1000) / 10,
+      output: fr.model_output,
+      error: fr.error,
+    });
+  }
+}
+
+// Sort by similarity descending
+modelOutputs.sort((a, b) => b.similarity - a.similarity);
+---
+
+<Layout title={`${fixtureId} — ${fi.benchmark}`}>
+  <div style="margin-bottom: 1.5rem;">
+    <a href={`/benchmarks/${fi.benchmark}`} style="
+      font-family: var(--font-mono); font-size: 0.68rem; color: var(--accent);
+      text-decoration: none;
+    ">← {fi.benchmark}</a>
+  </div>
+
+  <div class="card" style="margin-bottom: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+      <div>
+        <div style="font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.3rem;">
+          {fixtureId}
+        </div>
+        {fi.description && (
+          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-mid); margin-bottom: 0.5rem;">
+            {fi.description}
+          </div>
+        )}
+        {fi.purpose && (
+          <div style="font-family: var(--font-display); font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 0.75rem; max-width: 700px;">
+            {fi.purpose}
+          </div>
+        )}
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+        {fi.difficulty && <span class="badge" style="font-size: 0.7rem;">{fi.difficulty}</span>}
+        {fi.tags.map(t => (
+          <a href={`/explore?tag=${encodeURIComponent(t)}`} style="text-decoration: none;">
+            <span class="tag-pill">{t}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  </div>
+
+  <PromptBlock text={fi.prompt} />
+  <ExpectedBlock text={fi.expected} />
+
+  <section style="margin-top: 2rem;">
+    <div class="section-label"><span>Model Outputs ({modelOutputs.length})</span></div>
+    <div style="display: flex; flex-direction: column; gap: 1rem;">
+      {modelOutputs.map(mo => (
+        <ModelOutputCard
+          modelName={mo.model}
+          passed={mo.passed}
+          similarity={mo.similarity}
+          output={mo.output}
+          error={mo.error}
+        />
+      ))}
+    </div>
+  </section>
+</Layout>

@@ -1,0 +1,51 @@
+---
+interface Props {
+  fixtureId: string;
+  benchmark: string;
+  passed: boolean;
+  similarity: number;
+  difficulty: string;
+  tags: string[];
+}
+
+const { fixtureId, benchmark, passed, similarity, difficulty, tags } = Astro.props;
+const passCls = passed ? 'pass' : 'fail';
+const tagsStr = tags.join(',');
+---
+
+<a
+  href={`/fixtures/${encodeURIComponent(benchmark)}/${fixtureId}`}
+  style="text-decoration: none;"
+>
+  <div
+    class="card fixture-card"
+    data-benchmark={benchmark}
+    data-difficulty={difficulty}
+    data-tags={tagsStr}
+    style="padding: 1rem; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;"
+  >
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+      <span style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-mid); font-weight: 500;">
+        {fixtureId}
+      </span>
+      <span class="result-pill {passCls}">
+        {passed ? 'PASS' : 'FAIL'}
+      </span>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-family: var(--font-mono); font-size: 0.62rem; color: var(--text-dim);">
+        {benchmark}
+      </span>
+      <span style="font-family: var(--font-mono); font-size: 0.78rem; font-weight: 600; color: var(--text);">
+        {similarity}%
+      </span>
+    </div>
+    {difficulty && (
+      <div style="margin-top: 0.35rem;">
+        <span class="tag-pill" style="font-size: 0.58rem; padding: 0.1rem 0.4rem;">
+          {difficulty}
+        </span>
+      </div>
+    )}
+  </div>
+</a>

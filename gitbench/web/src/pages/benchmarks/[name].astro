@@ -1,0 +1,107 @@
+---
+import Layout from '../../components/Layout.astro';
+import PassRateBarChart from '../../components/charts/PassRateBarChart';
+import { loadDataSync } from '../../lib/data';
+import type { GitBenchData } from '../../lib/types';
+
+export function getStaticPaths() {
+  const data = loadDataSync();
+  return data.benchmarks.map(b => ({
+    params: { name: b },
+    props: { benchName: b, data },
+  }));
+}
+
+const { benchName, data } = Astro.props as { benchName: string; data: GitBenchData };
+
+// Collect all fixtures in this benchmark
+const fixtureIds = Object.values(data.fixture_index)
+  .filter(fi => fi.benchmark === benchName)
+  .map(fi => fi.id);
+
+// Tag breakdown
+const tagCounts: Record<string, number> = {};
+for (const fid of fixtureIds) {
+  const fi = data.fixture_index[fid];
+  for (const t of fi?.tags || []) {
+    tagCounts[t] = (tagCounts[t] || 0) + 1;
+  }
+}
+---
+
+<Layout title={benchName}>
+  <div class="card" style="margin-bottom: 2rem;">
+    <div style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.3rem;">Benchmark</div>
+    <div style="font-size: 1.1rem; font-weight: 600;">{benchName}</div>
+    <div style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim); margin-top: 0.5rem;">
+      {fixtureIds.length} fixtures
+    </div>
+  </div>
+
+  <section style="margin-bottom: 2.5rem;">
+    <div class="section-label"><span>Model Leaderboard</span></div>
+    <PassRateBarChart client:load />
+  </section>
+
+  {
+    Object.keys(tagCounts).length > 0 && (
+      <section style="margin-bottom: 2.5rem;">
+        <div class="section-label"><span>Tags</span></div>
+        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+          {Object.entries(tagCounts).sort(([,a], [,b]) => b - a).map(([tag, count]) => (
+            <a href={`/explore?tag=${encodeURIComponent(tag)}`} style="text-decoration: none;">
+              <span class="tag-pill">{tag} ({count})</span>
+            </a>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  <section>
+    <div class="section-label"><span>Per-Fixture Comparison</span></div>
+    <div class="card" style="overflow-x: auto; padding: 1.25rem;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Fixture</th>
+            <th>Difficulty</th>
+            {data.models.map(m => <th>{m.name}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {fixtureIds.map(fid => {
+            const fi = data.fixture_index[fid];
+            return (
+              <tr>
+                <td>
+                  <a href={`/fixtures/${encodeURIComponent(benchName)}/${fid}`} class="heat-pill" style="
+                    background: rgba(255,255,255,0.04); color: var(--text-mid);
+                    border: 1px solid var(--border); text-decoration: none;
+                  ">{fid}</a>
+                </td>
+                <td style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim);">
+                  {fi?.difficulty || '—'}
+                </td>
+                {data.models.map(m => {
+                  const results = data.fixtures[m.name]?.[benchName] || [];
+                  const fr = results.find(r => r.fixture_id === fid);
+                  if (!fr) {
+                    return <td style="color: var(--text-dim); opacity: 0.4; font-family: var(--font-mono); font-size: 0.72rem;">—</td>;
+                  }
+                  const sim = Math.round(fr.similarity * 1000) / 10;
+                  const cls = fr.passed ? 'pass' : 'fail';
+                  return (
+                    <td>
+                      <span class="result-pill {cls}">{sim}%</span>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</Layout>

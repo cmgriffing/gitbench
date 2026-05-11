@@ -1,0 +1,193 @@
+---
+import Layout from '../../components/Layout.astro';
+import FixtureCard from '../../components/fixtures/FixtureCard.astro';
+import { loadDataSync } from '../../lib/data';
+import type { GitBenchData, FixtureResult } from '../../lib/types';
+
+export function getStaticPaths() {
+  const data = loadDataSync();
+  return data.models.map(m => ({
+    params: { model: encodeURIComponent(m.name) },
+    props: { modelName: m.name, data },
+  }));
+}
+
+const { modelName, data } = Astro.props as { modelName: string; data: GitBenchData };
+const summary = data.model_summaries[modelName];
+const modelInfo = data.models.find(m => m.name === modelName);
+if (!summary || !modelInfo) {
+  return new Response('Model not found', { status: 404 });
+}
+
+const passRate = Math.round(summary.pass_at_k * 1000) / 10;
+const encodedModelName = encodeURIComponent(modelName);
+
+// Collect all fixture results for this model
+const allFixtures: FixtureResult[] = [];
+for (const bench of data.benchmarks) {
+  const results = data.fixtures[modelName]?.[bench] || [];
+  for (const r of results) {
+    allFixtures.push({ ...r, benchmark: bench } as any);
+  }
+}
+
+// Check for multiple reasoning levels of same base model
+const sameBaseModels = data.models.filter(
+  m => m.baseModel === modelInfo.baseModel && m.name !== modelName
+);
+const hasOtherLevels = sameBaseModels.length > 0;
+
+// Benchmark list for filter
+const benchmarkList = data.benchmarks;
+
+// All unique difficulties
+const diffs = new Set<string>();
+const allTags = new Set<string>();
+for (const fid in data.fixture_index) {
+  const fi = data.fixture_index[fid];
+  if (fi.difficulty) diffs.add(fi.difficulty);
+  for (const t of fi.tags) allTags.add(t);
+}
+
+const passCls = summary.pass_at_k >= 0.8 ? 'pass' : summary.pass_at_k < 0.5 ? 'fail' : 'warn';
+---
+
+<Layout title={modelName}>
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;">
+    <div>
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
+        <span class="result-pill {passCls}" style="font-size: 0.72rem;">{passRate}%</span>
+        <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim);">
+          {summary.total_passed} / {summary.total_fixtures} fixtures
+        </span>
+        <span style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); opacity: 0.6;">
+          {summary.total_runs} run(s)
+        </span>
+        {modelInfo.reasoningLevel && (
+          <span class="badge">{modelInfo.reasoningLevel}</span>
+        )}
+      </div>
+    </div>
+    <a href={`/compare?with=${encodedModelName}`} class="heat-pill" style="
+      text-decoration: none;
+      background: var(--accent-glow);
+      color: var(--accent);
+      border: 1px solid var(--border-accent);
+      padding: 0.4rem 1rem;
+      font-size: 0.75rem;
+    ">
+      Compare →
+    </a>
+  </div>
+
+  {
+    hasOtherLevels && (
+      <div class="card" style="margin-bottom: 2rem;">
+        <div class="section-label"><span>Reasoning Levels</span></div>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+          {
+            [modelInfo, ...sameBaseModels].map(m => {
+              const ms = data.model_summaries[m.name];
+              const rp = ms ? Math.round(ms.pass_at_k * 1000) / 10 : 0;
+              const isCurrent = m.name === modelName;
+              return (
+                <a
+                  href={`/models/${encodeURIComponent(m.name)}`}
+                  style="text-decoration: none;"
+                >
+                  <div class="card" style={`padding: 1rem 1.25rem; cursor: pointer; ${isCurrent ? 'border-color: var(--border-accent);' : ''}`}>
+                    <div style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.3rem;">
+                      {m.reasoningLevel || 'default'}
+                    </div>
+                    <div style={`font-size: 1.5rem; font-weight: 700; color: ${isCurrent ? 'var(--accent)' : 'var(--text)'};`}>
+                      {rp}%
+                    </div>
+                  </div>
+                </a>
+              );
+            })
+          }
+        </div>
+      </div>
+    )
+  }
+
+  <section>
+    <div class="section-label"><span>Fixture Gallery ({allFixtures.length})</span></div>
+
+    <!-- Filter controls -->
+    <div id="filter-bar" style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center;">
+      <select id="filter-bench" style="
+        background: var(--card); color: var(--text); border: 1px solid var(--border);
+        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.68rem;
+      ">
+        <option value="">All benchmarks</option>
+        {benchmarkList.map(b => <option value={b}>{b}</option>)}
+      </select>
+      <select id="filter-diff" style="
+        background: var(--card); color: var(--text); border: 1px solid var(--border);
+        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.68rem;
+      ">
+        <option value="">All difficulties</option>
+        {Array.from(diffs).sort().map(d => <option value={d}>{d}</option>)}
+      </select>
+      <select id="filter-tag" style="
+        background: var(--card); color: var(--text); border: 1px solid var(--border);
+        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.68rem;
+      ">
+        <option value="">All tags</option>
+        {Array.from(allTags).sort().map(t => <option value={t}>{t}</option>)}
+      </select>
+      <button onclick="resetFilters()" style="
+        background: none; border: 1px solid var(--border); color: var(--text-dim);
+        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--font-mono);
+        font-size: 0.65rem; cursor: pointer;
+      ">Reset</button>
+    </div>
+
+    <div class="fixture-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.8rem;" id="fixture-gallery">
+      {allFixtures.map(fx => {
+        const fi = data.fixture_index[fx.fixture_id];
+        const simPct = Math.round(fx.similarity * 1000) / 10;
+        return (
+          <FixtureCard
+            fixtureId={fx.fixture_id}
+            benchmark={(fx as any).benchmark || fi?.benchmark || ''}
+            passed={fx.passed}
+            similarity={simPct}
+            difficulty={fi?.difficulty || ''}
+            tags={fi?.tags || []}
+          />
+        );
+      })}
+    </div>
+  </section>
+</Layout>
+
+<script>
+  function applyFilters() {
+    const bench = document.getElementById('filter-bench')?.value || '';
+    const diff = document.getElementById('filter-diff')?.value || '';
+    const tag = document.getElementById('filter-tag')?.value || '';
+    const cards = document.querySelectorAll('.fixture-card');
+    cards.forEach((card: any) => {
+      const cBench = card.dataset.benchmark || '';
+      const cDiff = card.dataset.difficulty || '';
+      const cTags = card.dataset.tags || '';
+      const show = (!bench || cBench === bench)
+        && (!diff || cDiff === diff)
+        && (!tag || cTags.split(',').includes(tag));
+      card.style.display = show ? '' : 'none';
+    });
+  }
+  function resetFilters() {
+    ['filter-bench', 'filter-diff', 'filter-tag'].forEach(id => {
+      const el = document.getElementById(id) as HTMLSelectElement;
+      if (el) el.value = '';
+    });
+    applyFilters();
+  }
+  document.getElementById('filter-bench')?.addEventListener('change', applyFilters);
+  document.getElementById('filter-diff')?.addEventListener('change', applyFilters);
+  document.getElementById('filter-tag')?.addEventListener('change', applyFilters);
+</script>

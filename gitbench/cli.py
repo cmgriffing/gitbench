@@ -21,13 +21,12 @@ from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter
 from gitbench.harness.runner import BenchmarkRunner, RunProgress
 from gitbench.harness.reasoning import validate_model_list
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
-from gitbench.render import aggregate_runs, render_html, render_html_from_envelope, _run_sort_key
+from gitbench.render import aggregate_runs, _run_sort_key
 from gitbench.ui.progress import TerminalProgressTable, _progress_model_names, _progress_model_names_for_runs
 from gitbench.ui.summary import SummaryTable
 from gitbench.version import BENCHMARK_SUITE_VERSION, RESULT_SCHEMA_VERSION
 
 DEFAULT_JSON_OUTPUT_PATH = "gitbench-results/{timestamp}/results-v{version}.json"
-DEFAULT_HTML_OUTPUT_PATH = "gitbench-results/{timestamp}/report-v{version}.html"
 
 # Configure structured logging
 logging.basicConfig(
@@ -285,32 +284,23 @@ def _format_default_output_path(path_template: str, timestamp: str) -> str:
     )
 
 
-def resolve_run_output_paths(
+def resolve_run_output_path(
     config: dict,
     *,
     json_output: str | None,
-    html_output: str | None,
     default_timestamp: str | None = None,
-) -> tuple[str, str]:
-    """Resolve run JSON/HTML output paths.
+) -> str:
+    """Resolve the run JSON output path.
 
-    Precedence is explicit format-specific CLI option, config file, then
-    built-in default.
+    Precedence is explicit CLI option, config file, then built-in default.
     """
     default_timestamp = default_timestamp or _default_output_timestamp()
 
-    resolved_json = (
+    return (
         json_output
         or _get_config_output_path(config, "json")
         or _format_default_output_path(DEFAULT_JSON_OUTPUT_PATH, default_timestamp)
     )
-    resolved_html = (
-        html_output
-        or _get_config_output_path(config, "html")
-        or _format_default_output_path(DEFAULT_HTML_OUTPUT_PATH, default_timestamp)
-    )
-
-    return resolved_json, resolved_html
 
 
 
@@ -393,12 +383,6 @@ def cli():
     help=f"JSON output file path (default: {DEFAULT_JSON_OUTPUT_PATH}, configurable via gitbench.json outputs.json).",
 )
 @click.option(
-    "--html-output",
-    type=click.Path(),
-    default=None,
-    help=f"HTML report output file path (default: {DEFAULT_HTML_OUTPUT_PATH}, configurable via gitbench.json outputs.html).",
-)
-@click.option(
     "--output-dir",
     "-d",
     type=click.Path(),
@@ -475,7 +459,6 @@ def run(
     all_models: bool,
     model: str | None,
     json_output: str | None,
-    html_output: str | None,
     output_dir: str | None,
     jsonl_path: str | None,
     export_list: list[str],
@@ -520,16 +503,13 @@ def run(
         sys.exit(1)
 
     config = load_config()
-    resolved_json_output, resolved_html_output = resolve_run_output_paths(
+    resolved_json_output = resolve_run_output_path(
         config,
         json_output=json_output,
-        html_output=html_output,
     )
     stdout_json_enabled = (
         json_output is None
-        and html_output is None
         and _get_config_output_path(config, "json") is None
-        and _get_config_output_path(config, "html") is None
     )
 
     # Build the list of (profile_name, resolved_profile_dict, models_list) tuples to run
@@ -947,24 +927,6 @@ def run(
         write_text_file(resolved_json_output, output_json)
         click.echo(f"\nJSON results written to: {resolved_json_output}", err=True)
 
-        try:
-            envelopes_for_html = [envelope for _profile_name, envelope in pending_outputs]
-            if len(envelopes_for_html) > 1:
-                html = render_html(aggregate_runs(envelopes_for_html), title="GitBench Report")
-            else:
-                html = render_html_from_envelope(
-                    envelopes_for_html[0] if envelopes_for_html else _envelope,
-                    title="GitBench Report",
-                )
-            if html:
-                write_text_file(resolved_html_output, html)
-                click.echo(f"HTML report written to: {resolved_html_output}", err=True)
-            else:
-                click.echo("Warning: HTML generation returned no content; HTML report was not written.", err=True)
-        except Exception as _html_exc:
-            logger.warning("HTML generation failed (%s): %s", type(_html_exc).__name__, _html_exc)
-            click.echo(f"Warning: HTML generation failed: {_html_exc}", err=True)
-
         if stdout_json_enabled:
             click.echo(output_json)
 
@@ -1040,12 +1002,12 @@ def list_profiles():
         click.echo(f"  - {name}: {', '.join(parts)}")
 
 
-@cli.command("render")
+@cli.command("report")
 @click.option(
     "--input-dir",
     "-d",
     default=None,
-    help="Directory of per-run JSON files (from --output-dir)",
+    help="Directory of per-run JSON files (default: gitbench-results/)",
 )
 @click.option(
     "--input",
@@ -1059,54 +1021,95 @@ def list_profiles():
     "--output",
     "-o",
     "output_path",
-    default="gitbench-report.html",
-    show_default=True,
+    default=None,
     type=click.Path(),
-    help="Output HTML file path",
+    help="Output path for results.json (default: web/public/results.json)",
 )
 @click.option(
-    "--title",
-    "-t",
-    default="GitBench Report",
-    show_default=True,
-    help="Report title",
+    "--no-build",
+    is_flag=True,
+    help="Skip the Astro build step (only write results.json)",
 )
 @click.option(
     "--open",
     "open_browser",
     is_flag=True,
-    help="Open the report in the default browser after rendering",
+    help="Start preview server and open the report in the default browser",
 )
-def render(input_dir: str | None, input_file: str | None, output_path: str, title: str, open_browser: bool):
-    """Render a static HTML report from saved benchmark results.
+@click.option(
+    "--dev",
+    is_flag=True,
+    help="Start Astro dev server with hot reload (skips build)",
+)
+def report(input_dir: str | None, input_file: str | None, output_path: str | None, no_build: bool, open_browser: bool, dev: bool):
+    """Generate the Astro static report from benchmark results.
 
-    Reads run results from a directory of JSON files (--input-dir) or a
-    JSONL file (--input), or both. Generates a self-contained HTML report
-    with charts. No benchmarks are re-run.
+    Reads run results from gitbench-results/ (or --input-dir / --input),
+    aggregates them into web/public/results.json, builds the Astro site
+    to web/dist/, and optionally opens the report in a browser.
 
     \b
     Examples:
-      gitbench render --input-dir results/
-      gitbench render --input results.jsonl -o report.html
-      gitbench render -d results/ -i extra.jsonl --open
+      gitbench report                            # aggregate + build from gitbench-results/
+      gitbench report --no-build                 # only generate results.json
+      gitbench report --open                     # build and open
+      gitbench report -d my-results/ -i extra.jsonl --open
     """
+    import subprocess
     import webbrowser
 
-    from gitbench.render import aggregate_runs, load_runs_from_dir, load_runs_from_jsonl, render_html
+    from gitbench.render import (
+        aggregate_runs,
+        load_runs_from_combined,
+        load_runs_from_dir,
+        load_runs_from_jsonl,
+        render_json,
+    )
 
-    if not input_dir and not input_file:
-        raise click.ClickException("Provide --input-dir and/or --input to specify result files.")
+    # Determine input directory
+    results_dir = input_dir or "gitbench-results"
+    web_dir = Path(__file__).parent / "web"
+    json_output = output_path or str(web_dir / "public" / "results.json")
 
     runs: list[dict] = []
 
-    if input_dir:
+    # 1. Try combined format (default output of `gitbench run -a`)
+    #    Looks for gitbench-results/<latest-ts>/results-v<version>.json
+    combined_runs_loaded = False
+    if not input_file:
         try:
-            dir_runs = load_runs_from_dir(input_dir)
-            click.echo(f"Loaded {len(dir_runs)} run(s) from {input_dir}", err=True)
-            runs.extend(dir_runs)
-        except FileNotFoundError as e:
-            raise click.ClickException(str(e))
+            dir_path = Path(results_dir)
+            if dir_path.is_dir():
+                # Find the most recent timestamped subdirectory with a results file
+                best: tuple[str, str] | None = None
+                for subdir in sorted(dir_path.iterdir(), reverse=True):
+                    if subdir.is_dir():
+                        for f in subdir.glob("results-v*.json"):
+                            best = (str(f), subdir.name)
+                            break
+                    if best:
+                        break
+                if best:
+                    combined_runs = load_runs_from_combined(best[0])
+                    if combined_runs:
+                        click.echo(f"Loaded {len(combined_runs)} run(s) from combined file {best[0]}", err=True)
+                        runs.extend(combined_runs)
+                        combined_runs_loaded = True
+        except Exception:
+            pass
 
+    # 2. Fall back: per-run directory of envelope files
+    if not combined_runs_loaded and (input_dir or (not input_file and Path(results_dir).exists())):
+        try:
+            dir_runs = load_runs_from_dir(results_dir)
+            if dir_runs:
+                click.echo(f"Loaded {len(dir_runs)} run(s) from {results_dir}", err=True)
+                runs.extend(dir_runs)
+        except FileNotFoundError as e:
+            if not input_file:
+                raise click.ClickException(str(e))
+
+    # 3. Load from JSONL file
     if input_file:
         try:
             file_runs = load_runs_from_jsonl(input_file)
@@ -1116,9 +1119,11 @@ def render(input_dir: str | None, input_file: str | None, output_path: str, titl
             raise click.ClickException(str(e))
 
     if not runs:
-        raise click.ClickException("No valid run data found in the provided inputs.")
+        raise click.ClickException(
+            "No valid run data found. Run 'gitbench run -a' first or provide --input-dir/--input."
+        )
 
-    # Deduplicate by version + timestamp + model (prefer first occurrence)
+    # Deduplicate by version + timestamp + model
     seen = set()
     unique_runs = []
     for r in runs:
@@ -1132,16 +1137,63 @@ def render(input_dir: str | None, input_file: str | None, output_path: str, titl
             unique_runs.append(r)
     runs = sorted(unique_runs, key=_run_sort_key)
 
-    click.echo(f"Rendering {len(runs)} unique run(s)...", err=True)
+    click.echo(f"Aggregating {len(runs)} unique run(s)...", err=True)
 
     data = aggregate_runs(runs)
-    html = render_html(data, title=title)
+    render_json(data, json_output)
+    click.echo(f"JSON data written to: {json_output}", err=True)
 
-    write_text_file(output_path, html)
-    click.echo(f"Report written to: {output_path}", err=True)
+    if no_build:
+        click.echo("Skipping Astro build (--no-build).", err=True)
+        return
+
+    if dev:
+        click.echo("Starting Astro dev server...", err=True)
+        subprocess.run(
+            ["npx", "astro", "dev"],
+            cwd=str(web_dir),
+        )
+        return
+
+    # Build Astro site
+    if not web_dir.exists():
+        raise click.ClickException(
+            f"Web directory not found: {web_dir}. "
+            f"Run 'npm install' in gitbench/web/ first."
+        )
+
+    click.echo("Building Astro site...", err=True)
+    result = subprocess.run(
+        ["npm", "run", "build"],
+        cwd=str(web_dir),
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        click.echo(result.stderr, err=True)
+        raise click.ClickException("Astro build failed. See output above.")
+
+    click.echo(result.stdout, err=True)
+
+    dist_index = web_dir / "dist" / "index.html"
+    click.echo(f"Report built to: {web_dir / 'dist'}/", err=True)
 
     if open_browser:
-        webbrowser.open(f"file://{Path(output_path).resolve()}")
+        # Use Astro's preview server to avoid CORS/pathing issues with file://
+        import threading
+        import time
+
+        def _launch_preview():
+            # Give the server a moment to start, then open browser
+            time.sleep(1.5)
+            webbrowser.open("http://localhost:4321")
+
+        threading.Thread(target=_launch_preview, daemon=True).start()
+        subprocess.run(
+            ["npx", "astro", "preview"],
+            cwd=str(web_dir),
+        )
 
 
 if __name__ == "__main__":

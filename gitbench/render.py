@@ -65,6 +65,62 @@ def load_runs_from_jsonl(path: str) -> list[dict]:
     return runs
 
 
+def load_runs_from_combined(path: str) -> list[dict]:
+    """Load run envelopes from a combined results JSON file.
+
+    The combined format (produced by default from ``gitbench run -a``)
+    nests results under profiles → models.  This function extracts each
+    model's results into individual run envelope dicts.
+
+    Args:
+        path: Path to the combined results JSON file.
+
+    Returns:
+        List of run envelope dicts, sorted by suite version then timestamp.
+    """
+    file_path = Path(path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    data = json.loads(file_path.read_text())
+    runs: list[dict] = []
+    suite_version = data.get("benchmark_suite_version", "")
+    # Try to get timestamp from the file's parent directory name (ISO format)
+    timestamp = ""
+    parent_name = file_path.parent.name
+    if parent_name and parent_name[0].isdigit():
+        # Directory name like 20260511T220621Z → convert to ISO
+        try:
+            from datetime import datetime
+            dt = datetime.strptime(parent_name, "%Y%m%dT%H%M%SZ")
+            timestamp = dt.isoformat() + "Z"
+        except ValueError:
+            pass
+
+    for profile_entry in data.get("profiles", []):
+        profile_name = profile_entry.get("profile", "")
+        for model_entry in profile_entry.get("models", []):
+            model_name = model_entry.get("model", "")
+            model_results = model_entry.get("results", [])
+            runs.append({
+                "version": "0.1.0",
+                "model": model_name,
+                "profile": profile_name,
+                "benchmark_suite_version": suite_version,
+                "timestamp": timestamp,
+                "results": model_results,
+            })
+
+    runs.sort(key=_run_sort_key)
+    return runs
+
+
+def _default_output_timestamp() -> str:
+    """Return the timestamp fragment used for default run output paths."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
 def _version_sort_key(version: str) -> tuple[int, ...]:
     """Return a numeric-ish sort key for dotted version strings."""
     parts = []
@@ -143,7 +199,14 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
                     "passed": score.get("passed", False),
                     "similarity": score.get("similarity", 0),
                     "error": score.get("error"),
-                    "model_output": score.get("model_output", "")[:200],
+                    "model_output": score.get("model_output", ""),
+                    "reasoning_level": score.get("reasoning_level"),
+                    "input_tokens": score.get("input_tokens"),
+                    "output_tokens": score.get("output_tokens"),
+                    "total_tokens": score.get("total_tokens"),
+                    "purpose": score.get("purpose"),
+                    "difficulty": score.get("difficulty"),
+                    "tags": score.get("tags"),
                 })
 
     # Build summaries and matrix
@@ -184,6 +247,16 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
             sf["total_passed"] / sf["total_fixtures"], 4
         ) if sf["total_fixtures"] > 0 else 0.0
 
+    # Build model list with parsed base model + reasoning level
+    model_list = []
+    for m in sorted(models_set):
+        base, rl = parse_model_name(m)
+        model_list.append({
+            "name": m,
+            "baseModel": base,
+            "reasoningLevel": rl,
+        })
+
     runs_meta = []
     for run in runs:
         model_name = run.get("model", "")
@@ -197,14 +270,53 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
             "reasoning_level": rl or "",
         })
 
+    # Build fixture index: "benchmark/fixture_id" → metadata
+    # Fixture IDs are only unique within their benchmark
+    fixture_index: dict[str, dict] = {}
+    for run in runs:
+        for result in run.get("results", []):
+            bench = result.get("benchmark", "")
+            for score in result.get("scores", []):
+                fid = score.get("fixture_id", "")
+                key = f"{bench}/{fid}"
+                if fid and key not in fixture_index:
+                    fixture_index[key] = {
+                        "id": fid,
+                        "benchmark": bench,
+                        "prompt": score.get("prompt") or "",
+                        "expected": score.get("expected") or "",
+                        "description": score.get("description") or "",
+                        "purpose": score.get("purpose") or "",
+                        "difficulty": score.get("difficulty") or "",
+                        "tags": score.get("tags") or [],
+                    }
+
+    # Fall back: load any missing fixture metadata from YAML files
+    _supplement_fixture_index_from_yaml(fixture_index)
+
     return {
-        "models": sorted(models_set),
+        "models": model_list,
         "benchmarks": sorted(benchmarks_set),
         "model_summaries": model_summaries,
         "matrix": matrix,
         "fixtures": fixtures,
+        "fixture_index": fixture_index,
         "runs_meta": runs_meta,
     }
+
+
+def render_json(data: dict[str, Any], output_path: str) -> None:
+    """Write aggregated data as JSON for the Astro UI.
+
+    Args:
+        data: Aggregated data from aggregate_runs().
+        output_path: Path to write the JSON file to.
+    """
+    import json as _json
+
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json.dumps(data, indent=2, default=str))
 
 
 def render_html(data: dict[str, Any], title: str = "GitBench Report") -> str:
@@ -217,7 +329,12 @@ def render_html(data: dict[str, Any], title: str = "GitBench Report") -> str:
     Returns:
         Complete HTML string.
     """
-    models = data["models"]
+    # Extract model names (handle both legacy list-of-strings and new list-of-dicts)
+    raw_models = data["models"]
+    if raw_models and isinstance(raw_models[0], dict):
+        models = [m["name"] for m in raw_models]
+    else:
+        models = raw_models
     benchmarks = data["benchmarks"]
     matrix = data["matrix"]
     model_summaries = data["model_summaries"]
@@ -1024,3 +1141,40 @@ def render_html_from_envelope(envelope: dict, title: str = "GitBench Report") ->
     except Exception as exc:
         logger.error("HTML generation failed: %s", exc)
         return ""
+
+
+def _supplement_fixture_index_from_yaml(fixture_index: dict[str, dict]) -> None:
+    """Fill in missing fixture metadata by loading YAML fixture files.
+
+    Only touches fixtures whose ``prompt`` field is empty in the index.
+    """
+    fixtures_dir = Path(__file__).parent.parent / "fixtures"
+    if not fixtures_dir.exists():
+        return
+
+    for key, entry in fixture_index.items():
+        if entry.get("prompt"):
+            continue  # already has data from scores
+
+        fid = entry.get("id", "")
+        bench = entry.get("benchmark", "")
+        if not fid or not bench:
+            continue
+
+        # Try to find the fixture YAML file
+        yaml_path = fixtures_dir / bench / f"{fid}.yaml"
+        if not yaml_path.exists():
+            continue
+
+        try:
+            import yaml
+            data = yaml.safe_load(yaml_path.read_text())
+            if isinstance(data, dict):
+                entry["prompt"] = data.get("prompt", "")
+                entry["expected"] = data.get("expected", "")
+                entry["description"] = data.get("description", "")
+                entry["purpose"] = entry["purpose"] or data.get("purpose", "")
+                entry["difficulty"] = entry["difficulty"] or data.get("difficulty", "")
+                entry["tags"] = entry["tags"] or data.get("tags", [])
+        except Exception as exc:
+            logger.debug("Failed to load YAML for fixture %s: %s", fid, exc)

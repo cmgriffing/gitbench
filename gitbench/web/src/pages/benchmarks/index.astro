@@ -1,0 +1,43 @@
+---
+import Layout from '../../components/Layout.astro';
+import { loadDataSync } from '../../lib/data';
+
+const data = loadDataSync();
+---
+
+<Layout title="Benchmarks">
+  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+    {data.benchmarks.map(bench => {
+      // Collect best pass rate across models
+      let bestRate = 0;
+      for (const m of data.models) {
+        const cell = data.matrix[m.name]?.[bench];
+        if (cell && cell.pass_at_k > bestRate) bestRate = cell.pass_at_k;
+      }
+      const bestPct = Math.round(bestRate * 1000) / 10;
+
+      // Count fixtures
+      const fixtures = Object.values(data.fixture_index).filter(fi => fi.benchmark === bench);
+      const avgDifficulty = fixtures.reduce((sum, fi) => {
+        const levels = ['trivial', 'easy', 'medium', 'hard', 'expert'];
+        return sum + levels.indexOf(fi.difficulty);
+      }, 0) / fixtures.length || 0;
+
+      return (
+        <a href={`/benchmarks/${bench}`} style="text-decoration: none;">
+          <div class="card" style="padding: 1.5rem; cursor: pointer; transition: border-color 0.15s;">
+            <div style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 0.4rem;">
+              {bench}
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+              <span class="result-pill pass" style="font-size: 0.68rem;">Best: {bestPct}%</span>
+              <span style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim);">
+                {fixtures.length} fixtures
+              </span>
+            </div>
+          </div>
+        </a>
+      );
+    })}
+  </div>
+</Layout>

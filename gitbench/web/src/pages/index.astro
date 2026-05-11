@@ -1,0 +1,18 @@
+---
+import Layout from '../components/Layout.astro';
+import PassRateBarChart from '../components/charts/PassRateBarChart';
+import ModelSelector from '../components/charts/ModelSelector';
+import BenchmarkHeatmap from '../components/charts/BenchmarkHeatmap';
+---
+
+<Layout title="Dashboard">
+  <section>
+    <div class="section-label"><span>Model Summary</span></div>
+    <PassRateBarChart client:load />
+  </section>
+
+  <section style="margin-top: 2.5rem;">
+    <div class="section-label"><span>Benchmark Matrix</span></div>
+    <BenchmarkHeatmap client:load />
+  </section>
+</Layout>

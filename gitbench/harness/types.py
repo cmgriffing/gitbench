@@ -63,6 +63,9 @@ class Score:
     purpose: str | None = None
     difficulty: str | None = None
     tags: list[str] | None = None
+    prompt: str | None = None
+    expected: str | None = None
+    description: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -71,6 +74,7 @@ class Score:
             "reasoning_level", "input_tokens", "output_tokens",
             "total_tokens", "cost_usd", "provider_cost_usd",
             "purpose", "difficulty", "tags",
+            "prompt", "expected", "description",
         )
         for field in none_fields:
             if result.get(field) is None:
