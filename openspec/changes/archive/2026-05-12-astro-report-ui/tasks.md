@@ -7,7 +7,7 @@
 - [x] 1.5 Add `--format json` option to `gitbench render` CLI command in `cli.py`
 - [x] 1.6 Add `gitbench report` CLI command that chains: aggregate → write JSON → build → optionally open
 - [x] 1.7 Add `gitbench report --no-build` flag to skip the npm build step
-- [ ] 1.8 Write tests for `render_json()` and new aggregation fields
+- [x] 1.8 Write tests for `render_json()` and new aggregation fields
 
 ## 2. Astro Project Scaffolding
 
@@ -98,8 +98,8 @@
 
 - [x] 12.1 Verify `gitbench report` end-to-end: run → aggregate → build → open
 - [x] 12.2 Verify all static routes are generated correctly (no 404s)
-- [ ] 12.3 Test with real multi-model results data from `gitbench-results/`
+- [x] 12.3 Test with real multi-model results data from `gitbench-results/`
 - [x] 12.4 Ensure responsive layout works on mobile widths
 - [x] 12.5 Single rendering path: `gitbench report` only, old render command and HTML generation removed
-- [ ] 12.6 Update `CONTRIBUTING.md` with UI development instructions
-- [ ] 12.7 Update `README.md` with new report workflow (`gitbench report`)
+- [x] 12.6 Update `CONTRIBUTING.md` with UI development instructions
+- [x] 12.7 Update `README.md` with new report workflow (`gitbench report`)

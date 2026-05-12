@@ -235,6 +235,76 @@ class TestRenderJson:
         assert models[0]["baseModel"] == "o3-mini"
         assert models[0]["reasoningLevel"] == "high"
 
+    def test_model_without_reasoning_level_has_null(self, tmp_path):
+        """Test that a model without #suffix has reasoningLevel null."""
+        runs = [_make_envelope(model="claude-sonnet")]
+        data = aggregate_runs(runs)
+        output = tmp_path / "results.json"
+
+        render_json(data, str(output))
+
+        written = json.loads(output.read_text())
+        models = written["models"]
+        assert models[0]["name"] == "claude-sonnet"
+        assert models[0]["baseModel"] == "claude-sonnet"
+        assert models[0]["reasoningLevel"] is None
+
+    def test_model_outputs_not_truncated(self, tmp_path):
+        """Test that long model outputs are included in full, not truncated."""
+        long_output = "x" * 500
+        scores = [
+            {
+                "fixture_id": "f000",
+                "passed": True,
+                "similarity": 0.9,
+                "model_output": long_output,
+                "error": None,
+            }
+        ]
+        env = {
+            "version": 1,
+            "benchmark_suite_version": BENCHMARK_SUITE_VERSION,
+            "timestamp": "2026-04-25T13:00:00+00:00",
+            "git_sha": "abc123",
+            "model": "gpt-4o",
+            "profile": "(inline)",
+            "summary": {"total_benchmarks": 1, "total_fixtures": 1, "total_passed": 1, "overall_pass_at_k": 1.0},
+            "results": [
+                {
+                    "benchmark": "commit_messages",
+                    "total": 1,
+                    "passed": 1,
+                    "pass_at_k": 1.0,
+                    "scores": scores,
+                    "errors": 0,
+                }
+            ],
+        }
+        data = aggregate_runs([env])
+        output = tmp_path / "results.json"
+
+        render_json(data, str(output))
+
+        written = json.loads(output.read_text())
+        fixture = written["fixtures"]["gpt-4o"]["commit_messages"][0]
+        assert fixture["model_output"] == long_output
+        assert len(fixture["model_output"]) == 500
+
+    def test_multiple_runs_same_model_kept_separate(self, tmp_path):
+        """Test that multiple runs of the same model produce distinct runs_meta entries."""
+        runs = [
+            _make_envelope(model="gpt-4o", timestamp="2026-04-25T13:00:00+00:00"),
+            _make_envelope(model="gpt-4o", timestamp="2026-04-25T15:00:00+00:00"),
+        ]
+        data = aggregate_runs(runs)
+        output = tmp_path / "results.json"
+
+        render_json(data, str(output))
+
+        written = json.loads(output.read_text())
+        assert len(written["runs_meta"]) == 2
+        assert written["runs_meta"][0]["timestamp"] != written["runs_meta"][1]["timestamp"]
+
 
 class TestAggregateRunsFixtureIndex:
     """Tests for fixture_index in aggregate_runs."""
