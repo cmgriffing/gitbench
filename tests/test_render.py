@@ -3,10 +3,9 @@
 import json
 
 import pytest
-from click.testing import CliRunner
 
-from gitbench.cli import cli
-from gitbench.render import aggregate_runs, load_runs_from_dir, load_runs_from_jsonl, render_html
+from gitbench.render import aggregate_runs, load_runs_from_dir, load_runs_from_jsonl, render_json
+
 from gitbench.version import BENCHMARK_SUITE_VERSION
 
 

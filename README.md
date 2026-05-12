@@ -63,17 +63,16 @@ gitbench run --all --model mock --verbose
 gitbench run --all --model mock
 ```
 
-Each successful run writes both artifacts by default:
+Each successful run writes results to:
 
 | Artifact | Default path |
 | -------- | ------------ |
 | JSON results | `gitbench-results/<timestamp>/results-v<benchmark_suite_version>.json` |
-| HTML report | `gitbench-results/<timestamp>/report-v<benchmark_suite_version>.html` |
 
-Override either path on the CLI:
+Override the path on the CLI:
 
 ```bash
-gitbench run --all --model mock --json-output results.json --html-output report.html
+gitbench run --all --model mock --json-output results.json
 ```
 
 You can also set defaults in `gitbench.json` or `.gitbench.json`:
