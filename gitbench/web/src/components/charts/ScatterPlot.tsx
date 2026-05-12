@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, ZAxis } from 'recharts';
-import type { GitBenchData } from '../../lib/types';
-import { loadData } from '../../lib/load-data';
+import type { GitBenchData } from '@/lib/types';
+import { loadData } from '@/lib/load-data';
+import { Badge } from '@/components/ui/badge';
 
 interface Props {
   modelA?: string;
@@ -29,7 +30,6 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
 
   if (!data || !a || !b) return <div>Loading...</div>;
 
-  // Collect per-fixture similarities for both models
   const aFixtures = data.fixtures[a] || {};
   const bFixtures = data.fixtures[b] || {};
 
@@ -52,7 +52,6 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
     }
   }
 
-  // Agreement matrix
   let bothPass = 0, bothFail = 0, aOnly = 0, bOnly = 0;
   for (const d of scatterData) {
     if (d.aPassed && d.bPassed) bothPass++;
@@ -65,46 +64,30 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+      <div className="flex gap-4 mb-4 flex-wrap items-center">
+        <label className="font-mono text-xs text-[var(--color-text-dim)]">
           X:{' '}
           <select
             value={a}
             onChange={e => setA(e.target.value)}
-            style={{
-              background: 'var(--card)',
-              color: 'var(--text)',
-              border: '1px solid var(--border)',
-              borderRadius: '4px',
-              padding: '0.25rem 0.5rem',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.72rem',
-            }}
+            className="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-2 py-1 font-mono text-xs"
           >
             {modelNames.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
-        <label style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+        <label className="font-mono text-xs text-[var(--color-text-dim)]">
           Y:{' '}
           <select
             value={b}
             onChange={e => setB(e.target.value)}
-            style={{
-              background: 'var(--card)',
-              color: 'var(--text)',
-              border: '1px solid var(--border)',
-              borderRadius: '4px',
-              padding: '0.25rem 0.5rem',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.72rem',
-            }}
+            className="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded px-2 py-1 font-mono text-xs"
           >
             {modelNames.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
       </div>
 
-      <div className="card" style={{ marginBottom: '1rem' }}>
+      <div className="card mb-4">
         <ResponsiveContainer width="100%" height={340}>
           <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
             <CartesianGrid stroke="rgba(255,255,255,0.04)" />
@@ -155,7 +138,7 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
                       r={4}
                       fill={dotColor(payload.aPassed, payload.bPassed)}
                       opacity={0.7}
-                      style={{ cursor: 'pointer' }}
+                      className="cursor-pointer"
                     />
                   </a>
                 );
@@ -166,9 +149,9 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
         </ResponsiveContainer>
       </div>
 
-      <div className="card" style={{ marginBottom: '1rem' }}>
+      <div className="card mb-4">
         <div className="section-label"><span>Agreement Matrix</span></div>
-        <table className="data-table" style={{ maxWidth: '400px' }}>
+        <table className="data-table max-w-[400px]">
           <thead>
             <tr>
               <th></th>
@@ -178,14 +161,14 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
           </thead>
           <tbody>
             <tr>
-              <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-mid)' }}>{a} pass</td>
-              <td style={{ color: 'var(--pass)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600 }}>{bothPass}</td>
-              <td style={{ color: 'var(--warn)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600 }}>{aOnly}</td>
+              <td className="font-mono text-xs text-[var(--color-text-mid)]">{a} pass</td>
+              <td className="text-[var(--color-pass)] font-mono text-sm font-semibold">{bothPass}</td>
+              <td className="text-[var(--color-warn)] font-mono text-sm font-semibold">{aOnly}</td>
             </tr>
             <tr>
-              <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-mid)' }}>{a} fail</td>
-              <td style={{ color: 'var(--warn)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600 }}>{bOnly}</td>
-              <td style={{ color: 'var(--fail)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600 }}>{bothFail}</td>
+              <td className="font-mono text-xs text-[var(--color-text-mid)]">{a} fail</td>
+              <td className="text-[var(--color-warn)] font-mono text-sm font-semibold">{bOnly}</td>
+              <td className="text-[var(--color-fail)] font-mono text-sm font-semibold">{bothFail}</td>
             </tr>
           </tbody>
         </table>
@@ -208,22 +191,23 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
                 const [bench, fid] = d.fixture.split('/');
                 return (
                   <tr key={d.fixture}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-mid)' }}>
-                      <a href={`/benchmarks/${bench}`} style={{ color: 'inherit' }}>{bench}</a>
+                    <td className="font-mono text-xs text-[var(--color-text-mid)]">
+                      <a href={`/benchmarks/${bench}`} className="text-inherit">{bench}</a>
                     </td>
                     <td>
-                      <a href={`/fixtures/${encodeURIComponent(bench)}/${fid}`} className="heat-pill" style={{
-                        background: 'rgba(255,255,255,0.04)',
-                        color: 'var(--text-mid)',
-                        border: '1px solid var(--border)',
-                        textDecoration: 'none',
-                      }}>{fid}</a>
+                      <a href={`/fixtures/${encodeURIComponent(bench)}/${fid}`} className="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-[var(--color-text-mid)] border border-[var(--color-border)] no-underline">
+                        {fid}
+                      </a>
                     </td>
                     <td>
-                      <span className="result-pill pass" style={{ opacity: d.aPassed ? 1 : 0.3 }}>{d.x}%</span>
+                      <Badge variant="outline" className={`font-mono text-[0.62rem] border-[var(--color-pass-border)] text-[var(--color-pass)] bg-[var(--color-pass-bg)]`} style={{ opacity: d.aPassed ? 1 : 0.3 }}>
+                        {d.x}%
+                      </Badge>
                     </td>
                     <td>
-                      <span className="result-pill pass" style={{ opacity: d.bPassed ? 1 : 0.3 }}>{d.y}%</span>
+                      <Badge variant="outline" className={`font-mono text-[0.62rem] border-[var(--color-pass-border)] text-[var(--color-pass)] bg-[var(--color-pass-bg)]`} style={{ opacity: d.bPassed ? 1 : 0.3 }}>
+                        {d.y}%
+                      </Badge>
                     </td>
                   </tr>
                 );

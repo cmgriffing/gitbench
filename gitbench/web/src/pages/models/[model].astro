@@ -3,6 +3,9 @@ import Layout from '../../components/Layout.astro';
 import FixtureCard from '../../components/fixtures/FixtureCard.astro';
 import { loadDataSync } from '../../lib/data';
 import type { GitBenchData, FixtureResult } from '../../lib/types';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { GitCompare } from 'lucide-react';
 
 export function getStaticPaths() {
   const data = loadDataSync();
@@ -50,41 +53,44 @@ for (const fid in data.fixture_index) {
 }
 
 const passCls = summary.pass_at_k >= 0.8 ? 'pass' : summary.pass_at_k < 0.5 ? 'fail' : 'warn';
+const passColor = summary.pass_at_k >= 0.8
+  ? 'bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]'
+  : summary.pass_at_k < 0.5
+    ? 'bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]'
+    : 'bg-[var(--color-warn-bg)] text-[var(--color-warn)] border-[var(--color-warn-border)]';
 ---
 
 <Layout title={modelName}>
-  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;">
+  <div class="flex justify-between items-start flex-wrap gap-4 mb-8">
     <div>
-      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
-        <span class="result-pill {passCls}" style="font-size: 0.72rem;">{passRate}%</span>
-        <span style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim);">
+      <div class="flex gap-2 items-center flex-wrap mb-2">
+        <Badge variant="outline" className={`font-mono text-xs ${passColor}`}>
+          {passRate}%
+        </Badge>
+        <span class="font-mono text-xs text-[var(--color-text-dim)]">
           {summary.total_passed} / {summary.total_fixtures} fixtures
         </span>
-        <span style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); opacity: 0.6;">
+        <span class="font-mono text-[0.68rem] text-[var(--color-text-dim)] opacity-60">
           {summary.total_runs} run(s)
         </span>
         {modelInfo.reasoningLevel && (
-          <span class="badge">{modelInfo.reasoningLevel}</span>
+          <Badge variant="secondary" class="font-mono text-[0.65rem]">{modelInfo.reasoningLevel}</Badge>
         )}
       </div>
     </div>
-    <a href={`/compare?with=${encodedModelName}`} class="heat-pill" style="
-      text-decoration: none;
-      background: var(--accent-glow);
-      color: var(--accent);
-      border: 1px solid var(--border-accent);
-      padding: 0.4rem 1rem;
-      font-size: 0.75rem;
-    ">
-      Compare →
+    <a href={`/compare?with=${encodedModelName}`}>
+      <Button variant="outline" size="sm" class="font-mono text-xs border-[var(--color-border-accent)] text-[var(--color-accent)]">
+        <GitCompare class="size-3.5" />
+        Compare
+      </Button>
     </a>
   </div>
 
   {
     hasOtherLevels && (
-      <div class="card" style="margin-bottom: 2rem;">
+      <div class="card mb-8">
         <div class="section-label"><span>Reasoning Levels</span></div>
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div class="flex gap-4 flex-wrap">
           {
             [modelInfo, ...sameBaseModels].map(m => {
               const ms = data.model_summaries[m.name];
@@ -93,13 +99,13 @@ const passCls = summary.pass_at_k >= 0.8 ? 'pass' : summary.pass_at_k < 0.5 ? 'f
               return (
                 <a
                   href={`/models/${encodeURIComponent(m.name)}`}
-                  style="text-decoration: none;"
+                  class="no-underline"
                 >
-                  <div class="card" style={`padding: 1rem 1.25rem; cursor: pointer; ${isCurrent ? 'border-color: var(--border-accent);' : ''}`}>
-                    <div style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.3rem;">
+                  <div class={`card p-4 cursor-pointer ${isCurrent ? 'border-[var(--color-border-accent)]' : ''}`}>
+                    <div class="font-mono text-[0.68rem] text-[var(--color-text-dim)] mb-1">
                       {m.reasoningLevel || 'default'}
                     </div>
-                    <div style={`font-size: 1.5rem; font-weight: 700; color: ${isCurrent ? 'var(--accent)' : 'var(--text)'};`}>
+                    <div class={`text-2xl font-bold ${isCurrent ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'}`}>
                       {rp}%
                     </div>
                   </div>
@@ -116,36 +122,25 @@ const passCls = summary.pass_at_k >= 0.8 ? 'pass' : summary.pass_at_k < 0.5 ? 'f
     <div class="section-label"><span>Fixture Gallery ({allFixtures.length})</span></div>
 
     <!-- Filter controls -->
-    <div id="filter-bar" style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center;">
-      <select id="filter-bench" style="
-        background: var(--card); color: var(--text); border: 1px solid var(--border);
-        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.68rem;
-      ">
+    <div id="filter-bar" class="flex gap-1.5 flex-wrap mb-4 items-center">
+      <select id="filter-bench" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
         <option value="">All benchmarks</option>
         {benchmarkList.map(b => <option value={b}>{b}</option>)}
       </select>
-      <select id="filter-diff" style="
-        background: var(--card); color: var(--text); border: 1px solid var(--border);
-        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.68rem;
-      ">
+      <select id="filter-diff" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
         <option value="">All difficulties</option>
         {Array.from(diffs).sort().map(d => <option value={d}>{d}</option>)}
       </select>
-      <select id="filter-tag" style="
-        background: var(--card); color: var(--text); border: 1px solid var(--border);
-        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--font-mono); font-size: 0.68rem;
-      ">
+      <select id="filter-tag" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
         <option value="">All tags</option>
         {Array.from(allTags).sort().map(t => <option value={t}>{t}</option>)}
       </select>
-      <button onclick="resetFilters()" style="
-        background: none; border: 1px solid var(--border); color: var(--text-dim);
-        border-radius: 6px; padding: 0.3rem 0.6rem; font-family: var(--font-mono);
-        font-size: 0.65rem; cursor: pointer;
-      ">Reset</button>
+      <button onclick="resetFilters()" class="bg-transparent border border-[var(--color-border)] text-[var(--color-text-dim)] rounded-md px-2.5 py-1.5 font-mono text-[0.65rem] cursor-pointer">
+        Reset
+      </button>
     </div>
 
-    <div class="fixture-gallery" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.8rem;" id="fixture-gallery">
+    <div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3" id="fixture-gallery">
       {allFixtures.map(fx => {
         const fi = data.fixture_index[fx.fixture_id];
         const simPct = Math.round(fx.similarity * 1000) / 10;

@@ -3,6 +3,7 @@ import Layout from '../../components/Layout.astro';
 import PassRateBarChart from '../../components/charts/PassRateBarChart';
 import { loadDataSync } from '../../lib/data';
 import type { GitBenchData } from '../../lib/types';
+import { Badge } from '@/components/ui/badge';
 
 export function getStaticPaths() {
   const data = loadDataSync();
@@ -30,27 +31,27 @@ for (const fid of fixtureIds) {
 ---
 
 <Layout title={benchName}>
-  <div class="card" style="margin-bottom: 2rem;">
-    <div style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim); margin-bottom: 0.3rem;">Benchmark</div>
-    <div style="font-size: 1.1rem; font-weight: 600;">{benchName}</div>
-    <div style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-dim); margin-top: 0.5rem;">
+  <div class="card mb-8">
+    <div class="font-mono text-[0.68rem] text-[var(--color-text-dim)] mb-1">Benchmark</div>
+    <div class="text-lg font-semibold">{benchName}</div>
+    <div class="font-mono text-[0.7rem] text-[var(--color-text-dim)] mt-2">
       {fixtureIds.length} fixtures
     </div>
   </div>
 
-  <section style="margin-bottom: 2.5rem;">
+  <section class="mb-10">
     <div class="section-label"><span>Model Leaderboard</span></div>
     <PassRateBarChart client:load />
   </section>
 
   {
     Object.keys(tagCounts).length > 0 && (
-      <section style="margin-bottom: 2.5rem;">
+      <section class="mb-10">
         <div class="section-label"><span>Tags</span></div>
-        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+        <div class="flex gap-1.5 flex-wrap">
           {Object.entries(tagCounts).sort(([,a], [,b]) => b - a).map(([tag, count]) => (
-            <a href={`/explore?tag=${encodeURIComponent(tag)}`} style="text-decoration: none;">
-              <span class="tag-pill">{tag} ({count})</span>
+            <a href={`/explore?tag=${encodeURIComponent(tag)}`} class="no-underline">
+              <Badge variant="secondary" class="font-mono text-[0.65rem] cursor-pointer">{tag} ({count})</Badge>
             </a>
           ))}
         </div>
@@ -60,7 +61,7 @@ for (const fid of fixtureIds) {
 
   <section>
     <div class="section-label"><span>Per-Fixture Comparison</span></div>
-    <div class="card" style="overflow-x: auto; padding: 1.25rem;">
+    <div class="card overflow-x-auto p-5">
       <table class="data-table">
         <thead>
           <tr>
@@ -75,25 +76,27 @@ for (const fid of fixtureIds) {
             return (
               <tr>
                 <td>
-                  <a href={`/fixtures/${encodeURIComponent(benchName)}/${fid}`} class="heat-pill" style="
-                    background: rgba(255,255,255,0.04); color: var(--text-mid);
-                    border: 1px solid var(--border); text-decoration: none;
-                  ">{fid}</a>
+                  <a href={`/fixtures/${encodeURIComponent(benchName)}/${fid}`} class="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-[var(--color-text-mid)] border border-[var(--color-border)] no-underline">
+                    {fid}
+                  </a>
                 </td>
-                <td style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim);">
+                <td class="font-mono text-[0.68rem] text-[var(--color-text-dim)]">
                   {fi?.difficulty || '—'}
                 </td>
                 {data.models.map(m => {
                   const results = data.fixtures[m.name]?.[benchName] || [];
                   const fr = results.find(r => r.fixture_id === fid);
                   if (!fr) {
-                    return <td style="color: var(--text-dim); opacity: 0.4; font-family: var(--font-mono); font-size: 0.72rem;">—</td>;
+                    return <td class="text-[var(--color-text-dim)] opacity-40 font-mono text-xs">—</td>;
                   }
                   const sim = Math.round(fr.similarity * 1000) / 10;
-                  const cls = fr.passed ? 'pass' : 'fail';
+                  const isPass = fr.passed;
+                  const color = isPass
+                    ? 'bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]'
+                    : 'bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]';
                   return (
                     <td>
-                      <span class="result-pill {cls}">{sim}%</span>
+                      <Badge variant="outline" className={`font-mono text-[0.62rem] ${color}`}>{sim}%</Badge>
                     </td>
                   );
                 })}

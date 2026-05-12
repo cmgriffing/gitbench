@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell, Legend } from 'recharts';
-import type { GitBenchData } from '../lib/types';
-import { loadData } from '../lib/load-data';
+import type { GitBenchData } from '@/lib/types';
+import { loadData } from '@/lib/load-data';
 import ModelSelector from './charts/ModelSelector';
 import ScatterPlot from './charts/ScatterPlot';
+import { Badge } from '@/components/ui/badge';
 
 const COLORS = ['#06b6d4', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899', '#0ea5e9', '#84cc16'];
 
 function getColor(passRate: number): string {
-  if (passRate >= 0.8) return 'var(--pass)';
-  if (passRate >= 0.5) return 'var(--warn)';
-  return 'var(--fail)';
+  if (passRate >= 0.8) return 'var(--color-pass)';
+  if (passRate >= 0.5) return 'var(--color-warn)';
+  return 'var(--color-fail)';
 }
 
 export default function ComparePage() {
@@ -20,7 +21,6 @@ export default function ComparePage() {
   useEffect(() => {
     loadData().then(d => {
       setData(d);
-      // Check for ?with= query param
       const params = new URLSearchParams(window.location.search);
       const withModel = params.get('with');
       const initial = withModel ? [withModel] : d.models.slice(0, 3).map(m => m.name);
@@ -30,7 +30,6 @@ export default function ComparePage() {
 
   if (!data) return <div>Loading...</div>;
 
-  // Overall bar chart data
   const overallData = selectedModels
     .map(name => {
       const summary = data.model_summaries[name];
@@ -44,7 +43,6 @@ export default function ComparePage() {
     .filter((d): d is NonNullable<typeof d> => d !== null)
     .sort((a, b) => b.passRate - a.passRate);
 
-  // By-benchmark grouped bar data
   const byBenchData = data.benchmarks.map(bench => {
     const row: Record<string, string | number> = { benchmark: bench };
     for (const model of selectedModels) {
@@ -56,14 +54,14 @@ export default function ComparePage() {
 
   return (
     <div>
-      <div style={{ marginBottom: '1.5rem' }}>
+      <div className="mb-6">
         <ModelSelector
           initialSelected={selectedModels}
           onChange={setSelectedModels}
         />
       </div>
 
-      <section style={{ marginBottom: '2.5rem' }}>
+      <section className="mb-10">
         <div className="section-label"><span>Overall Pass Rates</span></div>
         <div className="card">
           <ResponsiveContainer width="100%" height={Math.max(180, selectedModels.length * 36)}>
@@ -99,7 +97,7 @@ export default function ComparePage() {
         </div>
       </section>
 
-      <section style={{ marginBottom: '2.5rem' }}>
+      <section className="mb-10">
         <div className="section-label"><span>By Benchmark</span></div>
         <div className="card">
           <ResponsiveContainer width="100%" height={Math.max(200, data.benchmarks.length * 22)}>
@@ -136,7 +134,7 @@ export default function ComparePage() {
         </div>
       </section>
 
-      <section style={{ marginBottom: '2.5rem' }}>
+      <section className="mb-10">
         <div className="section-label"><span>Head-to-Head</span></div>
         <ScatterPlot
           modelA={selectedModels[0]}

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import type { GitBenchData } from '../../lib/types';
-import { loadData } from '../../lib/load-data';
+import type { GitBenchData } from '@/lib/types';
+import { loadData } from '@/lib/load-data';
 import ModelSelector from './ModelSelector';
+import { Badge } from '@/components/ui/badge';
 
 function heatBg(ratio: number): string {
   if (ratio >= 0.9) return 'rgba(16,185,129,0.28)';
@@ -12,9 +13,9 @@ function heatBg(ratio: number): string {
 }
 
 function heatColor(ratio: number): string {
-  if (ratio >= 0.8) return 'var(--pass)';
-  if (ratio >= 0.5) return 'var(--warn)';
-  return 'var(--fail)';
+  if (ratio >= 0.8) return 'var(--color-pass)';
+  if (ratio >= 0.5) return 'var(--color-warn)';
+  return 'var(--color-fail)';
 }
 
 export default function BenchmarkHeatmap() {
@@ -36,7 +37,7 @@ export default function BenchmarkHeatmap() {
         initialSelected={selectedModels}
         onChange={setSelectedModels}
       />
-      <div className="card" style={{ overflowX: 'auto', padding: '1.25rem' }}>
+      <div className="card overflow-x-auto p-5">
         <table className="data-table">
           <thead>
             <tr>
@@ -45,7 +46,7 @@ export default function BenchmarkHeatmap() {
                 <th key={m}>
                   <a
                     href={`/models/${encodeURIComponent(m)}`}
-                    style={{ color: 'inherit', textDecoration: 'none' }}
+                    className="text-inherit no-underline"
                   >
                     {m}
                   </a>
@@ -56,10 +57,10 @@ export default function BenchmarkHeatmap() {
           <tbody>
             {data.benchmarks.map(bench => (
               <tr key={bench}>
-                <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-mid)' }}>
+                <td className="font-mono text-xs text-[var(--color-text-mid)]">
                   <a
                     href={`/benchmarks/${bench}`}
-                    style={{ color: 'inherit', textDecoration: 'none' }}
+                    className="text-inherit no-underline"
                   >
                     {bench}
                   </a>
@@ -69,7 +70,7 @@ export default function BenchmarkHeatmap() {
                   if (!cell) {
                     return (
                       <td key={m}>
-                        <span style={{ color: 'var(--text-dim)', opacity: 0.4, fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>—</span>
+                        <span className="text-[var(--color-text-dim)] opacity-40 font-mono text-xs">—</span>
                       </td>
                     );
                   }
@@ -77,24 +78,20 @@ export default function BenchmarkHeatmap() {
                     <td key={m}>
                       <a
                         href={`/benchmarks/${bench}`}
-                        style={{ textDecoration: 'none' }}
+                        className="no-underline"
                       >
-                        <span
-                          className="heat-pill"
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-xs"
                           style={{
                             background: heatBg(cell.pass_at_k),
                             color: heatColor(cell.pass_at_k),
-                            border: `1px solid ${heatColor(cell.pass_at_k)}33`,
+                            borderColor: `${heatColor(cell.pass_at_k)}33`,
                           }}
                         >
                           {Math.round(cell.pass_at_k * 1000) / 10}%
-                        </span>
-                        <span style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '0.65rem',
-                          color: 'var(--text-dim)',
-                          marginLeft: '0.3rem',
-                        }}>
+                        </Badge>
+                        <span className="font-mono text-[0.65rem] text-[var(--color-text-dim)] ml-1">
                           {cell.passed}/{cell.total}
                         </span>
                       </a>

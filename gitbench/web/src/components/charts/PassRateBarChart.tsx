@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell } from 'recharts';
-import type { GitBenchData } from '../../lib/types';
-import { loadData } from '../../lib/load-data';
+import type { GitBenchData } from '@/lib/types';
+import { loadData } from '@/lib/load-data';
 import ModelSelector from './ModelSelector';
+import { Badge } from '@/components/ui/badge';
 
 function getColor(passRate: number): string {
   if (passRate >= 0.8) return 'var(--pass)';

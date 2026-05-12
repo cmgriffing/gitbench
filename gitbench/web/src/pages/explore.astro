@@ -2,6 +2,7 @@
 import Layout from '../components/Layout.astro';
 import { loadDataSync } from '../lib/data';
 import type { GitBenchData } from '../lib/types';
+import { Badge } from '@/components/ui/badge';
 
 const data = loadDataSync();
 
@@ -18,20 +19,21 @@ for (const fid in data.fixture_index) {
 
 const sortedTags = Object.entries(tagCounts).sort(([,a], [,b]) => b - a);
 const diffsSorted = Array.from(allDiffs).sort();
+const maxCount = Math.max(...sortedTags.map(t => t[1]));
 
 // Build fixture list for client-side filtering
 const allFixtures = Object.values(data.fixture_index);
 ---
 
 <Layout title="Explore">
-  <div style="margin-bottom: 2rem;">
+  <div class="mb-8">
     <div class="section-label"><span>Tag Cloud</span></div>
-    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;" id="tag-cloud">
+    <div class="flex gap-1.5 flex-wrap" id="tag-cloud">
       {sortedTags.map(([tag, count]) => {
-        const fontSize = Math.max(0.65, Math.min(1.2, 0.65 + (count / Math.max(...sortedTags.map(t => t[1]))) * 0.55));
+        const fontSize = Math.max(0.65, Math.min(1.2, 0.65 + (count / maxCount) * 0.55));
         return (
           <span
-            class="tag-pill tag-cloud-item"
+            class="tag-pill tag-cloud-item cursor-pointer"
             data-tag={tag}
             style={`font-size: ${fontSize.toFixed(2)}rem;`}
           >
@@ -42,54 +44,56 @@ const allFixtures = Object.values(data.fixture_index);
     </div>
   </div>
 
-  <div style="margin-bottom: 2rem;">
+  <div class="mb-8">
     <div class="section-label"><span>Filters</span></div>
-    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;" id="filter-controls">
-      <select id="explore-tag" style="
-        background: var(--card); color: var(--text); border: 1px solid var(--border);
-        border-radius: 6px; padding: 0.35rem 0.6rem; font-family: var(--font-mono); font-size: 0.7rem;
-      ">
+    <div class="flex gap-2 flex-wrap items-center" id="filter-controls">
+      <select id="explore-tag" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.7rem]">
         <option value="">Any tag</option>
         {sortedTags.map(([tag]) => <option value={tag}>{tag}</option>)}
       </select>
-      <select id="explore-diff" style="
-        background: var(--card); color: var(--text); border: 1px solid var(--border);
-        border-radius: 6px; padding: 0.35rem 0.6rem; font-family: var(--font-mono); font-size: 0.7rem;
-      ">
+      <select id="explore-diff" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.7rem]">
         <option value="">Any difficulty</option>
         {diffsSorted.map(d => <option value={d}>{d}</option>)}
       </select>
-      <select id="explore-bench" style="
-        background: var(--card); color: var(--text); border: 1px solid var(--border);
-        border-radius: 6px; padding: 0.35rem 0.6rem; font-family: var(--font-mono); font-size: 0.7rem;
-      ">
+      <select id="explore-bench" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.7rem]">
         <option value="">Any benchmark</option>
         {data.benchmarks.map(b => <option value={b}>{b}</option>)}
       </select>
-      <button onclick="resetExploreFilters()" style="
-        background: none; border: 1px solid var(--border); color: var(--text-dim);
-        border-radius: 6px; padding: 0.35rem 0.6rem; font-family: var(--font-mono);
-        font-size: 0.65rem; cursor: pointer;
-      ">Reset</button>
+      <button onclick="resetExploreFilters()" class="bg-transparent border border-[var(--color-border)] text-[var(--color-text-dim)] rounded-md px-2.5 py-1.5 font-mono text-[0.65rem] cursor-pointer">
+        Reset
+      </button>
     </div>
   </div>
 
   <section>
-    <div class="section-label"><span>Results</span> <span id="result-count" style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim);"></span></div>
-    <div style="display: flex; flex-direction: column; gap: 0.6rem;" id="explore-results">
+    <div class="section-label">
+      <span>Results</span>
+      <span id="result-count" class="font-mono text-xs text-[var(--color-text-dim)]"></span>
+    </div>
+    <div class="flex flex-col gap-2.5" id="explore-results">
       {allFixtures.map(fi => (
-        <div class="card explore-result" data-tags={fi.tags.join(',')} data-diff={fi.difficulty} data-bench={fi.benchmark} style="padding: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; cursor: pointer;" onclick={`window.location='/fixtures/${encodeURIComponent(fi.benchmark)}/${fi.id}'`}>
-          <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-            <span style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-mid); font-weight: 500;">{fi.id}</span>
-            <span class="tag-pill" style="font-size: 0.6rem;">{fi.benchmark}</span>
-            {fi.difficulty && <span class="result-pill pass" style="opacity: 0.5; font-size: 0.55rem;">{fi.difficulty}</span>}
+        <div
+          class="card explore-result p-4 flex justify-between items-center flex-wrap gap-3 cursor-pointer"
+          data-tags={fi.tags.join(',')}
+          data-diff={fi.difficulty}
+          data-bench={fi.benchmark}
+          onclick={`window.location='/fixtures/${encodeURIComponent(fi.benchmark)}/${fi.id}'`}
+        >
+          <div class="flex gap-2 items-center flex-wrap">
+            <span class="font-mono text-xs text-[var(--color-text-mid)] font-medium">{fi.id}</span>
+            <Badge variant="secondary" class="font-mono text-[0.6rem]">{fi.benchmark}</Badge>
+            {fi.difficulty && (
+              <Badge variant="outline" class="font-mono text-[0.55rem] opacity-50 border-[var(--color-pass-border)] text-[var(--color-pass)]">
+                {fi.difficulty}
+              </Badge>
+            )}
           </div>
-          <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+          <div class="flex gap-1 flex-wrap">
             {fi.tags.slice(0, 3).map(t => (
-              <span class="tag-pill" style="font-size: 0.55rem; padding: 0.1rem 0.35rem;">{t}</span>
+              <Badge variant="secondary" class="font-mono text-[0.55rem] px-1 py-0">{t}</Badge>
             ))}
             {fi.tags.length > 3 && (
-              <span style="font-family: var(--font-mono); font-size: 0.6rem; color: var(--text-dim);">+{fi.tags.length - 3}</span>
+              <span class="font-mono text-[0.6rem] text-[var(--color-text-dim)]">+{fi.tags.length - 3}</span>
             )}
           </div>
         </div>
@@ -136,7 +140,6 @@ const allFixtures = Object.values(data.fixture_index);
       applyExploreFilters();
     });
   });
-  // Initial count
   applyExploreFilters();
 
   // Handle ?tag= query param

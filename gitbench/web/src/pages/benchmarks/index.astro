@@ -1,12 +1,13 @@
 ---
 import Layout from '../../components/Layout.astro';
 import { loadDataSync } from '../../lib/data';
+import { Badge } from '@/components/ui/badge';
 
 const data = loadDataSync();
 ---
 
 <Layout title="Benchmarks">
-  <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+  <div class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
     {data.benchmarks.map(bench => {
       // Collect best pass rate across models
       let bestRate = 0;
@@ -18,20 +19,16 @@ const data = loadDataSync();
 
       // Count fixtures
       const fixtures = Object.values(data.fixture_index).filter(fi => fi.benchmark === bench);
-      const avgDifficulty = fixtures.reduce((sum, fi) => {
-        const levels = ['trivial', 'easy', 'medium', 'hard', 'expert'];
-        return sum + levels.indexOf(fi.difficulty);
-      }, 0) / fixtures.length || 0;
 
       return (
-        <a href={`/benchmarks/${bench}`} style="text-decoration: none;">
-          <div class="card" style="padding: 1.5rem; cursor: pointer; transition: border-color 0.15s;">
-            <div style="font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 0.4rem;">
+        <a href={`/benchmarks/${bench}`} class="no-underline">
+          <div class="card p-6 cursor-pointer transition-colors hover:border-[var(--color-border-accent)]">
+            <div class="font-mono text-sm font-semibold text-[var(--color-text)] mb-1.5">
               {bench}
             </div>
-            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-              <span class="result-pill pass" style="font-size: 0.68rem;">Best: {bestPct}%</span>
-              <span style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim);">
+            <div class="flex gap-2 items-center flex-wrap">
+              <Badge variant="outline" class="font-mono text-[0.68rem] border-[var(--color-pass-border)] text-[var(--color-pass)] bg-[var(--color-pass-bg)]">Best: {bestPct}%</Badge>
+              <span class="font-mono text-[0.65rem] text-[var(--color-text-dim)]">
                 {fixtures.length} fixtures
               </span>
             </div>

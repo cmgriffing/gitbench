@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import type { GitBenchData, RunMeta } from '../../lib/types';
-import { loadData } from '../../lib/load-data';
+import type { GitBenchData, RunMeta } from '@/lib/types';
+import { loadData } from '@/lib/load-data';
 import ModelSelector from './ModelSelector';
 
 const COLORS = ['#06b6d4', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899', '#0ea5e9', '#84cc16'];
@@ -19,14 +19,12 @@ export default function TimeSeriesChart() {
 
   if (!data) return <div>Loading...</div>;
 
-  // Build time series: {date: {model: passRate}}
   const runsByModel: Record<string, RunMeta[]> = {};
   for (const run of data.runs_meta) {
     if (!runsByModel[run.model]) runsByModel[run.model] = [];
     runsByModel[run.model].push(run);
   }
 
-  // Collect all unique dates
   const dateSet = new Set<string>();
   for (const runs of Object.values(runsByModel)) {
     for (const r of runs) {
@@ -37,7 +35,6 @@ export default function TimeSeriesChart() {
 
   const sortedDates = Array.from(dateSet).sort();
 
-  // Build chart data: each date has pass rates per model
   const chartData = sortedDates.map(date => {
     const point: Record<string, string | number> = { date };
     for (const model of selectedModels) {

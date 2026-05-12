@@ -5,6 +5,7 @@ import ExpectedBlock from '../../../components/fixtures/ExpectedBlock.astro';
 import ModelOutputCard from '../../../components/fixtures/ModelOutputCard.astro';
 import { loadDataSync } from '../../../lib/data';
 import type { GitBenchData } from '../../../lib/types';
+import { Badge } from '@/components/ui/badge';
 
 export function getStaticPaths() {
   const data = loadDataSync();
@@ -44,35 +45,34 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
 ---
 
 <Layout title={`${fixtureId} — ${fi.benchmark}`}>
-  <div style="margin-bottom: 1.5rem;">
-    <a href={`/benchmarks/${fi.benchmark}`} style="
-      font-family: var(--font-mono); font-size: 0.68rem; color: var(--accent);
-      text-decoration: none;
-    ">← {fi.benchmark}</a>
+  <div class="mb-6">
+    <a href={`/benchmarks/${fi.benchmark}`} class="font-mono text-[0.68rem] text-[var(--color-accent)] no-underline">
+      ← {fi.benchmark}
+    </a>
   </div>
 
-  <div class="card" style="margin-bottom: 2rem;">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+  <div class="card mb-8">
+    <div class="flex justify-between items-start flex-wrap gap-4">
       <div>
-        <div style="font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.3rem;">
+        <div class="text-xl font-extrabold tracking-tight mb-1">
           {fixtureId}
         </div>
         {fi.description && (
-          <div style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-mid); margin-bottom: 0.5rem;">
+          <div class="font-mono text-xs text-[var(--color-text-mid)] mb-2">
             {fi.description}
           </div>
         )}
         {fi.purpose && (
-          <div style="font-family: var(--font-display); font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; margin-bottom: 0.75rem; max-width: 700px;">
+          <div class="font-display text-sm text-[var(--color-text-dim)] leading-relaxed mb-3 max-w-[700px]">
             {fi.purpose}
           </div>
         )}
       </div>
-      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-        {fi.difficulty && <span class="badge" style="font-size: 0.7rem;">{fi.difficulty}</span>}
+      <div class="flex gap-2 flex-wrap items-center">
+        {fi.difficulty && <Badge variant="secondary" class="font-mono text-[0.7rem]">{fi.difficulty}</Badge>}
         {fi.tags.map(t => (
-          <a href={`/explore?tag=${encodeURIComponent(t)}`} style="text-decoration: none;">
-            <span class="tag-pill">{t}</span>
+          <a href={`/explore?tag=${encodeURIComponent(t)}`} class="no-underline">
+            <Badge variant="secondary" class="font-mono text-[0.65rem] cursor-pointer">{t}</Badge>
           </a>
         ))}
       </div>
@@ -82,9 +82,9 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
   <PromptBlock text={fi.prompt} />
   <ExpectedBlock text={fi.expected} />
 
-  <section style="margin-top: 2rem;">
+  <section class="mt-8">
     <div class="section-label"><span>Model Outputs ({modelOutputs.length})</span></div>
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
+    <div class="flex flex-col gap-4">
       {modelOutputs.map(mo => (
         <ModelOutputCard
           modelName={mo.model}

@@ -3,6 +3,7 @@ import Layout from '../components/Layout.astro';
 import TimeSeriesChart from '../components/charts/TimeSeriesChart';
 import { loadDataSync } from '../lib/data';
 import type { GitBenchData } from '../lib/types';
+import { Badge } from '@/components/ui/badge';
 
 const data = loadDataSync();
 
@@ -22,14 +23,14 @@ const runsWithDelta = sortedRuns.map((run, idx) => {
 ---
 
 <Layout title="Run History">
-  <section style="margin-bottom: 2.5rem;">
+  <section class="mb-10">
     <div class="section-label"><span>Pass Rate Over Time</span></div>
     <TimeSeriesChart client:load />
   </section>
 
   <section>
     <div class="section-label"><span>Run Log ({sortedRuns.length})</span></div>
-    <div class="card" style="overflow-x: auto; padding: 1.25rem;">
+    <div class="card overflow-x-auto p-5">
       <table class="data-table">
         <thead>
           <tr>
@@ -52,27 +53,29 @@ const runsWithDelta = sortedRuns.map((run, idx) => {
             const summary = data.model_summaries[run.model];
             const passRate = summary ? Math.round(summary.pass_at_k * 1000) / 10 : 0;
             const hasDelta = run.delta !== null;
-            const deltaCls = hasDelta ? (run.delta! > 0 ? 'var(--pass)' : run.delta! < 0 ? 'var(--fail)' : 'var(--text-dim)') : '';
+            const deltaCls = hasDelta ? (run.delta! > 0 ? 'var(--color-pass)' : run.delta! < 0 ? 'var(--color-fail)' : 'var(--color-text-dim)') : '';
             return (
               <tr>
-                <td style="font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-dim);">{ts}</td>
+                <td class="font-mono text-xs text-[var(--color-text-dim)]">{ts}</td>
                 <td>
-                  <a href={`/models/${encodeURIComponent(run.model)}`} style="color: var(--text-mid); text-decoration: none; font-family: var(--font-mono); font-size: 0.72rem;">
+                  <a href={`/models/${encodeURIComponent(run.model)}`} class="text-[var(--color-text-mid)] no-underline font-mono text-xs">
                     {run.model}
                   </a>
                 </td>
-                <td style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim);">{run.profile || '—'}</td>
-                <td style="font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-dim);">{rl}</td>
+                <td class="font-mono text-[0.68rem] text-[var(--color-text-dim)]">{run.profile || '—'}</td>
+                <td class="font-mono text-[0.68rem] text-[var(--color-text-dim)]">{rl}</td>
                 <td>
-                  <span class="result-pill pass" style="font-size: 0.65rem;">{passRate}%</span>
+                  <Badge variant="outline" class="font-mono text-[0.65rem] border-[var(--color-pass-border)] text-[var(--color-pass)] bg-[var(--color-pass-bg)]">
+                    {passRate}%
+                  </Badge>
                 </td>
-                <td style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim); opacity: 0.6;">{run.benchmark_suite_version || '—'}</td>
-                <td style={`font-family: var(--font-mono); font-size: 0.7rem; color: ${deltaCls};`}>
+                <td class="font-mono text-[0.65rem] text-[var(--color-text-dim)] opacity-60">{run.benchmark_suite_version || '—'}</td>
+                <td class="font-mono text-[0.7rem]" style={`color: ${deltaCls};`}>
                   {hasDelta ? (run.delta! >= 0 ? '+' : '') + run.delta + '%' : '—'}
                 </td>
-                <td style="font-family: var(--font-mono); font-size: 0.65rem; color: var(--accent); opacity: 0.5;">{sha}</td>
+                <td class="font-mono text-[0.65rem] text-[var(--color-accent)] opacity-50">{sha}</td>
                 <td>
-                  <a href={`/compare?with=${encodeURIComponent(run.model)}`} style="font-family: var(--font-mono); font-size: 0.6rem; color: var(--accent); text-decoration: none;">Compare</a>
+                  <a href={`/compare?with=${encodeURIComponent(run.model)}`} class="font-mono text-[0.6rem] text-[var(--color-accent)] no-underline">Compare</a>
                 </td>
               </tr>
             );
