@@ -19,7 +19,10 @@ prompt: Run the command to list all configured submodules. Output ONLY the git c
   nothing else.
 expected: git submodule
 scoring:
-  type: exact_match
+  type: command_equivalence
+  accepted:
+  - git submodule
+  - git submodule status
 purpose: Tests ability to list all submodules in a repository. Evaluates submodule-listing
   command knowledge.
 difficulty: easy

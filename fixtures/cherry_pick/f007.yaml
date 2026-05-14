@@ -33,7 +33,7 @@ expected: 'PORT=8443
   '
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a three-way conflict with port and protocol settings.
   Evaluates preference-based conflict resolution with multiple configuration dimensions.
 difficulty: hard

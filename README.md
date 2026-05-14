@@ -117,7 +117,7 @@ Generated default artifact filenames include the benchmark suite version, and re
 
 ## Benchmarks
 
-GitBench includes 12 benchmark categories:
+GitBench includes 17 benchmark categories:
 
 | Benchmark         | Description                                                            | Fixtures | Scoring       |
 | ----------------- | ---------------------------------------------------------------------- | -------- | ------------- |
@@ -126,15 +126,20 @@ GitBench includes 12 benchmark categories:
 | `cherry_pick`     | Apply specific commits from one branch to another, resolving conflicts | 12       | similarity    |
 | `commit_messages` | Given a diff, generate a meaningful commit message                     | 12       | similarity    |
 | `commit_squash`   | Squash multiple commits into a single coherent commit                  | 12       | commit_selection |
-| `git_bisect`      | Identify the commit that introduced a bug via automated bisect         | 12       | similarity    |
+| `git_bisect`      | Identify the commit that introduced a bug via automated bisect         | 12       | dynamic hash   |
+| `git_clean`       | Safely remove untracked files and directories                          | 12       | state_assertions |
+| `git_grep`        | Search repository content with git grep                                | 12       | exact_match/similarity |
+| `git_log_format`  | Format git log output for targeted history inspection                  | 12       | exact_match    |
+| `git_show`        | Inspect commits, tags, and file state with git show                    | 12       | exact_match/dynamic hash |
 | `merge_conflicts` | Resolve merge conflicts producing the correct final tree               | 12       | similarity    |
 | `rebase`          | Clean up commit history before PR (squash, reorder, amend)             | 12       | similarity    |
 | `reflog`          | Restore lost commits or fix detached HEAD state                        | 12       | similarity    |
 | `stash_recovery`  | Recover stashed changes or resolve stash pop conflicts                 | 12       | similarity    |
 | `submodule_usage` | Manage git submodules for external dependencies                        | 12       | state_assertions |
+| `tag_management`  | Create, inspect, move, and delete tags                                 | 12       | state_assertions |
 | `worktree_usage`  | Use git worktrees for parallel development                             | 12       | state_assertions |
 
-Each benchmark has 12 fixtures — 144 total — for meaningful pass@1 scoring.
+Each benchmark has 12 fixtures — 204 total — for meaningful pass@1 scoring.
 
 ### Scoring Types
 
@@ -142,8 +147,31 @@ Each benchmark has 12 fixtures — 144 total — for meaningful pass@1 scoring.
 | ---- | ----------- |
 | `similarity` | Text similarity via `difflib.SequenceMatcher`. Default threshold: 0.5 |
 | `exact_match` | Exact string comparison after stripping whitespace |
+| `command_equivalence` | Tokenized command comparison against fixture-declared accepted alternatives |
 | `state_assertions` | Execute model output as git commands, then verify repo state via assertions (file_exists, dir_exists, file_content, branch_exists, git_config, git_output) |
 | `structured` | Parse model output as key-value fields, score each independently (exact_match or similarity per field) |
+
+Use `command_equivalence` for read-only fixtures that ask for a Git command and
+where multiple command spellings are semantically equivalent:
+
+```yaml
+scoring:
+  type: command_equivalence
+  accepted:
+    - git submodule
+    - git submodule status
+```
+
+Multi-command alternatives are supported as ordered command sequences:
+
+```yaml
+scoring:
+  type: command_equivalence
+  accepted:
+    - - git submodule init
+      - git submodule update
+    - - git submodule update --init
+```
 
 ## Output Format
 
@@ -177,8 +205,8 @@ When running `--all`, output is a combined JSON with a summary and per-benchmark
 ```json
 {
   "summary": {
-    "total_benchmarks": 12,
-    "total_fixtures": 144,
+    "total_benchmarks": 17,
+    "total_fixtures": 204,
     "total_passed": 15,
     "overall_pass_at_k": 0.25
   },
@@ -281,7 +309,7 @@ gitbench/
 │   ├── types.py           # Dataclasses: ModelMessage, Fixture, Score, BenchmarkResult
 │   ├── model.py           # ModelInterface, OpenAIAdapter, MockModelClient
 │   ├── loader.py          # FixtureLoader: YAML loading and validation
-│   └── scorer.py          # Scorer: similarity scoring and pass@k computation
+│   └── scorer.py          # Scorer: similarity, command equivalence, state assertions, pass@k
 ├── benchmarks/
 │   ├── __init__.py       # Benchmark abstract base class
 │   ├── blame_forensics.py # Blame/forensics benchmark
@@ -290,11 +318,16 @@ gitbench/
 │   ├── commit_messages.py # Commit message generation benchmark
 │   ├── commit_squash.py  # Commit squash benchmark
 │   ├── git_bisect.py     # Git bisect benchmark
+│   ├── git_clean.py      # Git clean benchmark
+│   ├── git_grep.py       # Git grep benchmark
+│   ├── git_log_format.py # Git log formatting benchmark
+│   ├── git_show.py       # Git show benchmark
 │   ├── merge_conflicts.py # Merge conflict resolution benchmark
 │   ├── rebase.py         # Interactive rebase benchmark
 │   ├── reflog.py         # Reflog/detached HEAD recovery benchmark
 │   ├── stash_recovery.py # Stash recovery benchmark
 │   ├── submodule_usage.py # Submodule usage benchmark
+│   ├── tag_management.py # Tag management benchmark
 │   └── worktree_usage.py # Worktree usage benchmark
 └── utils/
     └── git.py            # GitExecutor: sandboxed git repo management
@@ -305,11 +338,16 @@ fixtures/
 ├── commit_messages/     # 12 YAML fixtures for commit message benchmark
 ├── commit_squash/       # 12 YAML fixtures for commit squash benchmark
 ├── git_bisect/          # 12 YAML fixtures for git bisect benchmark
+├── git_clean/           # 12 YAML fixtures for git clean benchmark
+├── git_grep/            # 12 YAML fixtures for git grep benchmark
+├── git_log_format/      # 12 YAML fixtures for git log formatting benchmark
+├── git_show/            # 12 YAML fixtures for git show benchmark
 ├── merge_conflicts/     # 12 YAML fixtures for merge conflict benchmark
 ├── rebase/              # 12 YAML fixtures for rebase benchmark
 ├── reflog/              # 12 YAML fixtures for reflog benchmark
 ├── stash_recovery/      # 12 YAML fixtures for stash recovery benchmark
 ├── submodule_usage/     # 12 YAML fixtures for submodule usage benchmark
+├── tag_management/      # 12 YAML fixtures for tag management benchmark
 └── worktree_usage/      # 12 YAML fixtures for worktree usage benchmark
 tests/                    # Unit and integration tests
 ```

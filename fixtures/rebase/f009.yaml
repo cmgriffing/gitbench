@@ -22,7 +22,7 @@ prompt: 'Resolve the rebase conflict in author.txt. Base was ''Author: John''. B
 expected: 'Author: J. Doe'
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a three-way author-name conflict in rebase. Evaluates
   complex merge decisions with rebase polarity.
 difficulty: medium

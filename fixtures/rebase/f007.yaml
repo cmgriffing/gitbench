@@ -36,7 +36,7 @@ expected: 'PORT=8443
   '
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a three-way rebase conflict with port and protocol.
   Evaluates multi-dimensional conflict with rebase context.
 difficulty: hard

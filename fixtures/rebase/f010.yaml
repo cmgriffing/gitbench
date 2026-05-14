@@ -35,7 +35,7 @@ expected: "main.py:\ndef main():\n    print(\"Running enterprise\")\n\nutils.py:
   DEBUG = True\nPORT = 9000\n"
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve simultaneous rebase conflicts in two files with
   different strategies. Evaluates multi-file rebase juggling.
 difficulty: hard

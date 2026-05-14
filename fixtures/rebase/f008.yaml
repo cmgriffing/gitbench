@@ -27,7 +27,7 @@ prompt: 'Resolve the rebase conflict in project.txt. Branch being rebased set Ti
 expected: 'Title: My Project v3'
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to handle rebase with partial conflicts across files. Evaluates
   understanding of clean vs conflicted files in rebase.
 difficulty: hard

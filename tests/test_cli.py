@@ -5,25 +5,24 @@ import sys
 import time
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from gitbench.cli import (
     DEFAULT_JSON_OUTPUT_PATH,
+    DEFAULT_RETRY_COUNT,
     check_git_availability,
     cli,
     get_model_client,
     resolve_run_output_path,
-)
-from gitbench.ui.progress import (
-    TerminalProgressTable,
+    _effective_retry_count,
+    _effective_timeout,
     _progress_model_names,
     _progress_model_names_for_runs,
 )
-from gitbench.ui.summary import SummaryTable
-from gitbench.ui.terminal import should_use_colors
+from gitbench.ui.display import RichProgressDisplay
 from gitbench.version import BENCHMARK_SUITE_VERSION
 
 
@@ -115,6 +114,7 @@ class TestGetModelClient:
             from gitbench.harness.model import OpenAIAdapter
             client = get_model_client("gpt-4o", provider="openai")
             assert isinstance(client, OpenAIAdapter)
+            assert client.timeout == 30
 
     def test_provider_openai_overrides_localhost_base_url(self):
         """Test that explicit provider='openai' wins even with localhost base_url."""
@@ -128,6 +128,40 @@ class TestGetModelClient:
         from gitbench.harness.model import OllamaAdapter
         client = get_model_client("any-model", base_url="http://localhost:11434")
         assert isinstance(client, OllamaAdapter)
+        assert client.timeout == 120
+
+    def test_custom_timeout_and_retry_are_forwarded(self):
+        """Explicit timeout/retry values override provider defaults."""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            client = get_model_client(
+                "gpt-4o",
+                provider="openai",
+                timeout=45,
+                retry_count=2,
+            )
+
+        assert client.timeout == 45
+        assert client.retry_count == 2
+
+
+class TestModelRetryPolicy:
+    """Tests for CLI/profile timeout and retry resolution."""
+
+    def test_provider_defaults_are_preserved_without_cli_or_profile_values(self):
+        assert _effective_timeout({}, None) is None
+        assert _effective_retry_count({}, None) == DEFAULT_RETRY_COUNT
+
+    def test_profile_timeout_and_retry_are_used_when_cli_values_absent(self):
+        profile = {"timeout": 45, "retry_count": 2}
+
+        assert _effective_timeout(profile, None) == 45
+        assert _effective_retry_count(profile, None) == 2
+
+    def test_cli_timeout_and_retry_override_profile_values(self):
+        profile = {"timeout": 45, "retry_count": 2}
+
+        assert _effective_timeout(profile, 10) == 10
+        assert _effective_retry_count(profile, 1) == 1
 
 
 class TestListCommand:
@@ -499,6 +533,101 @@ class TestRunCommand:
         assert len(list(output_dir.glob("*.json"))) == 2
         assert len(jsonl_path.read_text().strip().split("\n")) == 2
 
+    def test_run_uses_profile_timeout_and_retry_when_cli_values_absent(self, runner, tmp_path):
+        """Profile timeout/retry settings are passed to model clients."""
+        from gitbench.harness.model import MockModelClient
+
+        calls = []
+
+        def fake_get_model_client(model, *, timeout=None, retry_count=3, base_url=None, api_key=None, provider=None):
+            calls.append(
+                {
+                    "model": model,
+                    "timeout": timeout,
+                    "retry_count": retry_count,
+                    "base_url": base_url,
+                    "provider": provider,
+                }
+            )
+            return MockModelClient()
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            config = {
+                "models": {
+                    "remote": {
+                        "models": ["remote-model"],
+                        "provider": "openai",
+                        "base_url": "https://example.invalid/v1",
+                        "timeout": 45,
+                        "retry_count": 2,
+                    }
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.cli.get_model_client", side_effect=fake_get_model_client):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "--benchmark",
+                        "commit_messages",
+                        "--profile",
+                        "remote",
+                    ],
+                )
+
+        assert result.exit_code == 0
+        assert calls[0]["timeout"] == 45
+        assert calls[0]["retry_count"] == 2
+
+    def test_run_cli_timeout_and_retry_override_profile_values(self, runner, tmp_path):
+        """Explicit CLI timeout/retry settings win over profile settings."""
+        from gitbench.harness.model import MockModelClient
+
+        calls = []
+
+        def fake_get_model_client(model, *, timeout=None, retry_count=3, base_url=None, api_key=None, provider=None):
+            calls.append({"timeout": timeout, "retry_count": retry_count})
+            return MockModelClient()
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            config = {
+                "models": {
+                    "remote": {
+                        "models": ["remote-model"],
+                        "provider": "openai",
+                        "timeout": 45,
+                        "retry_count": 2,
+                    }
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.cli.get_model_client", side_effect=fake_get_model_client):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "--benchmark",
+                        "commit_messages",
+                        "--profile",
+                        "remote",
+                        "--timeout",
+                        "10",
+                        "--retry-count",
+                        "1",
+                    ],
+                )
+
+        assert result.exit_code == 0
+        assert calls[0]["timeout"] == 10
+        assert calls[0]["retry_count"] == 1
+
     def test_run_all_models_with_workers_runs_across_profiles_concurrently(self, runner, tmp_path):
         """Test that -a parallelizes all-model runs across provider profiles."""
         starts = []
@@ -582,8 +711,8 @@ class TtyStringIO(StringIO):
         return True
 
 
-class TestTerminalProgressTable:
-    """Tests for consolidated live progress output."""
+class TestRichProgressDisplay:
+    """Tests for RichProgressDisplay."""
 
     def test_progress_model_names_disambiguates_duplicates(self):
         assert _progress_model_names(["mock", "gpt-4o", "mock"]) == [
@@ -603,218 +732,350 @@ class TestTerminalProgressTable:
             ["mock #2", "gpt-4o", "claude"],
         ]
 
-    def test_table_renders_updates_in_place_for_tty(self):
-        stream = TtyStringIO()
-        table = TerminalProgressTable(["mock"], ["commit_messages"], stream=stream)
-
-        table.model_started("mock")
-        table.benchmark_started("mock", "commit_messages", 2)
-        table.fixture_finished("mock", "commit_messages", True)
-        table.benchmark_finished("mock", "commit_messages", 0)
-        table.close()
-
-        output = stream.getvalue()
-        assert "GitBench progress" in output
-        assert "GitBench complete" in output
-        assert "Model" in output
-        assert "Current" in output
-        assert "commit_messages" in output
-        assert "1/2" in output
-        assert "\x1b[1A\x1b[2K" in output
-
-    def test_table_condenses_benchmarks_into_one_model_row(self):
-        table = TerminalProgressTable(["mock"], ["commit_messages", "rebase"], stream=StringIO())
-
-        table.model_started("mock")
-        table.benchmark_started("mock", "commit_messages", 2)
-        table.fixture_finished("mock", "commit_messages", True)
-        table.benchmark_finished("mock", "commit_messages", 0)
-        table.benchmark_started("mock", "rebase", 3)
-        table.fixture_finished("mock", "rebase", False)
-
-        lines = table._build_lines(final=False)
-        assert len(lines) == 4
-        assert "mock" in lines[-1]
-        assert "rebase" in lines[-1]
-        assert "1/2" in lines[-1]
-        assert "2/5" in lines[-1]
-
-    def test_table_is_quiet_for_non_tty(self):
+    def test_non_tty_skips_live_display(self):
+        """When stderr is not a TTY, Live is not started."""
         stream = StringIO()
-        table = TerminalProgressTable(["mock"], ["commit_messages"], stream=stream)
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        assert d.enabled is False  # stderr is not a TTY in pytest
+        assert d._live is None
+        d.close()
 
-        table.model_started("mock")
-        table.benchmark_started("mock", "commit_messages", 1)
-        table.fixture_finished("mock", "commit_messages", True)
-        table.close()
+    def test_state_tracks_model_progress(self):
+        """Callbacks update internal state correctly."""
+        d = RichProgressDisplay(["mock"], ["commit_messages", "rebase"])
+        d.model_started("mock")
+        assert d._rows["mock"]["status"] == "queued"
 
-        assert stream.getvalue() == ""
+        d.benchmark_started("mock", "commit_messages", 10)
+        assert d._rows["mock"]["status"] == "running"
+        assert d._rows["mock"]["fixtures_total"] == 10
 
+        d.fixture_finished("mock", "commit_messages", True, fixture_id="f1", similarity=0.85)
+        assert d._rows["mock"]["fixtures_done"] == 1
+        assert d._rows["mock"]["passed"] == 1
 
-class TestShouldUseColors:
-    """Tests for color detection utility."""
+        d.benchmark_finished("mock", "commit_messages", 0)
+        assert d._rows["mock"]["benchmarks_done"] == 1
 
-    def test_no_color_env_var_disables_colors(self):
-        """NO_COLOR env var should disable colors."""
-        with patch.dict("os.environ", {"NO_COLOR": "1"}, clear=False):
-            import gitbench.ui.terminal as term_module
+        d.model_finished("mock", {"total_fixtures": 10, "total_passed": 8})
+        assert d._rows["mock"]["status"] == "done"
+        d.close()
 
-            # Reset the cached value
-            term_module._use_colors = None
-            result = should_use_colors()
-            assert result is False
+    def test_bench_results_tracks_per_benchmark(self):
+        """Per-benchmark results are tracked in _bench_results."""
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.benchmark_started("mock", "commit_messages", 5)
+        d.fixture_finished("mock", "commit_messages", True)
+        d.fixture_finished("mock", "commit_messages", False)
+        d.benchmark_finished("mock", "commit_messages", 0)
 
-    def test_term_dumb_disables_colors(self):
-        """TERM=dumb should disable colors."""
-        with patch.dict("os.environ", {"TERM": "dumb"}, clear=False):
-            import gitbench.ui.terminal as term_module
+        br = d._bench_results["mock"]["commit_messages"]
+        assert br["total"] == 2
+        assert br["passed"] == 1
+        assert br["done"] is True
+        d.close()
 
-            term_module._use_colors = None
-            result = should_use_colors()
-            assert result is False
+    def test_summary_table_renders_rows(self):
+        """Summary table shows benchmark rows with pass rates."""
+        d = RichProgressDisplay(["mock", "gpt-4o"], ["commit_messages", "rebase"])
 
-    def test_tty_stream_enables_colors(self):
-        """TTY stream should enable colors."""
-        stream = TtyStringIO()
-        with patch.dict("os.environ", {"TERM": "xterm-256color"}, clear=True):
-            import gitbench.ui.terminal as term_module
+        # Run commit_messages for both models
+        for model in ["mock", "gpt-4o"]:
+            d.model_started(model)
+            d.benchmark_started(model, "commit_messages", 5)
+            for _ in range(5):
+                d.fixture_finished(model, "commit_messages", True)
+            d.benchmark_finished(model, "commit_messages", 0)
+            d.model_finished(model, {"total_fixtures": 5, "total_passed": 5})
 
-            term_module._use_colors = None
-            result = should_use_colors(stream)
-        assert result is True
+        table = d._render_summary_table()
+        # Table should have rows for both benchmarks
+        assert table.row_count >= 2
+        d.close()
 
-    def test_non_tty_stream_disables_colors(self):
-        """Non-TTY stream should disable colors."""
-        stream = StringIO()
-        import gitbench.ui.terminal as term_module
+    def test_build_layout_uses_supported_rich_layout_api(self):
+        """Layout construction works with Rich versions without item assignment."""
+        d = RichProgressDisplay(["mock", "gpt-4o"], ["commit_messages"])
+        layout = d._build_layout()
 
-        term_module._use_colors = None
-        result = should_use_colors(stream)
-        assert result is False
+        assert layout["main"]["panels"] is not None
+        assert layout["main"]["summary"] is not None
+        d.close()
 
-    def test_result_is_cached(self):
-        """Result should be cached after first call when no stream is provided."""
-        import gitbench.ui.terminal as term_module
+    def test_panel_columns_scale_with_terminal_width(self):
+        """Model panels wrap into more rows when the terminal is narrow."""
+        d = RichProgressDisplay(
+            ["m1", "m2", "m3", "m4", "m5"],
+            ["commit_messages"],
+        )
 
-        term_module._use_colors = None
-        # Call without stream argument — uses sys.stdout, which should be non-TTY in tests
-        first = should_use_colors()
-        second = should_use_colors()
+        assert d._panel_columns(80, 5) == 3
+        assert d._panel_columns(120, 5) == 3
+        assert d._panel_columns(180, 5) == 5
+        d.close()
 
-        assert first == second
-        assert term_module._use_colors is not None
+    def test_refresh_repaints_live_display_immediately(self):
+        """Manual-refresh Live display repaints on each state update."""
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.enabled = True
+        d._live = Mock()
 
+        d.model_started("mock")
 
-class TestSummaryTable:
-    """Tests for SummaryTable class."""
+        d._live.update.assert_called_once()
+        assert d._live.update.call_args.kwargs["refresh"] is True
+        d._live = None
+        d.close()
 
-    def setup_method(self):
-        """Reset cached color state before each test."""
-        import gitbench.ui.terminal as term_module
-        term_module._use_colors = None
+    def test_periodic_refresh_repaints_while_no_callbacks_arrive(self):
+        """Heartbeat refresh keeps the live display moving during slow fixtures."""
+        d = RichProgressDisplay(
+            ["mock"],
+            ["commit_messages"],
+            refresh_interval=0.01,
+        )
+        d.enabled = True
+        d._live = Mock()
+        d._start_periodic_refresh()
 
-    def test_render_returns_none_when_disabled(self):
-        """render() should return None when stdout is not a TTY."""
-        import gitbench.ui.terminal as term_module
+        time.sleep(0.05)
 
-        term_module._use_colors = None
-        stream = StringIO()
-        results = [
-            {"benchmark": "commit_messages", "total": 10, "passed": 8, "pass_at_k": 0.8},
+        assert d._live.update.call_count >= 1
+        d.close()
+
+    def test_model_panel_colour_by_status(self):
+        """Model panels are coloured by status."""
+        from io import StringIO as SIO
+
+        # Use non-TTY to avoid live display
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+
+        # Pending
+        panel = d._render_model_panel("mock")
+        assert "waiting" in str(panel.renderable)
+
+        # Running — call fixture_finished for each fixture to accumulate pass rate
+        d.model_started("mock")
+        d.benchmark_started("mock", "commit_messages", 3)
+        d.fixture_finished("mock", "commit_messages", True)
+        d.fixture_finished("mock", "commit_messages", True)
+        d.fixture_finished("mock", "commit_messages", False)
+        panel = d._render_model_panel("mock")
+        rendered = str(panel.renderable)
+        assert "commit_messages" in rendered
+
+        # Done
+        d.benchmark_finished("mock", "commit_messages", 0)
+        d.model_finished("mock", {"total_fixtures": 3, "total_passed": 2})
+        panel = d._render_model_panel("mock")
+        rendered = str(panel.renderable)
+        assert "66.7%" in rendered
+        d.close()
+
+    def test_model_panel_renders_markup_as_styles(self):
+        """Model panel markup is parsed instead of displayed as tags."""
+        from rich.console import Console as RichConsole
+
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.model_started("mock")
+        d.benchmark_started("mock", "commit_messages", 2)
+        d.fixture_finished("mock", "commit_messages", True)
+
+        console = RichConsole(width=80, color_system=None)
+        with console.capture() as capture:
+            console.print(d._render_model_panel("mock"))
+
+        rendered = capture.get()
+        assert "[cyan]" not in rendered
+        assert "[/]" not in rendered
+        assert "50.0%" in rendered
+        d.close()
+
+    def test_compact_model_panel_hides_token_details(self):
+        """Compact model panels prioritize progress and pass rate."""
+        from rich.console import Console as RichConsole
+
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.model_started("mock")
+        d.benchmark_started("mock", "commit_messages", 2)
+        d.fixture_finished("mock", "commit_messages", True)
+
+        console = RichConsole(width=32, color_system=None)
+        with console.capture() as capture:
+            console.print(d._render_model_panel("mock", compact=True))
+
+        rendered = capture.get()
+        assert "50.0%" in rendered
+        assert "Tokens:" not in rendered
+        assert "Cost:" not in rendered
+        d.close()
+
+    def test_summary_limit_prioritizes_active_benchmarks(self):
+        """Short terminals keep running benchmarks in the visible summary."""
+        benchmarks = [
+            "blame_forensics",
+            "branch_cleanup",
+            "cherry_pick",
+            "commit_messages",
+            "git_clean",
         ]
-        table = SummaryTable(results, stream=stream)
-        result = table.render()
-        assert result is None
-        assert stream.getvalue() == ""
+        d = RichProgressDisplay(["mock"], benchmarks)
+        d.model_started("mock")
+        d.benchmark_started("mock", "git_clean", 12)
 
-    def test_render_writes_table_when_enabled(self):
-        """render() should write colored table to stream when TTY."""
-        stream = TtyStringIO()
-        results = [
-            {"benchmark": "commit_messages", "total": 10, "passed": 8, "pass_at_k": 0.8},
-            {"benchmark": "rebase", "total": 5, "passed": 2, "pass_at_k": 0.4},
+        visible, omitted = d._summary_benchmarks(limit=3)
+
+        assert "git_clean" in visible
+        assert omitted == 3
+        d.close()
+
+    def test_short_layout_uses_dense_panels_and_limits_summary_rows(self):
+        """Short terminals reduce panel height and summary rows to fit."""
+        d = RichProgressDisplay(
+            ["m1", "m2", "m3", "m4", "m5"],
+            ["b1", "b2", "b3", "b4", "b5"],
+        )
+
+        plan = d._layout_plan(width=80, height=16)
+
+        assert plan["dense"] is True
+        assert plan["panel_height"] == 3
+        assert plan["show_summary"] is True
+        assert plan["summary_limit"] == 3
+        d.close()
+
+    def test_tiny_layout_hides_summary_before_overflowing_vertically(self):
+        """Very short terminals prioritize model status over the summary table."""
+        d = RichProgressDisplay(
+            ["m1", "m2", "m3", "m4", "m5"],
+            ["b1", "b2", "b3"],
+        )
+
+        plan = d._layout_plan(width=80, height=8)
+
+        assert plan["dense"] is True
+        assert plan["show_summary"] is False
+        assert plan["summary_limit"] == 0
+        assert plan["panel_rows"] == 1
+        d.close()
+
+    def test_verbose_log_buffer(self):
+        """Verbose mode buffers log lines."""
+        d = RichProgressDisplay(["mock"], ["commit_messages"], verbose=True)
+        d.benchmark_started("mock", "commit_messages", 3)
+        d.fixture_finished("mock", "commit_messages", True, fixture_id="f1", similarity=0.9)
+        d.fixture_finished("mock", "commit_messages", False, fixture_id="f2", similarity=0.2)
+
+        assert len(d._log_lines) == 2
+        assert "PASS" in d._log_lines[0]
+        assert "FAIL" in d._log_lines[1]
+        log_panel = d._render_log_panel()
+        assert "f1" in str(log_panel.renderable)
+        assert "f2" in str(log_panel.renderable)
+        d.close()
+
+    def test_close_stops_live_and_prints_summary(self):
+        """close() stops live display and prints final summary."""
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.model_started("mock")
+        d.benchmark_started("mock", "commit_messages", 2)
+        d.fixture_finished("mock", "commit_messages", True)
+        d.fixture_finished("mock", "commit_messages", True)
+        d.benchmark_finished("mock", "commit_messages", 0)
+        d.model_finished("mock", {"total_fixtures": 2, "total_passed": 2})
+        d.close()
+        # Should not raise — close is idempotent when live is None
+
+    def test_multiple_models_summary_has_delta(self):
+        """When 2+ models, summary table includes delta column."""
+        from rich.console import Console as RichConsole
+
+        d = RichProgressDisplay(["mock", "gpt-4o"], ["commit_messages"])
+
+        for model in ["mock", "gpt-4o"]:
+            d.model_started(model)
+            d.benchmark_started(model, "commit_messages", 4)
+            passed = 3 if model == "mock" else 4
+            for _ in range(passed):
+                d.fixture_finished(model, "commit_messages", True)
+            for _ in range(4 - passed):
+                d.fixture_finished(model, "commit_messages", False)
+            d.benchmark_finished(model, "commit_messages", 0)
+            d.model_finished(model, {"total_fixtures": 4, "total_passed": passed})
+
+        table = d._render_summary_table()
+        # Render the Rich table to a string for inspection
+        console = RichConsole(width=120)
+        with console.capture() as capture:
+            console.print(table)
+        rendered = capture.get()
+        # Summary table should have a delta column header for 2+ models
+        assert "Δ" in rendered or "delta" in rendered.lower()
+        d.close()
+
+    def test_summary_table_uses_single_delta_column_for_many_models(self):
+        """Many-model full summary does not create implicit extra columns."""
+        d = RichProgressDisplay(
+            ["m1", "m2", "m3", "m4"],
+            ["commit_messages"],
+        )
+
+        for index, model in enumerate(["m1", "m2", "m3", "m4"]):
+            d.model_started(model)
+            d.benchmark_started(model, "commit_messages", 4)
+            passed = index + 1
+            for _ in range(passed):
+                d.fixture_finished(model, "commit_messages", True)
+            for _ in range(4 - passed):
+                d.fixture_finished(model, "commit_messages", False)
+            d.benchmark_finished(model, "commit_messages", 4 - passed)
+            d.model_finished(model, {"total_fixtures": 4, "total_passed": passed})
+
+        table = d._render_summary_table(width=140)
+
+        assert len(table.columns) == 6  # Benchmark + 4 models + one delta
+        d.close()
+
+    def test_summary_table_compacts_for_narrow_many_model_layouts(self):
+        """Narrow terminals get an aggregate summary instead of many model columns."""
+        from rich.console import Console as RichConsole
+
+        models = [
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b",
+            "minimax/minimax-m2.5",
+            "deepseek/deepseek-v4-flash",
+            "google/gemini-3.1-flash-lite-preview",
         ]
-        table = SummaryTable(results, stream=stream)
-        result = table.render()
+        d = RichProgressDisplay(models, ["commit_messages"])
 
-        assert result is not None
-        output = stream.getvalue()
-        assert "Benchmark" in output
-        assert "Pass@1" in output
-        assert "Passed/Fail" in output
+        for index, model in enumerate(models):
+            d.model_started(model)
+            d.benchmark_started(model, "commit_messages", 4)
+            passed = min(4, index + 1)
+            for _ in range(passed):
+                d.fixture_finished(model, "commit_messages", True)
+            for _ in range(4 - passed):
+                d.fixture_finished(model, "commit_messages", False)
+            d.benchmark_finished(model, "commit_messages", 4 - passed)
+            d.model_finished(model, {"total_fixtures": 4, "total_passed": passed})
 
-    def test_rows_sorted_alphabetically(self):
-        """Results should be sorted alphabetically by benchmark name."""
-        stream = TtyStringIO()
-        results = [
-            {"benchmark": "zebra", "total": 5, "passed": 5, "pass_at_k": 1.0},
-            {"benchmark": "alpha", "total": 5, "passed": 3, "pass_at_k": 0.6},
-            {"benchmark": "middle", "total": 5, "passed": 2, "pass_at_k": 0.4},
+        table = d._render_summary_table(width=60)
+
+        assert [column.header for column in table.columns] == [
+            "Benchmark",
+            "Done",
+            "Best",
+            "Range",
         ]
-        table = SummaryTable(results, stream=stream)
-        table.render()
 
-        output = stream.getvalue()
-        alpha_pos = output.find("alpha")
-        middle_pos = output.find("middle")
-        zebra_pos = output.find("zebra")
-        assert alpha_pos < middle_pos < zebra_pos
+        console = RichConsole(width=60, color_system=None)
+        with console.capture() as capture:
+            console.print(table)
+        rendered = capture.get()
 
-    def test_summary_row_contains_totals(self):
-        """Summary row should show overall pass@1 and total fixtures."""
-        stream = TtyStringIO()
-        results = [
-            {"benchmark": "commit_messages", "total": 10, "passed": 8, "pass_at_k": 0.8},
-            {"benchmark": "rebase", "total": 5, "passed": 2, "pass_at_k": 0.4},
-        ]
-        table = SummaryTable(results, stream=stream)
-        table.render()
-
-        output = stream.getvalue()
-        assert "TOTAL" in output
-        # 10 passed + 2 passed = 12, total = 15, pass@1 = 0.8
-        assert "8/10" in output or "10/15" in output
-
-    def test_color_coding_thresholds(self):
-        """Color should be green >= 0.8, yellow >= 0.5, red < 0.5."""
-        with patch.dict("os.environ", {"TERM": "xterm-256color"}, clear=True):
-            stream = TtyStringIO()
-
-            # Green (>= 0.8)
-            results_green = [{"benchmark": "green", "total": 10, "passed": 9, "pass_at_k": 0.9}]
-            table_green = SummaryTable(results_green, stream=stream)
-            table_green.render()
-            output_green = stream.getvalue()
-            assert "\x1b[32m" in output_green  # Green
-
-            # Yellow (>= 0.5)
-            stream2 = TtyStringIO()
-            results_yellow = [{"benchmark": "yellow", "total": 10, "passed": 6, "pass_at_k": 0.6}]
-            table_yellow = SummaryTable(results_yellow, stream=stream2)
-            table_yellow.render()
-            output_yellow = stream2.getvalue()
-            assert "\x1b[33m" in output_yellow  # Yellow
-
-            # Red (< 0.5)
-            stream3 = TtyStringIO()
-            results_red = [{"benchmark": "red", "total": 10, "passed": 4, "pass_at_k": 0.4}]
-            table_red = SummaryTable(results_red, stream=stream3)
-            table_red.render()
-            output_red = stream3.getvalue()
-        assert "\x1b[31m" in output_red  # Red
-
-    def test_passed_fail_column_format(self):
-        """Passed/Fail column should show passed/failed counts."""
-        stream = TtyStringIO()
-        results = [
-            {"benchmark": "test", "total": 10, "passed": 7, "pass_at_k": 0.7},
-        ]
-        table = SummaryTable(results, stream=stream)
-        table.render()
-
-        output = stream.getvalue()
-        # Should show 7 passed, 3 failed
-        assert "7/3" in output
+        assert all(len(line) <= 60 for line in rendered.splitlines())
+        d.close()
 
 
 class TestBuildRunEnvelope:

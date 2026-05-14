@@ -45,7 +45,7 @@ expected: 'app = Flask(__name__)
   '
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve conflicts in two interdependent files with trade-off
   decisions. Evaluates dependency-aware merging.
 difficulty: hard

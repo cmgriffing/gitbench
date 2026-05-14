@@ -22,7 +22,7 @@ prompt: 'Resolve the cherry-pick conflict in status.txt. The base was ''Status: 
 expected: 'Status: Resolved'
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a status-message conflict. Evaluates choosing between
   conflicting status values from different branches.
 difficulty: easy

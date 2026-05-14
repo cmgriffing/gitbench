@@ -22,7 +22,7 @@ prompt: 'Resolve the merge conflict in status.txt. The base was ''Status: OK''. 
 expected: 'Status: Resolved'
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a status-message merge conflict. Evaluates choosing
   between contradictory status values.
 difficulty: easy

@@ -27,7 +27,7 @@ prompt: 'Resolve the merge conflict in project.txt. Branch A set Title: My Proje
 expected: 'Title: My Project v3'
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to handle merge where some files conflict and others merge
   cleanly. Evaluates partial-conflict understanding.
 difficulty: hard

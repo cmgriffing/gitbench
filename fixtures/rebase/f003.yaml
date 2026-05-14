@@ -22,7 +22,7 @@ prompt: 'Resolve the rebase conflict in status.txt. The base was ''Status: OK''.
 expected: 'Status: Failed'
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a status-message conflict during rebase. Evaluates
   choosing between contradictory values in rebase context.
 difficulty: easy

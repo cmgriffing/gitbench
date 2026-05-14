@@ -166,3 +166,142 @@ class TestScorer:
         assert result.passed is False
         assert result.similarity == 0.0
         assert result.error is None
+
+    def test_command_equivalence_single_command_matches(self, scorer):
+        fixture = Fixture(
+            id="cmd_001",
+            description="Command equivalence fixture",
+            setup=[],
+            prompt="List worktrees",
+            expected="",
+            scoring={"type": "command_equivalence", "accepted": ["git worktree list"]},
+        )
+
+        result = scorer.score(fixture, "git worktree list")
+
+        assert result.passed is True
+        assert result.similarity == 1.0
+        assert result.error is None
+
+    def test_command_equivalence_accepts_equivalent_alternative(self, scorer):
+        fixture = Fixture(
+            id="cmd_002",
+            description="Command equivalence fixture",
+            setup=[],
+            prompt="List submodules",
+            expected="",
+            scoring={
+                "type": "command_equivalence",
+                "accepted": ["git submodule", "git submodule status"],
+            },
+        )
+
+        result = scorer.score(fixture, "git submodule status")
+
+        assert result.passed is True
+        assert result.similarity == 1.0
+
+    def test_command_equivalence_normalizes_whitespace(self, scorer):
+        fixture = Fixture(
+            id="cmd_003",
+            description="Command equivalence fixture",
+            setup=[],
+            prompt="List submodules",
+            expected="",
+            scoring={"type": "command_equivalence", "accepted": ["git submodule status"]},
+        )
+
+        result = scorer.score(fixture, "\n  git   submodule    status  \n\n")
+
+        assert result.passed is True
+
+    def test_command_equivalence_normalizes_quotes(self, scorer):
+        fixture = Fixture(
+            id="cmd_004",
+            description="Command equivalence fixture",
+            setup=[],
+            prompt="Lock worktree",
+            expected="",
+            scoring={
+                "type": "command_equivalence",
+                "accepted": ["git worktree lock --reason 'do not delete' ../feature-wt"],
+            },
+        )
+
+        result = scorer.score(
+            fixture,
+            'git worktree lock --reason "do not delete" ../feature-wt',
+        )
+
+        assert result.passed is True
+
+    def test_command_equivalence_invalid_syntax_fails_with_error(self, scorer):
+        fixture = Fixture(
+            id="cmd_005",
+            description="Command equivalence fixture",
+            setup=[],
+            prompt="List worktrees",
+            expected="",
+            scoring={"type": "command_equivalence", "accepted": ["git worktree list"]},
+        )
+
+        result = scorer.score(fixture, "git worktree list 'unterminated")
+
+        assert result.passed is False
+        assert result.similarity == 0.0
+        assert "Could not parse model output" in result.error
+
+    def test_command_equivalence_multi_command_sequence_matches(self, scorer):
+        fixture = Fixture(
+            id="cmd_006",
+            description="Command equivalence fixture",
+            setup=[],
+            prompt="Initialize submodules",
+            expected="",
+            scoring={
+                "type": "command_equivalence",
+                "accepted": [["git submodule init", "git submodule update"]],
+            },
+        )
+
+        result = scorer.score(fixture, "git submodule init\ngit submodule update")
+
+        assert result.passed is True
+
+    def test_command_equivalence_multi_command_alternative_matches(self, scorer):
+        fixture = Fixture(
+            id="cmd_007",
+            description="Command equivalence fixture",
+            setup=[],
+            prompt="Initialize submodules",
+            expected="",
+            scoring={
+                "type": "command_equivalence",
+                "accepted": [
+                    ["git submodule init", "git submodule update"],
+                    ["git submodule update --init"],
+                ],
+            },
+        )
+
+        result = scorer.score(fixture, "git submodule update --init")
+
+        assert result.passed is True
+
+    def test_command_equivalence_wrong_command_order_fails(self, scorer):
+        fixture = Fixture(
+            id="cmd_008",
+            description="Command equivalence fixture",
+            setup=[],
+            prompt="Initialize submodules",
+            expected="",
+            scoring={
+                "type": "command_equivalence",
+                "accepted": [["git submodule init", "git submodule update"]],
+            },
+        )
+
+        result = scorer.score(fixture, "git submodule update\ngit submodule init")
+
+        assert result.passed is False
+        assert "Command did not match accepted alternatives" in result.error

@@ -74,18 +74,29 @@ class CommitSquashBenchmark(Benchmark):
             for message in expected_messages
             if self._mentions_commit(message, hashes_by_message, normalized_output)
         ]
+        extra = self._selected_extra_commits(
+            model_output,
+            expected_messages,
+            hashes_by_message,
+        )
 
         similarity = len(found) / len(expected_messages)
         threshold = fixture.scoring.get("threshold", 1.0)
-        passed = similarity >= threshold
+        allow_extra = fixture.scoring.get("allow_extra", False)
+        passed = similarity >= threshold and (allow_extra or not extra)
         missing = [message for message in expected_messages if message not in found]
+        error_parts = []
+        if missing:
+            error_parts.append(f"Missing expected commit messages: {missing}")
+        if extra:
+            error_parts.append(f"Extra selected commit messages: {extra}")
 
         return Score(
             fixture_id=fixture.id,
             passed=passed,
             similarity=round(similarity, 4),
             model_output=model_output,
-            error=None if passed else f"Missing expected commit messages: {missing}",
+            error=None if passed else "; ".join(error_parts),
         )
 
     def _mentions_commit(
@@ -125,6 +136,40 @@ class CommitSquashBenchmark(Benchmark):
             if commit_hash and subject:
                 hashes_by_message[subject] = commit_hash.lower()
         return hashes_by_message
+
+    def _selected_extra_commits(
+        self,
+        model_output: str,
+        expected_messages: list[str],
+        hashes_by_message: dict[str, str],
+    ) -> list[str]:
+        """Find clearly selected non-expected commits in model output.
+
+        Commit-selection answers can mention target/base commits as explanatory
+        context. To avoid rejecting that useful context, this only treats bullet
+        lines and comma-separated command-like lists as selected commits.
+        """
+        expected_set = {message.lower() for message in expected_messages}
+        selected_regions = []
+        for line in model_output.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("-", "*")) or "," in stripped:
+                selected_regions.append(stripped.lower())
+
+        extras = []
+        for message, commit_hash in hashes_by_message.items():
+            if message.lower() in expected_set:
+                continue
+            abbreviated_hash = commit_hash[:7]
+            if any(
+                message.lower() in region
+                or commit_hash in region
+                or abbreviated_hash in region
+                for region in selected_regions
+            ):
+                extras.append(message)
+
+        return extras
 
     def get_diff(self, repo_path: str) -> str:
         """Get git log output for the repository.

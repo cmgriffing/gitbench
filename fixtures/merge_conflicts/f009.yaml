@@ -26,7 +26,7 @@ prompt: 'Resolve the merge conflict in author.txt. Three different authors were 
 expected: 'Author: J. Doe'
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a three-way author-name conflict where all three
   values differ. Evaluates complex merge decisions.
 difficulty: medium

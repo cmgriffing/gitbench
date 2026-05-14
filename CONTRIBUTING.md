@@ -41,7 +41,7 @@ scoring:
 - `purpose` — 1–3 sentence explanation of what skill is tested and why it matters
 - `difficulty` — relative difficulty: `trivial`, `easy`, `medium`, `hard`, or `expert`
 - `tags` — list of searchable keywords (e.g., `["commit-message", "basic"]`)
-- `scoring.type` — scoring algorithm (`similarity` is the only one currently)
+- `scoring.type` — scoring algorithm (`similarity`, `exact_match`, `command_equivalence`, `state_assertions`, or benchmark-specific types)
 - `scoring.threshold` — minimum similarity to pass (0.0–1.0, default 0.5)
 
 ### Setup Command Tips
@@ -66,7 +66,7 @@ scoring:
 2. **Diverse scenarios** — Cover different git operations and edge cases.
 3. **Realistic prompts** — Keep prompts concise and focused.
 4. **Realistic expected values** — Use conventional commit format when appropriate.
-5. **Appropriate thresholds** — Default 0.5 works for most text. Lower for lenient scoring, raise for exact-match requirements.
+5. **Appropriate thresholds** — Default 0.5 works for loose text only. Use higher thresholds for conflict resolutions and exact or benchmark-specific scorers for identifiers, selections, hashes, and commands.
 6. **YAML gotcha** — Bare colons in strings (e.g., commit messages like "Fix: login") cause PyYAML to parse them as mapping keys. Use single quotes: `'Fix: login'` or explicit block scalars (`|`).
 
 ### Fixture Metadata (Optional but Recommended)
@@ -269,14 +269,50 @@ If you need to run other commands that may exit non-zero, you can extend `GitExe
 
 ## Scoring
 
-Currently the only scoring type is `similarity` using Python's `difflib.SequenceMatcher`. It computes character-level similarity between the model's output and the expected value.
+Use the narrowest scorer that matches the fixture's intended answer.
 
-The threshold controls pass/fail:
-- `0.5` — moderate similarity (suitable for commit messages, file content)
-- `0.8+` — near-exact match (suitable for commit hashes, specific identifiers)
-- Below `0.5` — lenient (accepts loosely related outputs)
+- `similarity` uses Python's `difflib.SequenceMatcher`. It is suitable for natural-language commit messages and file content where small wording differences are acceptable. Use higher thresholds, such as `0.9`, for conflict resolutions where incomplete output should fail.
+- `exact_match` compares stripped strings exactly. Use it for literal answers such as commit subjects, email addresses, tag names, and exact command output.
+- `command_equivalence` compares tokenized command lines against fixture-declared accepted alternatives. Use it for read-only prompts that ask the model to output a Git command.
+- `state_assertions` executes model commands in the fixture repo and validates the resulting state. Use it for commands that mutate the repository.
+- Benchmark-specific scorers, such as branch selection, commit selection, stash recovery, reflog recovery, and dynamic commit-hash scoring, should enforce the Git-specific correctness contract directly.
 
-Future milestones may add semantic scoring for cases where text similarity doesn't capture correctness (e.g., identifying a commit hash vs describing it in prose).
+### Command Equivalence
+
+Use `command_equivalence` when multiple command spellings are semantically equivalent and the fixture asks for a command, not for command output or repo mutation.
+
+```yaml
+scoring:
+  type: command_equivalence
+  accepted:
+    - git submodule
+    - git submodule status
+```
+
+For ordered multi-command answers, list each accepted sequence:
+
+```yaml
+scoring:
+  type: command_equivalence
+  accepted:
+    - - git submodule init
+      - git submodule update
+    - - git submodule update --init
+```
+
+Accepted alternatives must be semantically equivalent, not merely similar. Do not list a command that is broader, mutates extra state, omits required flags, or answers a different question just because it often appears near the right command.
+
+### Selection Scoring
+
+Fixtures that ask the model to select branches, commits, files, stash refs, or other Git identifiers should fail when the answer includes extra incorrect selections unless partial credit is explicitly intended and documented in the fixture. In cleanup and history-editing tasks, over-selection is usually dangerous: deleting an extra branch or squashing an unrelated commit is a real failure.
+
+### State Assertions
+
+Use `state_assertions` when the model must perform an operation and correctness is best proven by repository state. Prefer assertions over exact command text for mutating operations because several command sequences may legitimately reach the same state.
+
+### Similarity Scoring
+
+Similarity scoring is intentionally approximate. Keep it for prose and resolved file content where reasonable formatting variation is expected. Avoid low thresholds for multi-file conflict fixtures; broad similarity can let incomplete answers pass when only one returned file resembles the expected output.
 
 ---
 

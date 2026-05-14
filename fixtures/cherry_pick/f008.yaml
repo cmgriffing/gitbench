@@ -28,7 +28,7 @@ prompt: 'Resolve the cherry-pick conflict in project.txt. The incoming commit se
 expected: 'Title: My Project v3'
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to handle cherry-pick where some files conflict and others
   merge cleanly. Evaluates understanding of partial-conflict scenarios.
 difficulty: hard

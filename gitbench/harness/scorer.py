@@ -3,6 +3,7 @@
 import difflib
 import logging
 import os
+import shlex
 import subprocess
 from typing import Any
 
@@ -293,12 +294,102 @@ class StructuredScorer:
         )
 
 
+class CommandEquivalenceScorer:
+    """Scores command answers against fixture-declared equivalent commands."""
+
+    def score(self, fixture: Fixture, model_output: str) -> Score:
+        """Score command output by comparing normalized command token sequences."""
+        try:
+            accepted_sequences = self._normalize_accepted(fixture.scoring.get("accepted"))
+            model_sequence = self._normalize_command_sequence(model_output, "model output")
+        except ValueError as e:
+            return self._score(fixture, model_output, False, str(e))
+
+        if not accepted_sequences:
+            return self._score(
+                fixture,
+                model_output,
+                False,
+                "No accepted command alternatives defined",
+            )
+
+        for accepted in accepted_sequences:
+            if model_sequence == accepted:
+                return self._score(fixture, model_output, True, None)
+
+        expected_display = [
+            " && ".join(" ".join(command) for command in sequence)
+            for sequence in accepted_sequences
+        ]
+        return self._score(
+            fixture,
+            model_output,
+            False,
+            f"Command did not match accepted alternatives: {expected_display}",
+        )
+
+    def _normalize_accepted(self, accepted: Any) -> list[list[list[str]]]:
+        """Normalize accepted alternatives into command-token sequences."""
+        if not isinstance(accepted, list):
+            raise ValueError("command_equivalence scoring requires an accepted list")
+
+        normalized = []
+        for index, alternative in enumerate(accepted):
+            label = f"accepted alternative {index + 1}"
+            if isinstance(alternative, str):
+                normalized.append(self._normalize_command_sequence(alternative, label))
+            elif isinstance(alternative, list) and all(
+                isinstance(command, str) for command in alternative
+            ):
+                normalized.append(self._normalize_command_sequence("\n".join(alternative), label))
+            else:
+                raise ValueError(
+                    "accepted alternatives must be command strings or lists of command strings"
+                )
+        return normalized
+
+    def _normalize_command_sequence(self, value: str, label: str) -> list[list[str]]:
+        lines = [line.strip() for line in value.splitlines() if line.strip()]
+        if not lines:
+            raise ValueError(f"Could not parse {label}: no command lines found")
+
+        sequence = []
+        for line in lines:
+            try:
+                tokens = shlex.split(line)
+            except ValueError as e:
+                raise ValueError(f"Could not parse {label}: {e}") from e
+            if not tokens:
+                raise ValueError(f"Could not parse {label}: empty command line")
+            sequence.append(tokens)
+        return sequence
+
+    def _score(
+        self,
+        fixture: Fixture,
+        model_output: str,
+        passed: bool,
+        error: str | None,
+    ) -> Score:
+        return Score(
+            fixture_id=fixture.id,
+            passed=passed,
+            similarity=1.0 if passed else 0.0,
+            model_output=model_output,
+            error=error,
+            purpose=fixture.purpose or None,
+            difficulty=fixture.difficulty or None,
+            tags=fixture.tags or None,
+        )
+
+
 class Scorer:
     """Computes similarity scores for model outputs against expected values.
 
     Supports multiple scoring types:
     - similarity: difflib SequenceMatcher (default)
     - exact_match: exact string comparison
+    - command_equivalence: tokenized command sequence comparison
     - state_assertions: repo state checking (needs repo_path)
     - structured: per-field scoring
     """
@@ -307,6 +398,7 @@ class Scorer:
         """Initialize the scorer with sub-scorers."""
         self._state_scorer = StateAssertionScorer()
         self._structured_scorer = StructuredScorer()
+        self._command_equivalence_scorer = CommandEquivalenceScorer()
 
     def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         """Score a model output against the expected value.
@@ -364,6 +456,9 @@ class Scorer:
 
             elif scoring_type == "structured":
                 return self._structured_scorer.score(fixture, model_output)
+
+            elif scoring_type == "command_equivalence":
+                return self._command_equivalence_scorer.score(fixture, model_output)
 
             else:
                 raise ValueError(f"Unsupported scoring type: {scoring_type}")

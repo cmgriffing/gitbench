@@ -12,9 +12,10 @@ setup:
 - git commit -m 'Second commit'
 prompt: Using git show -s --format=%H, what is the full SHA hash of the commit with
   message 'Second commit'? Output ONLY the full hash, nothing else.
-expected: Second commit
+expected: full hash for commit message 'Second commit'
 scoring:
-  type: exact_match
+  type: commit_hash_by_subject
+  subject: Second commit
 purpose: Tests ability to extract full commit hash from git show. Evaluates SHA-extraction
   from commit display.
 difficulty: easy

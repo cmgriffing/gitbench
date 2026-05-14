@@ -41,7 +41,7 @@ expected: 'Name: John Doe
   '
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a multi-line hunk conflict with address/contact
   information. Evaluates combining partial changes from both sides.
 difficulty: medium

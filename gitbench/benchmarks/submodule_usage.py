@@ -37,6 +37,9 @@ class SubmoduleUsageBenchmark(Benchmark):
         Returns:
             A Score object based on state assertion results.
         """
+        if fixture.scoring.get("type") == "command_equivalence":
+            return self._scorer.score(fixture, model_output, repo_path=repo_path)
+
         if repo_path is None:
             return Score(
                 fixture_id=fixture.id,

@@ -5,6 +5,7 @@ from abc import ABC
 import pytest
 
 from gitbench.benchmarks import Benchmark
+from gitbench.benchmarks.branch_cleanup import BranchCleanupBenchmark
 from gitbench.benchmarks.commit_messages import CommitMessagesBenchmark
 from gitbench.benchmarks.commit_squash import CommitSquashBenchmark
 from gitbench.benchmarks.merge_conflicts import MergeConflictsBenchmark
@@ -169,6 +170,17 @@ class TestMergeConflictsBenchmark:
         assert result.fixture_id == fixture.id
         assert result.similarity > 0.8  # Should be very similar
 
+    def test_multi_file_incomplete_resolution_fails(self):
+        """Test that resolving only one file in a multi-file fixture is insufficient."""
+        benchmark = MergeConflictsBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == "f010")
+        incomplete_output = "main.py:\ndef main():\n    print(\"Running enterprise\")\n"
+
+        result = benchmark.score(fixture, incomplete_output)
+
+        assert result.passed is False
+        assert result.similarity < fixture.scoring["threshold"]
+
 
 class TestCommitSquashBenchmark:
     """Test the commit_squash benchmark implementation."""
@@ -226,6 +238,28 @@ class TestCommitSquashBenchmark:
         assert result.similarity == 0.5
         assert "WIP: continue work" in result.error
 
+    def test_extra_selected_commit_fails(self):
+        """Test that selecting an extra non-squash commit fails."""
+        benchmark = CommitSquashBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+        executor, repo_path = benchmark.setup_fixture(fixture)
+
+        try:
+            output = (
+                "- WIP: add main.py\n"
+                "- WIP: continue work\n"
+                "- Initial commit"
+            )
+
+            result = benchmark.score(fixture, output, repo_path=repo_path)
+
+            assert result.passed is False
+            assert result.similarity == 1.0
+            assert "Extra selected commit messages" in result.error
+            assert "Initial commit" in result.error
+        finally:
+            executor.cleanup()
+
     def test_hash_only_correct_answer_passes(self):
         """Test that answers using commit hashes instead of messages pass."""
         import subprocess
@@ -252,6 +286,40 @@ class TestCommitSquashBenchmark:
             assert result.similarity == 1.0
         finally:
             executor.cleanup()
+
+
+class TestBranchCleanupBenchmark:
+    """Test branch cleanup selection scoring."""
+
+    def test_exact_branch_selection_passes(self):
+        benchmark = BranchCleanupBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+
+        result = benchmark.score(fixture, fixture.expected)
+
+        assert result.passed is True
+        assert result.similarity == 1.0
+        assert result.error is None
+
+    def test_missing_branch_selection_fails(self):
+        benchmark = BranchCleanupBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+
+        result = benchmark.score(fixture, "")
+
+        assert result.passed is False
+        assert result.similarity == 0.0
+        assert "Missing" in result.error
+
+    def test_extra_branch_selection_fails(self):
+        benchmark = BranchCleanupBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+
+        result = benchmark.score(fixture, f"{fixture.expected}\nfeature-login")
+
+        assert result.passed is False
+        assert result.similarity == 1.0
+        assert "Extra" in result.error
 
 
 class TestCherryPickBenchmark:
@@ -572,7 +640,10 @@ class TestSubmoduleUsageBenchmark:
 
         assert len(fixtures) == 12
         assert {fixture.id for fixture in fixtures} == {f"f{i:03d}" for i in range(1, 13)}
-        assert all(fixture.scoring["type"] in {"state_assertions", "exact_match"} for fixture in fixtures)
+        assert all(
+            fixture.scoring["type"] in {"state_assertions", "exact_match", "command_equivalence"}
+            for fixture in fixtures
+        )
 
     @pytest.mark.parametrize("fixture_id", [f"f{i:03d}" for i in range(1, 13)])
     def test_expected_answer_passes_fixture_state_checks(self, fixture_id):
@@ -621,6 +692,15 @@ class TestSubmoduleUsageBenchmark:
         finally:
             executor.cleanup()
 
+    def test_list_submodules_accepts_status_form(self):
+        benchmark = SubmoduleUsageBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == "f006")
+
+        result = benchmark.score(fixture, "git submodule status")
+
+        assert result.passed is True
+        assert result.similarity == 1.0
+
 
 class TestWorktreeUsageBenchmark:
     """Test the worktree_usage benchmark against its real fixtures."""
@@ -631,7 +711,10 @@ class TestWorktreeUsageBenchmark:
 
         assert len(fixtures) == 12
         assert {fixture.id for fixture in fixtures} == {f"f{i:03d}" for i in range(1, 13)}
-        assert all(fixture.scoring["type"] in {"state_assertions", "exact_match"} for fixture in fixtures)
+        assert all(
+            fixture.scoring["type"] in {"state_assertions", "exact_match", "command_equivalence"}
+            for fixture in fixtures
+        )
 
     @pytest.mark.parametrize("fixture_id", [f"f{i:03d}" for i in range(1, 13)])
     def test_expected_answer_passes_fixture_state_checks(self, fixture_id):
@@ -659,6 +742,15 @@ class TestWorktreeUsageBenchmark:
             assert result.passed is False
         finally:
             executor.cleanup()
+
+    def test_list_worktrees_accepts_porcelain_form(self):
+        benchmark = WorktreeUsageBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == "f004")
+
+        result = benchmark.score(fixture, "git worktree list --porcelain")
+
+        assert result.passed is True
+        assert result.similarity == 1.0
 
 
 class TestTagManagementBenchmark:
@@ -823,6 +915,33 @@ class TestGitShowBenchmark:
 
         assert result.passed is False
         assert result.similarity == 0.0
+
+    def test_full_hash_fixture_scores_dynamic_commit_hash(self):
+        benchmark = GitShowBenchmark()
+        fixture = next(f for f in benchmark.load_fixtures() if f.id == "f008")
+        executor, repo_path = benchmark.setup_fixture(fixture)
+
+        try:
+            import subprocess
+
+            git_result = subprocess.run(
+                ["git", "log", "--format=%H", "--grep", "^Second commit$"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            full_hash = git_result.stdout.strip()
+
+            result = benchmark.score(fixture, full_hash, repo_path=repo_path)
+            wrong_result = benchmark.score(fixture, "Second commit", repo_path=repo_path)
+
+            assert fixture.expected != "Second commit"
+            assert result.passed is True
+            assert result.similarity == 1.0
+            assert wrong_result.passed is False
+        finally:
+            executor.cleanup()
 
 
 class TestGitCleanBenchmark:

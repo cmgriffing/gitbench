@@ -22,7 +22,7 @@ prompt: 'Resolve the merge conflict in config.yaml. The base had port: 8080 and 
 expected: "server:\n  port: 443\n  host: 0.0.0.0\n"
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve a configuration block merge conflict with port and
   host changes. Evaluates infrastructure-merge judgment.
 difficulty: medium

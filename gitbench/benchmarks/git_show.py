@@ -36,7 +36,76 @@ class GitShowBenchmark(Benchmark):
         Returns:
             A Score object with passed/failed status and similarity value.
         """
+        if fixture.scoring.get("type") == "commit_hash_by_subject":
+            return self._score_commit_hash_by_subject(fixture, model_output, repo_path)
+
         return self._scorer.score(fixture, model_output, repo_path=repo_path)
+
+    def _score_commit_hash_by_subject(
+        self,
+        fixture: Fixture,
+        model_output: str,
+        repo_path: str | None,
+    ) -> Score:
+        """Score an answer against a commit's full hash resolved from the repo."""
+        if repo_path is None:
+            return Score(
+                fixture_id=fixture.id,
+                passed=False,
+                similarity=0.0,
+                model_output=model_output,
+                error="repo_path required for commit_hash_by_subject scoring",
+            )
+
+        subject = fixture.scoring.get("subject")
+        if not subject:
+            return Score(
+                fixture_id=fixture.id,
+                passed=False,
+                similarity=0.0,
+                model_output=model_output,
+                error="commit_hash_by_subject scoring requires subject",
+            )
+
+        result = subprocess.run(
+            ["git", "log", "--format=%H%x00%s"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return Score(
+                fixture_id=fixture.id,
+                passed=False,
+                similarity=0.0,
+                model_output=model_output,
+                error=f"git log failed: {result.stderr.strip()}",
+            )
+
+        expected_hash = None
+        for line in result.stdout.splitlines():
+            commit_hash, _, commit_subject = line.partition("\0")
+            if commit_subject == subject:
+                expected_hash = commit_hash
+                break
+
+        if expected_hash is None:
+            return Score(
+                fixture_id=fixture.id,
+                passed=False,
+                similarity=0.0,
+                model_output=model_output,
+                error=f"Could not find commit with subject: {subject}",
+            )
+
+        match = model_output.strip() == expected_hash
+        return Score(
+            fixture_id=fixture.id,
+            passed=match,
+            similarity=1.0 if match else 0.0,
+            model_output=model_output,
+            error=None if match else f"Expected full hash {expected_hash}, got {model_output.strip()}",
+        )
 
     def get_diff(self, repo_path: str) -> str:
         """Get git show output for all commits and tags in the repository.

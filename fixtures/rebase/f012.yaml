@@ -45,7 +45,7 @@ expected: 'app = Flask(__name__)
   '
 scoring:
   type: similarity
-  threshold: 0.5
+  threshold: 0.9
 purpose: Tests ability to resolve interdependent file conflicts during rebase with
   trade-offs. Evaluates dependency-aware rebase merging.
 difficulty: hard

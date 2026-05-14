@@ -22,11 +22,74 @@ from gitbench.harness.runner import BenchmarkRunner, RunProgress
 from gitbench.harness.reasoning import validate_model_list
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
 from gitbench.render import aggregate_runs, _run_sort_key
-from gitbench.ui.progress import TerminalProgressTable, _progress_model_names, _progress_model_names_for_runs
-from gitbench.ui.summary import SummaryTable
+from gitbench.ui.display import RichProgressDisplay
 from gitbench.version import BENCHMARK_SUITE_VERSION, RESULT_SCHEMA_VERSION
 
 DEFAULT_JSON_OUTPUT_PATH = "gitbench-results/{timestamp}/results-v{version}.json"
+DEFAULT_RETRY_COUNT = 3
+
+
+def _progress_model_names(models: list[str]) -> list[str]:
+    """Return stable display names for progress rows, disambiguating duplicates."""
+    total_counts: dict[str, int] = {}
+    seen_counts: dict[str, int] = {}
+    for model in models:
+        total_counts[model] = total_counts.get(model, 0) + 1
+
+    display_names: list[str] = []
+    for model in models:
+        seen_counts[model] = seen_counts.get(model, 0) + 1
+        if total_counts[model] > 1:
+            display_names.append(f"{model} #{seen_counts[model]}")
+        else:
+            display_names.append(model)
+    return display_names
+
+
+def _progress_model_names_for_runs(
+    runs: list[tuple[str, dict, list[str]]],
+) -> list[list[str]]:
+    """Return display names for every scheduled model across all run groups."""
+    raw_labels: list[str] = []
+    for _profile_name, _profile_conf, models in runs:
+        raw_labels.extend(models)
+
+    display_labels = _progress_model_names(raw_labels)
+    labels_by_run: list[list[str]] = []
+    offset = 0
+    for _profile_name, _profile_conf, models in runs:
+        labels_by_run.append(display_labels[offset : offset + len(models)])
+        offset += len(models)
+    return labels_by_run
+
+
+def _effective_timeout(
+    profile_conf: dict,
+    cli_timeout: int | None,
+) -> int | None:
+    """Return the timeout to pass to the model adapter.
+
+    ``None`` deliberately preserves provider-specific adapter defaults.
+    """
+    if cli_timeout is not None:
+        return cli_timeout
+    profile_timeout = profile_conf.get("timeout")
+    if profile_timeout is None:
+        return None
+    return int(profile_timeout)
+
+
+def _effective_retry_count(
+    profile_conf: dict,
+    cli_retry_count: int | None,
+) -> int:
+    """Return retry attempts, allowing profiles to override the default."""
+    if cli_retry_count is not None:
+        return cli_retry_count
+    profile_retry_count = profile_conf.get("retry_count")
+    if profile_retry_count is None:
+        return DEFAULT_RETRY_COUNT
+    return int(profile_retry_count)
 
 # Configure structured logging
 logging.basicConfig(
@@ -98,13 +161,21 @@ def check_git_availability() -> bool:
         return False
 
 
-def get_model_client(model: str, timeout: int = 600, retry_count: int = 3, base_url: str | None = None, api_key: str | None = None, provider: str | None = None) -> OpenAIAdapter | OllamaAdapter | MockModelClient:
+def get_model_client(
+    model: str,
+    timeout: int | None = None,
+    retry_count: int = DEFAULT_RETRY_COUNT,
+    base_url: str | None = None,
+    api_key: str | None = None,
+    provider: str | None = None,
+) -> OpenAIAdapter | OllamaAdapter | MockModelClient:
     """Get the model client based on model name and provider.
 
     Args:
         model: Model name. Use 'mock' for testing.
-        timeout: Timeout in seconds for model generation (default: 600).
-        retry_count: Number of retries on failure (default: 3).
+        timeout: Timeout in seconds for model generation. When ``None``,
+            uses the provider adapter default.
+        retry_count: Number of retry attempts on failure.
         base_url: Optional API base URL. For Ollama, defaults to http://localhost:11434.
                   For OpenAI-compatible providers, set explicitly.
         api_key: Optional API key for OpenAI-compatible providers.
@@ -130,9 +201,15 @@ def get_model_client(model: str, timeout: int = 600, retry_count: int = 3, base_
         ollama_base = ollama_base.rstrip("/")
         if ollama_base.endswith("/v1"):
             ollama_base = ollama_base[:-3]
-        return OllamaAdapter(model=model, base_url=ollama_base, timeout=timeout, retry_count=retry_count)
+        kwargs: dict = {"base_url": ollama_base, "retry_count": retry_count}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        return OllamaAdapter(model=model, **kwargs)
     else:
-        return OpenAIAdapter(model=model, timeout=timeout, retry_count=retry_count, base_url=base_url, api_key=api_key)
+        kwargs = {"retry_count": retry_count, "base_url": base_url, "api_key": api_key}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        return OpenAIAdapter(model=model, **kwargs)
 
 
 def _get_git_sha() -> str | None:
@@ -425,16 +502,22 @@ def cli():
 @click.option(
     "--timeout",
     "-t",
-    default=600,
-    type=int,
-    help="Timeout in seconds for model generation (default: 600)",
+    default=None,
+    type=click.IntRange(1),
+    help=(
+        "Timeout in seconds for each model attempt. "
+        "Defaults to the provider adapter default unless set in profile config."
+    ),
 )
 @click.option(
     "--retry-count",
     "-r",
-    default=3,
-    type=int,
-    help="Number of retries on model failure (default: 3)",
+    default=None,
+    type=click.IntRange(1),
+    help=(
+        "Number of model attempts on retryable failures "
+        f"(default: profile retry_count or {DEFAULT_RETRY_COUNT})."
+    ),
 )
 @click.option(
     "--model-workers",
@@ -465,8 +548,8 @@ def run(
     export_format: str,
     export_path: str | None,
     verbose: bool,
-    timeout: int,
-    retry_count: int,
+    timeout: int | None,
+    retry_count: int | None,
     base_url: str | None,
     provider: str | None,
     model_workers: int,
@@ -598,23 +681,12 @@ def run(
         all_profile_results: list[dict] = []
         pending_outputs: list[tuple[str, dict]] = []
         progress_model_names_by_run = _progress_model_names_for_runs(runs)
-        progress_table = TerminalProgressTable(
-            [name for names in progress_model_names_by_run for name in names],
+        all_models_flat = [name for names in progress_model_names_by_run for name in names]
+        progress_display = RichProgressDisplay(
+            all_models_flat,
             benchmarks_to_run,
             verbose=verbose,
         )
-
-        def announce_model(profile_label: str, models_to_run: list[str], current_model: str) -> None:
-            if progress_table.enabled:
-                return
-            if len(runs) > 1 or len(models_to_run) > 1:
-                parts = []
-                if profile_label:
-                    parts.append(profile_label)
-                parts.append(f"model '{current_model}'")
-                click.echo(f"\nRunning benchmarks ({', '.join(parts)})...", err=True)
-            for bench_name in benchmarks_to_run:
-                click.echo(f"  Running '{bench_name}'...", err=True)
 
         def finish_model_result(model_result: dict) -> None:
             summary = model_result["summary"]
@@ -663,17 +735,18 @@ def run(
                     p_api_key = profile_conf.get("api_key")
                     p_provider = provider or profile_conf.get("provider")
                     p_api_key_env = profile_conf.get("_api_key_env")
+                    p_timeout = _effective_timeout(profile_conf, timeout)
+                    p_retry_count = _effective_retry_count(profile_conf, retry_count)
 
                     if not current_model.startswith("mock") and not p_api_key and p_api_key_env:
                         click.echo(f"Skipping profile '{profile_name}': env var {p_api_key_env} not set", err=True)
                         continue
 
                     profile_label = f"profile '{profile_name}'" if len(runs) > 1 else ""
-                    announce_model(profile_label, models_to_run, current_model)
                     model_client = get_model_client(
                         current_model,
-                        timeout=timeout,
-                        retry_count=retry_count,
+                        timeout=p_timeout,
+                        retry_count=p_retry_count,
                         base_url=p_base_url,
                         api_key=p_api_key,
                         provider=p_provider,
@@ -684,7 +757,7 @@ def run(
                         benchmarks_to_run,
                         model_name=current_model,
                         fixture_workers=fixture_workers,
-                        progress=progress_table,
+                        progress=progress_display,
                         progress_model_name=progress_model_names_by_run[run_index][0],
                     )
                     future_to_run_index[future] = run_index
@@ -709,6 +782,8 @@ def run(
                 p_api_key = profile_conf.get("api_key")
                 p_provider = provider or profile_conf.get("provider")
                 p_api_key_env = profile_conf.get("_api_key_env")
+                p_timeout = _effective_timeout(profile_conf, timeout)
+                p_retry_count = _effective_retry_count(profile_conf, retry_count)
 
                 # Validate api_key
                 has_real_models = any(not m.startswith("mock") for m in models_to_run)
@@ -730,11 +805,10 @@ def run(
                     with ThreadPoolExecutor(max_workers=worker_count) as executor:
                         future_to_index = {}
                         for index, current_model in enumerate(models_to_run):
-                            announce_model(profile_label, models_to_run, current_model)
                             model_client = get_model_client(
                                 current_model,
-                                timeout=timeout,
-                                retry_count=retry_count,
+                                timeout=p_timeout,
+                                retry_count=p_retry_count,
                                 base_url=p_base_url,
                                 api_key=p_api_key,
                                 provider=p_provider,
@@ -745,7 +819,7 @@ def run(
                                 benchmarks_to_run,
                                 model_name=current_model,
                                 fixture_workers=fixture_workers,
-                                progress=progress_table,
+                                progress=progress_display,
                                 progress_model_name=progress_model_names[index],
                             )
                             future_to_index[future] = index
@@ -760,11 +834,10 @@ def run(
                             finish_model_result(model_result)
                 else:
                     for index, current_model in enumerate(models_to_run):
-                        announce_model(profile_label, models_to_run, current_model)
                         model_client = get_model_client(
                             current_model,
-                            timeout=timeout,
-                            retry_count=retry_count,
+                            timeout=p_timeout,
+                            retry_count=p_retry_count,
                             base_url=p_base_url,
                             api_key=p_api_key,
                             provider=p_provider,
@@ -774,7 +847,7 @@ def run(
                             benchmarks_to_run,
                             model_name=current_model,
                             fixture_workers=fixture_workers,
-                            progress=progress_table,
+                            progress=progress_display,
                             progress_model_name=progress_model_names[index],
                         )
                         all_model_results.append(model_result)
@@ -823,18 +896,13 @@ def run(
                     # Multiple profiles: nest under profile name
                     append_profile_result(profile_name, all_model_results)
 
-        progress_table.close()
+        progress_display.close()
 
-        # Collect all results for summary table
+        # Collect all results for summary table (close() already printed summary)
         all_results: list[dict] = []
         for model_result in all_model_results:
             for r in model_result.get("results", []):
                 all_results.append(r)
-
-        # Print summary table to stdout (suppressed when piped)
-        if all_results:
-            summary_table = SummaryTable(all_results)
-            summary_table.render()
 
         for _profile_name, envelope in pending_outputs:
             if output_dir:

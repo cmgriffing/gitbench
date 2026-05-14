@@ -17,7 +17,10 @@ prompt: Run the command to list all git worktrees. Output ONLY the git command, 
   else.
 expected: git worktree list
 scoring:
-  type: exact_match
+  type: command_equivalence
+  accepted:
+  - git worktree list
+  - git worktree list --porcelain
 purpose: Tests ability to list all existing worktrees. Evaluates worktree-enumeration
   command knowledge.
 difficulty: easy

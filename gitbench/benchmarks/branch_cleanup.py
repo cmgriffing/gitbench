@@ -50,7 +50,7 @@ class BranchCleanupBenchmark(Benchmark):
 
         Parses both expected and model_output as newline-separated branch names,
         computes similarity as the fraction of expected branches found in model output,
-        and returns detailed error listing missing and extra branches.
+        and passes only when there are no missing or extra branches by default.
 
         Args:
             fixture: The fixture containing the expected branch names.
@@ -70,10 +70,10 @@ class BranchCleanupBenchmark(Benchmark):
         matches = expected_set & model_set
         similarity = len(matches) / len(expected_set) if expected_set else 0.0
         threshold = fixture.scoring.get("threshold", 1.0)
-        passed = similarity >= threshold
-
         missing = expected_set - model_set
         extra = model_set - expected_set
+        allow_extra = fixture.scoring.get("allow_extra", False)
+        passed = similarity >= threshold and not missing and (allow_extra or not extra)
 
         error_parts = []
         if missing:
