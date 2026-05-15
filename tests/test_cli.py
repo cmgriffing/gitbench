@@ -1,6 +1,7 @@
 """Tests for GitBench CLI."""
 
 import json
+import logging
 import sys
 import time
 from io import StringIO
@@ -398,6 +399,49 @@ class TestRunCommand:
             assert result.exit_code == 0
             # Verbose output should mention per-fixture or similar
             assert "Per-fixture" in result.output or "fixture" in result.output.lower()
+
+    def test_run_routes_benchmark_logs_to_file(self, runner, tmp_path):
+        """Runtime logs should not write through the terminal progress stream."""
+
+        def fake_run_all(self, benchmark_names, *, model_name="", fixture_workers=1, progress=None, progress_model_name=None):
+            logging.getLogger("gitbench.tests.noisy").warning("noisy benchmark warning")
+            results = [
+                {
+                    "benchmark": bench_name,
+                    "total": 1,
+                    "passed": 1,
+                    "pass_at_k": 1.0,
+                    "scores": [],
+                    "errors": 0,
+                }
+                for bench_name in benchmark_names
+            ]
+            return {
+                "model": model_name,
+                "summary": {
+                    "total_benchmarks": len(results),
+                    "total_fixtures": len(results),
+                    "total_passed": len(results),
+                    "overall_pass_at_k": 1.0,
+                },
+                "results": results,
+            }
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.cli._benchmark_registry", {"commit_messages": object()}), \
+                 patch("gitbench.harness.runner.BenchmarkRunner.run_all", side_effect=fake_run_all, autospec=True):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "mock"],
+                )
+
+            assert result.exit_code == 0
+            assert "noisy benchmark warning" not in result.output
+
+            logs = list(Path("gitbench-logs").glob("run-*.log"))
+            assert len(logs) == 1
+            assert "noisy benchmark warning" in logs[0].read_text()
 
     def test_run_exits_with_error_when_git_missing(self, runner):
         """Test that run exits with error when git is not available."""

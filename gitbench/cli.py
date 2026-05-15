@@ -26,6 +26,7 @@ from gitbench.ui.display import RichProgressDisplay
 from gitbench.version import BENCHMARK_SUITE_VERSION, RESULT_SCHEMA_VERSION
 
 DEFAULT_JSON_OUTPUT_PATH = "gitbench-results/{timestamp}/results-v{version}.json"
+DEFAULT_LOG_DIR = "gitbench-logs"
 DEFAULT_RETRY_COUNT = 3
 
 
@@ -91,12 +92,8 @@ def _effective_retry_count(
         return DEFAULT_RETRY_COUNT
     return int(profile_retry_count)
 
-# Configure structured logging
-logging.basicConfig(
-    level=logging.WARNING,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+# Keep package logs off stderr unless a command explicitly installs a handler.
+logging.getLogger("gitbench").addHandler(logging.NullHandler())
 logger = logging.getLogger(__name__)
 
 # Global registry for discovered benchmarks
@@ -353,6 +350,38 @@ def _default_output_timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _default_log_path(timestamp: str | None = None) -> Path:
+    """Return the benchmark run log path for a timestamp."""
+    timestamp = timestamp or _default_output_timestamp()
+    return Path(DEFAULT_LOG_DIR) / f"run-{timestamp}.log"
+
+
+def configure_run_logging(log_path: str | Path | None = None) -> Path:
+    """Route GitBench runtime logs to a file, never the benchmark TUI stream."""
+    resolved = Path(log_path) if log_path is not None else _default_log_path()
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+
+    root_logger = logging.getLogger()
+    for handler in list(root_logger.handlers):
+        if getattr(handler, "_gitbench_run_log_handler", False):
+            root_logger.removeHandler(handler)
+            handler.close()
+
+    handler = logging.FileHandler(resolved, encoding="utf-8")
+    handler._gitbench_run_log_handler = True
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.DEBUG)
+    return resolved
+
+
 def _format_default_output_path(path_template: str, timestamp: str) -> str:
     """Format a default output path template with run metadata."""
     return path_template.format(
@@ -556,6 +585,9 @@ def run(
     fixture_workers: int,
 ):
     """Run one or all benchmarks against the specified model."""
+    run_log_path = configure_run_logging()
+    logger.info("Benchmark run log started: %s", run_log_path)
+
     # -a means all benchmarks + all models (flat comparison), unless a specific model is given
     if run_all:
         all_benchmarks_flag = True
