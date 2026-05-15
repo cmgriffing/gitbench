@@ -20,7 +20,7 @@ export default function CostValueChart() {
     loadData().then(d => setData(d));
   }, []);
 
-  if (!data) return <div class="font-mono text-xs text-[var(--color-text-dim)]">Loading chart...</div>;
+  if (!data) return <div className="font-mono text-xs text-[var(--color-text-dim)]">Loading chart...</div>;
 
   // Build chart data: include only models with valid cost data
   const chartData: ChartPoint[] = [];
@@ -41,9 +41,9 @@ export default function CostValueChart() {
   // Edge case: no models with cost data
   if (chartData.length === 0) {
     return (
-      <div class="card p-8 text-center">
-        <div class="font-display text-base text-[var(--color-text-dim)] mb-1">No pricing data available</div>
-        <div class="font-mono text-xs text-[var(--color-text-dim)] opacity-60">
+      <div className="card p-8 text-center">
+        <div className="font-display text-base text-[var(--color-text-dim)] mb-1">No pricing data available</div>
+        <div className="font-mono text-xs text-[var(--color-text-dim)] opacity-60">
           Run benchmarks through OpenRouter to collect cost data for each model.
         </div>
       </div>
@@ -69,7 +69,7 @@ export default function CostValueChart() {
   };
 
   return (
-    <div class="card">
+    <div className="card">
       <ResponsiveContainer width="100%" height={380}>
         <ScatterChart margin={{ top: 20, right: 20, bottom: 30, left: 20 }}>
           <CartesianGrid stroke="rgba(255,255,255,0.04)" />
@@ -140,7 +140,7 @@ export default function CostValueChart() {
                     r={5}
                     fill="#a78bfa"
                     opacity={0.75}
-                    class="cursor-pointer hover:opacity-100 transition-opacity"
+                    className="cursor-pointer hover:opacity-100 transition-opacity"
                   />
                 </a>
               );

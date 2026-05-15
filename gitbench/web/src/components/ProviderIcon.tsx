@@ -6,6 +6,7 @@ import {
   SiMeta,
   SiMistralai,
 } from '@icons-pack/react-simple-icons';
+import { PROVIDER_COLORS, providerHue } from '@/lib/provider-colors';
 
 // Map of lowercase provider slugs → Simple Icons component
 const PROVIDER_ICON_MAP: Record<string, ComponentType<IconProps>> = {
@@ -15,15 +16,6 @@ const PROVIDER_ICON_MAP: Record<string, ComponentType<IconProps>> = {
   mistral: SiMistralai,
   // openai, deepseek: not yet in simple-icons 13.x — fallback below
 };
-
-/** Derive a deterministic hue for a provider string (golden-angle spacing). */
-function providerHue(provider: string): number {
-  let h = 0;
-  for (let i = 0; i < provider.length; i++) {
-    h = (h * 31 + provider.charCodeAt(i)) & 0xffffffff;
-  }
-  return (h >>> 0) % 360;
-}
 
 const SIZE_REGEX = /^size-/;
 
@@ -46,12 +38,32 @@ export default function ProviderIcon({ provider, size = 16 }: ProviderIconProps)
         }
       }
     }
+
+    // Anthropic: override near-black default with palette terracotta
+    const iconColor = normalized === 'anthropic' ? PROVIDER_COLORS.anthropic : 'default';
+
+    // Subtle background circle for small icons to ensure visibility on dark bg
+    const showBgCircle = size <= 14;
+
     return (
-      <IconComponent
-        size={size}
-        color="default"
-        {...filtered}
-      />
+      <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+        {showBgCircle && (
+          <span
+            style={{
+              position: 'absolute',
+              width: size + 4,
+              height: size + 4,
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.08)',
+            }}
+          />
+        )}
+        <IconComponent
+          size={size}
+          color={iconColor}
+          {...filtered}
+        />
+      </span>
     );
   }
 
