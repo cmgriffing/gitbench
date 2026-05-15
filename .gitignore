@@ -32,3 +32,6 @@ tmp/
 gitbench.json
 .gitbench.json
 results/
+gitbench-logs/
+.codex
+.claude
