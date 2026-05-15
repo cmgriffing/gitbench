@@ -754,7 +754,7 @@ def run(
 
         if all_models and model_workers > 1 and total_models > 1:
             worker_count = min(model_workers, total_models)
-            click.echo(f"Running up to {worker_count} model(s) concurrently.", err=True)
+            logger.info("Running up to %d model(s) concurrently.", worker_count)
             ordered_results: list[dict | None] = [None] * len(runs)
 
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -772,7 +772,11 @@ def run(
                     p_retry_count = _effective_retry_count(profile_conf, retry_count)
 
                     if not current_model.startswith("mock") and not p_api_key and p_api_key_env:
-                        click.echo(f"Skipping profile '{profile_name}': env var {p_api_key_env} not set", err=True)
+                        logger.warning(
+                            "Skipping profile '%s': env var %s not set",
+                            profile_name,
+                            p_api_key_env,
+                        )
                         continue
 
                     profile_label = f"profile '{profile_name}'" if len(runs) > 1 else ""
@@ -821,7 +825,11 @@ def run(
                 # Validate api_key
                 has_real_models = any(not m.startswith("mock") for m in models_to_run)
                 if has_real_models and not p_api_key and p_api_key_env:
-                    click.echo(f"Skipping profile '{profile_name}': env var {p_api_key_env} not set", err=True)
+                    logger.warning(
+                        "Skipping profile '%s': env var %s not set",
+                        profile_name,
+                        p_api_key_env,
+                    )
                     continue
 
                 profile_label = f"profile '{profile_name}'" if len(runs) > 1 else ""
@@ -833,7 +841,7 @@ def run(
 
                 if model_workers > 1 and len(models_to_run) > 1:
                     worker_count = min(model_workers, len(models_to_run))
-                    click.echo(f"Running up to {worker_count} model(s) concurrently.", err=True)
+                    logger.info("Running up to %d model(s) concurrently.", worker_count)
                     ordered_results: list[dict | None] = [None] * len(models_to_run)
                     with ThreadPoolExecutor(max_workers=worker_count) as executor:
                         future_to_index = {}
