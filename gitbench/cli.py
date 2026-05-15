@@ -676,6 +676,7 @@ def run(
             f"Unknown benchmark: {unknown_benchmarks[0]}. Available: {available}"
         )
 
+    progress_display: RichProgressDisplay | None = None
     try:
         # Run each (profile, models) entry
         all_profile_results: list[dict] = []
@@ -999,7 +1000,9 @@ def run(
             click.echo(output_json)
 
     except Exception as e:
-        logger.error(f"Benchmark failed: {e}")
+        if progress_display is not None:
+            progress_display.close()
+        logger.exception("Benchmark failed")
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 

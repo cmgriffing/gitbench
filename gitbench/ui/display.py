@@ -136,16 +136,21 @@ class RichProgressDisplay:
         self._log_lines: deque[str] = deque(maxlen=500)
 
         if self.enabled:
-            self._console = Console(stderr=True)
-            layout = self._build_layout()
-            self._live = Live(
-                layout,
-                console=self._console,
-                screen=True,
-                auto_refresh=False,
-            )
-            self._live.start()
-            self._start_periodic_refresh()
+            try:
+                self._console = Console(stderr=True)
+                layout = self._build_layout()
+                self._live = Live(
+                    layout,
+                    console=self._console,
+                    screen=True,
+                    auto_refresh=False,
+                )
+                self._live.start()
+                self._start_periodic_refresh()
+            except Exception:
+                self.enabled = False
+                self._console = Console(stderr=True, force_terminal=False)
+                self._live = None
         else:
             self._console = Console(stderr=True, force_terminal=False)
             self._live = None
@@ -230,14 +235,20 @@ class RichProgressDisplay:
 
         with self._lock:
             if self._live is not None:
-                self._live.stop()
+                try:
+                    self._live.stop()
+                except Exception:
+                    pass
                 self._live = None
 
         # Print final static summary to stdout (if TTY)
         if sys.stdout.isatty():
-            table = self._render_summary_table(width=self._console.size.width)
-            stdout_console = Console()
-            stdout_console.print(table)
+            try:
+                table = self._render_summary_table(width=self._console.size.width)
+                stdout_console = Console()
+                stdout_console.print(table)
+            except Exception:
+                pass
 
         # Dump verbose log to file
         if self._verbose and self._log_lines:
@@ -247,10 +258,16 @@ class RichProgressDisplay:
 
     def _refresh(self) -> None:
         if not self.enabled or self._live is None:
-            self._render_fallback()
+            try:
+                self._render_fallback()
+            except Exception:
+                pass
             return
-        layout = self._build_layout()
-        self._live.update(layout, refresh=True)
+        try:
+            layout = self._build_layout()
+            self._live.update(layout, refresh=True)
+        except Exception:
+            pass
 
     def _start_periodic_refresh(self) -> None:
         if (

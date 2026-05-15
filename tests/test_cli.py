@@ -827,6 +827,45 @@ class TestRichProgressDisplay:
         d._live = None
         d.close()
 
+    def test_refresh_swallows_live_update_errors(self):
+        """Transient Rich update errors do not escape progress callbacks."""
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.enabled = True
+        d._live = Mock()
+        d._live.update.side_effect = RuntimeError("terminal changed size")
+
+        d.model_started("mock")
+
+        assert d._rows["mock"]["status"] == "queued"
+        d._live.update.assert_called_once()
+        d._live = None
+        d.close()
+
+    def test_refresh_swallows_layout_errors(self):
+        """Transient layout errors do not escape progress callbacks."""
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.enabled = True
+        d._live = Mock()
+        d._build_layout = Mock(side_effect=RuntimeError("layout failed"))
+
+        d.model_started("mock")
+
+        assert d._rows["mock"]["status"] == "queued"
+        d._live.update.assert_not_called()
+        d._live = None
+        d.close()
+
+    def test_close_swallows_live_stop_errors(self):
+        """Terminal cleanup errors do not escape close()."""
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.enabled = True
+        d._live = Mock()
+        d._live.stop.side_effect = RuntimeError("already stopped")
+
+        d.close()
+
+        assert d._live is None
+
     def test_periodic_refresh_repaints_while_no_callbacks_arrive(self):
         """Heartbeat refresh keeps the live display moving during slow fixtures."""
         d = RichProgressDisplay(
