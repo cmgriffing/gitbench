@@ -2,6 +2,8 @@
 import Layout from '../components/Layout.astro';
 import PassRateBarChart from '../components/charts/PassRateBarChart';
 import CostValueChart from '../components/charts/CostValueChart';
+import RuntimeBarChart from '../components/charts/RuntimeBarChart';
+import TokenUsageChart from '../components/charts/TokenUsageChart';
 import ModelSelector from '../components/charts/ModelSelector';
 import BenchmarkHeatmap from '../components/charts/BenchmarkHeatmap';
 ---
@@ -28,12 +30,22 @@ import BenchmarkHeatmap from '../components/charts/BenchmarkHeatmap';
   </section>
 
   <section class="mt-10">
-    <div class="section-label"><span>Benchmark Matrix</span></div>
-    <BenchmarkHeatmap client:load />
+    <div class="section-label"><span>Cost per Full Run</span></div>
+    <CostValueChart client:load />
   </section>
 
   <section class="mt-10">
-    <div class="section-label"><span>Cost vs Quality</span></div>
-    <CostValueChart client:load />
+    <div class="section-label"><span>Runtime (Wall Clock)</span></div>
+    <RuntimeBarChart client:load />
+  </section>
+
+  <section class="mt-10">
+    <div class="section-label"><span>Token Usage</span></div>
+    <TokenUsageChart client:load />
+  </section>
+
+  <section class="mt-10">
+    <div class="section-label"><span>Benchmark Matrix</span></div>
+    <BenchmarkHeatmap client:load />
   </section>
 </Layout>

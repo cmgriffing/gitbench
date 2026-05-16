@@ -1,154 +1,293 @@
-import { useState, useEffect } from 'react';
-import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, ZAxis, ReferenceLine } from 'recharts';
-import type { GitBenchData } from '@/lib/types';
-import { loadData } from '@/lib/load-data';
-import { modelLevelPath } from '@/lib/routes';
+import { useState, useEffect, useMemo } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  Cell,
+  Tooltip,
+} from "recharts";
+import type { GitBenchData } from "@/lib/types";
+import { loadData } from "@/lib/load-data";
+import ModelSelector from "./ModelSelector";
+import ProviderIcon from "@/components/ProviderIcon";
+import { modelLevelPath } from "@/lib/routes";
+import { getProviderColor } from "@/lib/provider-colors";
 
-interface ChartPoint {
+function truncateName(name: string, maxLen = 10): string {
+  if (!name || name.length <= maxLen) return name || "";
+  return name.slice(0, maxLen - 1) + "\u2026";
+}
+
+function formatCost(v: number): string {
+  if (v < 0.0001) return `$${v.toExponential(1)}`;
+  if (v < 0.01) return `$${v.toFixed(6)}`;
+  return `$${v.toFixed(4)}`;
+}
+
+interface CustomTickProps {
   x: number;
   y: number;
-  model: string;
-  provider: string;
-  baseModel: string;
-  level: string;
+  payload: {
+    value: string;
+    index: number;
+    coordinate: number;
+  };
+  modelMap?: Record<
+    string,
+    {
+      provider: string;
+      baseModel: string;
+      reasoningLevel: string | null;
+      name: string;
+    }
+  >;
+}
+
+function CustomXAxisTick(props: CustomTickProps) {
+  const { x, y, payload, modelMap } = props;
+  const modelName = payload.value;
+  const info = modelMap?.[modelName];
+  const baseName = truncateName(info?.baseModel || modelName);
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <g transform="rotate(-40)">
+        <foreignObject
+          x={-100}
+          y={-4}
+          width={120}
+          height={32}
+          style={{ overflow: "visible" }}
+        >
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 3,
+              fontSize: 9,
+              fontFamily: "var(--font-mono)",
+              color: "var(--text-mid)",
+              whiteSpace: "nowrap",
+              justifyContent: "center",
+            }}
+          >
+            <ProviderIcon provider={info?.provider || ""} size={12} />
+            <span>{baseName}</span>
+            {info?.reasoningLevel && (
+              <span style={{ color: "var(--text-dim)", fontSize: 8 }}>
+                {info.reasoningLevel}
+              </span>
+            )}
+          </div>
+        </foreignObject>
+      </g>
+    </g>
+  );
 }
 
 export default function CostValueChart() {
   const [data, setData] = useState<GitBenchData | null>(null);
+  const [selectedModels, setSelectedModels] = useState<string[]>([]);
 
   useEffect(() => {
-    loadData().then(d => setData(d));
+    loadData().then((d) => {
+      setData(d);
+      const withCost = d.models.filter(
+        (m) => d.model_summaries[m.name]?.total_cost_usd != null
+      );
+      setSelectedModels(withCost.map((m) => m.name));
+    });
   }, []);
 
-  if (!data) return <div className="font-mono text-xs text-[var(--color-text-dim)]">Loading chart...</div>;
-
-  // Build chart data: include only models with valid cost data
-  const chartData: ChartPoint[] = [];
-  for (const m of data.models) {
-    const summary = data.model_summaries[m.name];
-    if (summary && summary.total_cost_usd != null && summary.pass_at_k != null) {
-      chartData.push({
-        x: summary.total_cost_usd,
-        y: Math.round(summary.pass_at_k * 1000) / 10,
-        model: m.name,
-        provider: m.provider,
-        baseModel: m.baseModel,
-        level: m.reasoningLevel || '',
+  const uniqueProviders = useMemo(() => {
+    if (!data) return [];
+    const seen = new Set<string>();
+    const result: { slug: string; color: string }[] = [];
+    for (const name of selectedModels) {
+      const info = data.models.find((m) => m.name === name);
+      if (!info) continue;
+      const slug = info.provider.toLowerCase();
+      if (seen.has(slug)) continue;
+      seen.add(slug);
+      result.push({
+        slug: info.provider,
+        color: getProviderColor(info.provider),
       });
     }
-  }
+    return result;
+  }, [data, selectedModels]);
 
-  // Edge case: no models with cost data
+  if (!data) return <div>Loading...</div>;
+
+  const chartData = selectedModels
+    .map((name) => {
+      const summary = data.model_summaries[name];
+      const info = data.models.find((m) => m.name === name);
+      if (!summary || summary.total_cost_usd == null) return null;
+      return {
+        name,
+        provider: info?.provider || "",
+        baseModel: info?.baseModel || name,
+        reasoningLevel: info?.reasoningLevel,
+        cost: summary.total_cost_usd,
+        passRate: summary.pass_at_k != null ? Math.round(summary.pass_at_k * 1000) / 10 : null,
+      };
+    })
+    .filter((d): d is NonNullable<typeof d> => d !== null)
+    .sort((a, b) => a.cost - b.cost);
+
+  const modelMap = chartData.reduce(
+    (acc, d) => {
+      acc[d.name] = d;
+      return acc;
+    },
+    {} as Record<string, (typeof chartData)[number]>,
+  );
+
+  const chartHeight = 350;
+  const bottomMargin = 60;
+
   if (chartData.length === 0) {
     return (
       <div className="card p-8 text-center">
-        <div className="font-display text-base text-[var(--color-text-dim)] mb-1">No pricing data available</div>
-        <div className="font-mono text-xs text-[var(--color-text-dim)] opacity-60">
+        <div className="font-display text-base text-[var(--text-dim)] mb-1">No pricing data available</div>
+        <div className="font-mono text-xs text-[var(--text-dim)] opacity-60">
           Run benchmarks through OpenRouter to collect cost data for each model.
         </div>
       </div>
     );
   }
 
-  // Compute median X and Y
-  const sortedX = [...chartData].sort((a, b) => a.x - b.x);
-  const sortedY = [...chartData].sort((a, b) => a.y - b.y);
-  const mid = Math.floor(chartData.length / 2);
-  const medianX = chartData.length % 2 === 0
-    ? (sortedX[mid - 1].x + sortedX[mid].x) / 2
-    : sortedX[mid].x;
-  const medianY = chartData.length % 2 === 0
-    ? (sortedY[mid - 1].y + sortedY[mid].y) / 2
-    : sortedY[mid].y;
-
-  // Format cost for display
-  const formatCost = (v: number): string => {
-    if (v < 0.0001) return `$${v.toExponential(1)}`;
-    if (v < 0.01) return `$${v.toFixed(6)}`;
-    return `$${v.toFixed(4)}`;
-  };
-
   return (
-    <div className="card">
-      <ResponsiveContainer width="100%" height={380}>
-        <ScatterChart margin={{ top: 20, right: 20, bottom: 30, left: 20 }}>
-          <CartesianGrid stroke="rgba(255,255,255,0.04)" />
-          <XAxis
-            type="number"
-            dataKey="x"
-            name="Total cost"
-            tick={{ fill: 'var(--text-dim)', fontSize: 11, fontFamily: 'var(--font-mono)' }}
-            tickFormatter={formatCost}
-            axisLine={false}
-            tickLine={false}
-            label={{ value: 'Total cost per full run (USD)', position: 'bottom', offset: 10, fill: 'var(--text-dim)', fontSize: 11, fontFamily: 'var(--font-mono)' }}
-          />
-          <YAxis
-            type="number"
-            dataKey="y"
-            name="Pass rate"
-            domain={[0, 100]}
-            tick={{ fill: 'var(--text-dim)', fontSize: 11, fontFamily: 'var(--font-mono)' }}
-            tickFormatter={(v: number) => `${v}%`}
-            axisLine={false}
-            tickLine={false}
-            label={{ value: 'Pass rate', angle: -90, position: 'left', offset: 0, fill: 'var(--text-dim)', fontSize: 11, fontFamily: 'var(--font-mono)' }}
-          />
-          <ZAxis range={[40, 40]} />
-          <ReferenceLine
-            x={medianX}
-            stroke="var(--color-border-accent)"
-            strokeDasharray="4 4"
-            strokeOpacity={0.5}
-          />
-          <ReferenceLine
-            y={medianY}
-            stroke="var(--color-border-accent)"
-            strokeDasharray="4 4"
-            strokeOpacity={0.5}
-          />
-          <Tooltip
-            contentStyle={{
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.72rem',
-              color: 'var(--text)',
-            }}
-            formatter={(value: any, name: string) => {
-              if (name === 'Total cost') return [formatCost(value), name];
-              if (name === 'Pass rate') return [`${value}%`, name];
-              return [value, name];
-            }}
-            labelFormatter={(label: any, payload: any[]) => {
-              if (payload && payload[0]) return payload[0].payload.model;
-              return '';
-            }}
-          />
-          <Scatter
+    <div>
+      <div className="max-w-xs ml-auto w-full mb-3">
+        <ModelSelector
+          initialSelected={selectedModels}
+          onChange={setSelectedModels}
+        />
+      </div>
+      <div className="card">
+        <ResponsiveContainer width="100%" height={chartHeight}>
+          <BarChart
             data={chartData}
-            fill="#a78bfa"
-            shape={(props: any) => {
-              const { cx, cy, payload } = props;
-              const url = modelLevelPath(payload.provider, payload.baseModel, payload.level);
-              return (
-                <a href={url}>
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={5}
-                    fill="#a78bfa"
-                    opacity={0.75}
-                    className="cursor-pointer hover:opacity-100 transition-opacity"
-                  />
-                </a>
-              );
-            }}
-            isAnimationActive={false}
-          />
-        </ScatterChart>
-      </ResponsiveContainer>
+            layout="horizontal"
+            margin={{ top: 5, right: 20, left: 0, bottom: bottomMargin }}
+          >
+            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+            <XAxis
+              type="category"
+              dataKey="name"
+              tick={(props: any) => (
+                <CustomXAxisTick {...props} modelMap={modelMap} />
+              )}
+              axisLine={false}
+              tickLine={false}
+              interval={0}
+              height={bottomMargin}
+            />
+            <YAxis
+              type="number"
+              tick={{
+                fill: "var(--text-dim)",
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+              }}
+              tickFormatter={formatCost}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Bar
+              dataKey="cost"
+              radius={[4, 4, 0, 0]}
+              barSize={Math.max(
+                12,
+                Math.min(28, 400 / Math.max(1, chartData.length)),
+              )}
+              cursor="pointer"
+              onClick={(entry: any) => {
+                if (entry?.provider && entry?.baseModel && entry?.reasoningLevel) {
+                  window.location.href = modelLevelPath(entry.provider, entry.baseModel, entry.reasoningLevel);
+                }
+              }}
+            >
+              {chartData.map((entry, index) => (
+                <Cell key={index} fill={getProviderColor(entry.provider)} />
+              ))}
+            </Bar>
+            <Tooltip
+              cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null;
+                const entry = modelMap[label];
+                const displayLabel = entry
+                  ? `${entry.provider}/${entry.baseModel}:${entry.reasoningLevel}`
+                  : label;
+                return (
+                  <div
+                    style={{
+                      background: "var(--card)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      fontSize: 12,
+                      fontFamily: "var(--font-mono)",
+                      color: "var(--text-dim)",
+                    }}
+                  >
+                    <div style={{ color: "var(--text)", marginBottom: 2 }}>
+                      {displayLabel}
+                    </div>
+                    <div style={{ color: "var(--text-bright)" }}>
+                      Cost: {formatCost(payload[0].value as number)}
+                    </div>
+                    {entry?.passRate != null && (
+                      <div style={{ color: "var(--text-dim)" }}>
+                        Pass: {entry.passRate}%
+                      </div>
+                    )}
+                  </div>
+                );
+              }}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      {uniqueProviders.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 14,
+            justifyContent: "center",
+            marginTop: 10,
+            fontSize: 10,
+            fontFamily: "var(--font-mono)",
+            color: "var(--text-dim)",
+          }}
+        >
+          {uniqueProviders.map((p) => (
+            <span
+              key={p.slug}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  backgroundColor: p.color,
+                  flexShrink: 0,
+                }}
+              />
+              {p.slug}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

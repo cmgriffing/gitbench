@@ -202,6 +202,7 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
         - models: list of model names
         - benchmarks: list of benchmark names
         - model_summaries: {model: {total_runs, total_fixtures, total_passed, pass_at_k}}
+        - model_runtimes: {model: {total_ms, avg_ms, min_ms, max_ms, fixture_count}}
         - matrix: {model: {benchmark: {pass_at_k, total, passed, avg_similarity}}}
         - fixtures: {model: {benchmark: [{fixture_id, passed, similarity, error}]}}
         - runs_meta: [{timestamp, model, profile, git_sha, benchmark_suite_version, reasoning_level}]
@@ -220,6 +221,7 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
                 "total_fixtures": 0,
                 "total_passed": 0,
                 "benchmarks": {},
+                "durations_ms": [],
             }
 
         model_data[model]["total_runs"] += 1
@@ -259,7 +261,11 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
                     "purpose": score.get("purpose"),
                     "difficulty": score.get("difficulty"),
                     "tags": score.get("tags"),
+                    "duration_ms": score.get("duration_ms"),
                 })
+                # Collect duration for model-level aggregation
+                if score.get("duration_ms") is not None:
+                    model_data[model]["durations_ms"].append(score["duration_ms"])
 
     # Build summaries and matrix
     model_summaries = {}
@@ -313,6 +319,19 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
         if model_cost_count > 0:
             sf["total_cost_usd"] = round(model_cost_sum, 10)
             sf["avg_cost_usd"] = round(model_cost_sum / model_cost_count, 10)
+
+    # Build model runtime summaries
+    model_runtimes: dict[str, dict] = {}
+    for model, data in model_data.items():
+        durations = data.get("durations_ms", [])
+        if durations:
+            model_runtimes[model] = {
+                "total_ms": round(sum(durations), 2),
+                "avg_ms": round(sum(durations) / len(durations), 2),
+                "min_ms": round(min(durations), 2),
+                "max_ms": round(max(durations), 2),
+                "fixture_count": len(durations),
+            }
 
     # Build model list with parsed provider + base model + reasoning level
     model_list = []
@@ -391,6 +410,7 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
 
     # Filter out the "unknown" model from all collections
     model_summaries.pop("unknown", None)
+    model_runtimes.pop("unknown", None)
     matrix.pop("unknown", None)
     fixtures.pop("unknown", None)
     model_list = [m for m in model_list if m["name"] != "unknown"]
@@ -400,6 +420,7 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
         "models": model_list,
         "benchmarks": sorted(benchmarks_set),
         "model_summaries": model_summaries,
+        "model_runtimes": model_runtimes,
         "matrix": matrix,
         "fixtures": fixtures,
         "fixture_index": fixture_index,

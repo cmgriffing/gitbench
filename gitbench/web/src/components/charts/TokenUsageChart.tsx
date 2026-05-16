@@ -16,10 +16,15 @@ import ProviderIcon from "@/components/ProviderIcon";
 import { modelLevelPath } from "@/lib/routes";
 import { getProviderColor } from "@/lib/provider-colors";
 
-/** Truncate a model name for display, preserving end characters. */
 function truncateName(name: string, maxLen = 10): string {
   if (!name || name.length <= maxLen) return name || "";
-  return name.slice(0, maxLen - 1) + "…";
+  return name.slice(0, maxLen - 1) + "\u2026";
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
 }
 
 interface CustomTickProps {
@@ -50,7 +55,6 @@ function CustomXAxisTick(props: CustomTickProps) {
   return (
     <g transform={`translate(${x},${y})`}>
       <g transform="rotate(-40)">
-        {/* Provider icon + model name + level */}
         <foreignObject
           x={-100}
           y={-4}
@@ -85,7 +89,7 @@ function CustomXAxisTick(props: CustomTickProps) {
   );
 }
 
-export default function PassRateBarChart() {
+export default function TokenUsageChart() {
   const [data, setData] = useState<GitBenchData | null>(null);
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
 
@@ -96,7 +100,23 @@ export default function PassRateBarChart() {
     });
   }, []);
 
-  // Compute unique providers for legend (must be before any early return — Rules of Hooks)
+  const modelTokenTotals = useMemo(() => {
+    if (!data) return {} as Record<string, number>;
+    const totals: Record<string, number> = {};
+    for (const modelName of Object.keys(data.fixtures)) {
+      const fixtures = data.fixtures[modelName];
+      if (!fixtures) continue;
+      let sum = 0;
+      for (const fixtureArr of Object.values(fixtures)) {
+        for (const f of fixtureArr) {
+          if (f.total_tokens != null) sum += f.total_tokens;
+        }
+      }
+      totals[modelName] = sum;
+    }
+    return totals;
+  }, [data]);
+
   const uniqueProviders = useMemo(() => {
     if (!data) return [];
     const seen = new Set<string>();
@@ -119,20 +139,17 @@ export default function PassRateBarChart() {
 
   const chartData = selectedModels
     .map((name) => {
-      const summary = data.model_summaries[name];
       const info = data.models.find((m) => m.name === name);
-      if (!summary) return null;
+      const totalTokens = modelTokenTotals[name] ?? 0;
       return {
         name,
         provider: info?.provider || "",
         baseModel: info?.baseModel || name,
         reasoningLevel: info?.reasoningLevel,
-        passRate: Math.round(summary.pass_at_k * 1000) / 10,
-        raw: summary.pass_at_k,
+        tokens: totalTokens,
       };
     })
-    .filter((d): d is NonNullable<typeof d> => d !== null)
-    .sort((a, b) => b.passRate - a.passRate);
+    .sort((a, b) => a.tokens - b.tokens);
 
   const modelMap = chartData.reduce(
     (acc, d) => {
@@ -143,7 +160,19 @@ export default function PassRateBarChart() {
   );
 
   const chartHeight = 350;
-  const bottomMargin = 60; // room for -40° rotated labels below axis
+  const bottomMargin = 60;
+
+  const allZero = chartData.every((d) => d.tokens === 0);
+  if (allZero) {
+    return (
+      <div className="card p-8 text-center">
+        <div className="font-display text-base text-[var(--text-dim)] mb-1">No token data available</div>
+        <div className="font-mono text-xs text-[var(--text-dim)] opacity-60">
+          Token usage data was not collected for these benchmark runs.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -174,18 +203,17 @@ export default function PassRateBarChart() {
             />
             <YAxis
               type="number"
-              domain={[0, 100]}
               tick={{
                 fill: "var(--text-dim)",
                 fontSize: 11,
                 fontFamily: "var(--font-mono)",
               }}
-              tickFormatter={(v: number) => `${v}%`}
+              tickFormatter={formatTokens}
               axisLine={false}
               tickLine={false}
             />
             <Bar
-              dataKey="passRate"
+              dataKey="tokens"
               radius={[4, 4, 0, 0]}
               barSize={Math.max(
                 12,
@@ -226,7 +254,7 @@ export default function PassRateBarChart() {
                       {displayLabel}
                     </div>
                     <div style={{ color: "var(--text-bright)" }}>
-                      Pass Rate: {payload[0].value}%
+                      Tokens: {formatTokens(payload[0].value as number)}
                     </div>
                   </div>
                 );
@@ -235,7 +263,6 @@ export default function PassRateBarChart() {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      {/* Provider legend */}
       {uniqueProviders.length > 0 && (
         <div
           style={{

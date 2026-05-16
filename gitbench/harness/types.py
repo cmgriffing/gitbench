@@ -66,6 +66,7 @@ class Score:
     prompt: str | None = None
     expected: str | None = None
     description: str | None = None
+    duration_ms: float | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -75,6 +76,7 @@ class Score:
             "total_tokens", "cost_usd", "provider_cost_usd",
             "purpose", "difficulty", "tags",
             "prompt", "expected", "description",
+            "duration_ms",
         )
         for field in none_fields:
             if result.get(field) is None:
@@ -84,7 +86,9 @@ class Score:
     @classmethod
     def from_dict(cls, data: dict) -> "Score":
         """Create from dictionary."""
-        return cls(**data)
+        kwargs = dict(data)
+        kwargs.setdefault("duration_ms", None)
+        return cls(**kwargs)
 
 
 @dataclass
@@ -100,7 +104,13 @@ class BenchmarkResult:
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
-        return {
+        non_null_durations = [
+            s.duration_ms
+            for s in self.scores
+            if s.duration_ms is not None
+        ]
+        total_duration_ms = round(sum(non_null_durations), 2) if non_null_durations else None
+        result = {
             "benchmark": self.benchmark,
             "total": self.total,
             "passed": self.passed,
@@ -108,6 +118,9 @@ class BenchmarkResult:
             "scores": [s.to_dict() for s in self.scores],
             "errors": self.errors,
         }
+        if total_duration_ms is not None:
+            result["total_duration_ms"] = total_duration_ms
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "BenchmarkResult":

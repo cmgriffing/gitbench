@@ -1,6 +1,7 @@
 """Benchmark runner — executes benchmarks against a model client."""
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Protocol
 
@@ -201,6 +202,7 @@ class BenchmarkRunner:
         in the returned :class:`Score`.
         """
         executor = None
+        t_start = time.perf_counter()
         try:
             executor, repo_path = benchmark.setup_fixture(fixture)
             diff = benchmark.get_diff(repo_path)
@@ -232,7 +234,7 @@ class BenchmarkRunner:
             return fixture.id, score
         except Exception as exc:
             logger.error("Error processing fixture %s: %s", fixture.id, exc)
-            return fixture.id, Score(
+            score = Score(
                 fixture_id=fixture.id,
                 passed=False,
                 similarity=0.0,
@@ -245,7 +247,11 @@ class BenchmarkRunner:
                 expected=fixture.expected,
                 description=fixture.description,
             )
+            return fixture.id, score
         finally:
+            elapsed = time.perf_counter() - t_start
+            if score is not None:
+                score.duration_ms = round(elapsed * 1000, 2)
             if executor is not None:
                 executor.cleanup()
 

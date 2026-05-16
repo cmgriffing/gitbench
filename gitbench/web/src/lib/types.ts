@@ -47,9 +47,18 @@ export interface FixtureResult {
   output_tokens: number | null;
   total_tokens: number | null;
   cost_usd: number | null;
+  duration_ms: number | null;
   purpose: string | null;
   difficulty: string | null;
   tags: string[] | null;
+}
+
+export interface ModelRuntimeSummary {
+  total_ms: number;
+  avg_ms: number;
+  min_ms: number;
+  max_ms: number;
+  fixture_count: number;
 }
 
 export interface FixtureInfo {
@@ -76,6 +85,7 @@ export interface GitBenchData {
   models: ModelInfo[];
   benchmarks: string[];
   model_summaries: Record<string, ModelSummary>;
+  model_runtimes: Record<string, ModelRuntimeSummary>;
   matrix: Record<string, Record<string, CellData>>;
   fixtures: Record<string, Record<string, FixtureResult[]>>;
   fixture_index: Record<string, FixtureInfo>;
