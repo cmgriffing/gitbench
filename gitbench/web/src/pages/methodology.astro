@@ -35,7 +35,9 @@ import Layout from '../components/Layout.astro';
         <h3 class="text-base font-bold text-[var(--color-text)] mb-2">Similarity Scoring</h3>
         <p>
           Each model output is compared to the expected answer using a fuzzy similarity algorithm
-          (Python's <code class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded">SequenceMatcher</code> from the standard library).
+          (Python's <code class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded has-tooltip" data-tooltip="difflib.SequenceMatcher — a Python standard library algorithm that compares two sequences and returns a similarity ratio. 0 = completely different, 1 = identical.
+
+GitBench uses it to compare model outputs against expected answers." title="difflib.SequenceMatcher — Python's fuzzy string comparison algorithm.">SequenceMatcher</code> from the standard library).
           The similarity score ranges from 0% (completely different) to 100% (exact match).
           A fixture is marked as <strong>passed</strong> when the similarity exceeds the
           fixture's configured threshold (typically 80–90%, depending on the prompt).
@@ -67,8 +69,12 @@ import Layout from '../components/Layout.astro';
       <section>
         <h3 class="text-base font-bold text-[var(--color-text)] mb-2">Model Selection &amp; Run Metadata</h3>
         <p>
-          Models are called through <strong>OpenRouter</strong> (for cloud-hosted models)
-          or a local <strong>Ollama</strong> server. Each run records:
+          Models are called through <strong><span class="has-tooltip" data-tooltip="OpenRouter is a unified API gateway that provides access to many AI models from different providers through a single endpoint.
+
+It tracks usage, costs, and handles rate limiting. GitBench uses it for cloud-hosted model evaluation." title="OpenRouter — unified API gateway for AI model access.">OpenRouter</span></strong> (for cloud-hosted models)
+          or a local <strong><span class="has-tooltip" data-tooltip="Ollama is a tool for running AI models locally on your own hardware.
+
+Models run through Ollama have no API cost tracked (shown as — in the dashboard)." title="Ollama — runs AI models locally on your hardware.">Ollama</span></strong> server. Each run records:
         </p>
         <ul class="list-disc list-inside mt-2 space-y-1 font-mono text-xs">
           <li><code>profile</code> — the runner profile used (e.g., "openrouter")</li>

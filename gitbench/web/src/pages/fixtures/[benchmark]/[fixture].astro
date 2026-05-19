@@ -86,6 +86,14 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
 
   <section class="mt-8">
     <div class="section-label"><span>Model Outputs ({modelOutputs.length})</span></div>
+    <p class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4">
+      All model responses for this fixture, sorted by similarity to the correct answer.
+      <span class="has-tooltip" data-tooltip="PASS = the model's output was similar enough to the expected answer (above the fixture's scoring threshold, typically 80-90%).
+
+FAIL = the output was too different from the expected answer." title="PASS = met similarity threshold. FAIL = below threshold.">PASS</span>
+      means the model's output was close enough to the expected answer. Click any model name to explore its full results.
+      <a href="/methodology#similarity-scoring" class="text-[var(--color-accent)] no-underline text-xs font-mono">Learn more →</a>
+    </p>
     <div class="flex flex-col gap-4">
       {modelOutputs.map(mo => (
         <ModelOutputCard

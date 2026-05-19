@@ -20,41 +20,41 @@ const tagsStr = tags.join(',');
 
 <a
   href={`/fixtures/${encodeURIComponent(benchmark)}/${fixtureId}`}
-  class="no-underline"
+  class="no-underline card fixture-card p-4 cursor-pointer transition-colors hover:border-[var(--color-border-accent)]"
+  data-benchmark={benchmark}
+  data-difficulty={difficulty}
+  data-tags={tagsStr}
 >
-  <div
-    class="card fixture-card p-4 cursor-pointer transition-colors hover:border-[var(--color-border-accent)]"
-    data-benchmark={benchmark}
-    data-difficulty={difficulty}
-    data-tags={tagsStr}
-  >
-    <div class="flex justify-between items-center mb-2">
-      <span class="font-mono text-xs text-[var(--color-text-mid)] font-medium">
-        {fixtureId}
-      </span>
+  <div class="flex justify-between items-center mb-2">
+    <span class="font-mono text-xs text-[var(--color-text-mid)] font-medium">
+      {fixtureId}
+    </span>
+    <span class="has-tooltip" data-tooltip={`${passed ? 'PASS' : 'FAIL'} — the model's answer ${passed ? 'met' : 'failed to meet'} the similarity threshold (typically 80-90%).`} title={`${passed ? 'PASS: met' : 'FAIL: below'} similarity threshold.`}>
       <Badge variant="outline" className={`font-mono text-[0.6rem] ${passColor}`}>
         {passed ? 'PASS' : 'FAIL'}
       </Badge>
-    </div>
-    <div class="flex justify-between items-center">
-      <span class="font-mono text-[0.62rem] text-[var(--color-text-dim)]">
-        {benchmark}
-      </span>
-      <span class="font-mono text-xs font-semibold text-[var(--color-text)]">
-        {similarity}%
-      </span>
-    </div>
-    {difficulty && (
-      <div class="mt-1.5">
-        <Badge variant="secondary" class="font-mono text-[0.58rem] px-1 py-0">
-          {difficulty}
-        </Badge>
-      </div>
-    )}
-    {inputTokens != null && outputTokens != null && (
-      <div class="mt-1.5 font-mono text-[0.58rem] text-[var(--color-text-dim)] opacity-60">
-        {inputTokens}→{outputTokens} tokens
-      </div>
-    )}
+    </span>
   </div>
+  <div class="flex justify-between items-center">
+    <span class="font-mono text-[0.62rem] text-[var(--color-text-dim)]">
+      {benchmark}
+    </span>
+    <span class="font-mono text-xs font-semibold text-[var(--color-text)] has-tooltip" data-tooltip={`Text similarity between the model's output and the correct answer.
+
+${similarity}% similarity. ${passed ? 'Above the pass threshold.' : 'Below the pass threshold.'}`} title={`${similarity}% similarity to expected answer.`}>
+      {similarity}%
+    </span>
+  </div>
+  {difficulty && (
+    <div class="mt-1.5">
+      <Badge variant="secondary" class="font-mono text-[0.58rem] px-1 py-0">
+        {difficulty}
+      </Badge>
+    </div>
+  )}
+  {inputTokens != null && outputTokens != null && (
+    <div class="mt-1.5 font-mono text-[0.58rem] text-[var(--color-text-dim)] opacity-60">
+      {inputTokens}→{outputTokens} tokens
+    </div>
+  )}
 </a>

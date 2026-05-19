@@ -748,6 +748,203 @@ class TestRunCommand:
         assert data["summary"]["total_models"] == 2
 
 
+def _doctor_payload() -> dict:
+    return {
+        "benchmark_suite_version": "0.1.0",
+        "summary": {
+            "total_profiles": 1,
+            "total_models": 1,
+            "total_fixtures": 3,
+            "total_passed": 1,
+            "overall_pass_at_k": 0.3333,
+        },
+        "profiles": [
+            {
+                "profile": "local",
+                "summary": {
+                    "total_models": 1,
+                    "total_fixtures": 3,
+                    "total_passed": 1,
+                    "overall_pass_at_k": 0.3333,
+                },
+                "models": [
+                    {
+                        "model": "mock",
+                        "summary": {
+                            "total_benchmarks": 1,
+                            "total_fixtures": 3,
+                            "total_passed": 1,
+                            "overall_pass_at_k": 0.3333,
+                        },
+                        "results": [
+                            {
+                                "benchmark": "commit_messages",
+                                "total": 3,
+                                "passed": 1,
+                                "pass_at_k": 0.3333,
+                                "errors": 2,
+                                "scores": [
+                                    {
+                                        "fixture_id": "f001",
+                                        "passed": True,
+                                        "similarity": 1.0,
+                                        "model_output": "ok",
+                                        "error": None,
+                                    },
+                                    {
+                                        "fixture_id": "f002",
+                                        "passed": False,
+                                        "similarity": 0.0,
+                                        "model_output": "",
+                                        "error": "APITimeoutError",
+                                    },
+                                    {
+                                        "fixture_id": "f003",
+                                        "passed": False,
+                                        "similarity": 0.0,
+                                        "model_output": "bad",
+                                        "error": "expected got mismatch",
+                                    },
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+class TestDoctorCommand:
+    """Tests for the doctor command."""
+
+    def test_dry_run_reports_plan_without_model_calls_or_writes(self, runner, tmp_path):
+        result_path = tmp_path / "results-v0.1.0.json"
+        result_path.write_text(json.dumps(_doctor_payload()))
+
+        with patch("gitbench.cli.get_model_client") as get_model_client:
+            result = runner.invoke(
+                cli,
+                ["doctor", str(result_path), "--dry-run"],
+            )
+
+        assert result.exit_code == 0
+        assert "Doctorable failed fixtures: 1" in result.output
+        assert "Affected models: 1" in result.output
+        assert "APITimeoutError: 1" in result.output
+        get_model_client.assert_not_called()
+
+    def test_latest_scans_all_default_result_files(self, runner, tmp_path):
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            first = Path("gitbench-results/20260101T000000Z/results-v0.1.0.json")
+            second = Path("gitbench-results/20260102T000000Z/results-v0.1.0.json")
+            first.parent.mkdir(parents=True)
+            second.parent.mkdir(parents=True)
+            first.write_text(json.dumps(_doctor_payload()))
+            second.write_text(json.dumps(_doctor_payload()))
+
+            result = runner.invoke(cli, ["doctor", "--latest", "--dry-run"])
+
+        assert result.exit_code == 0
+        assert "Inputs: 2" in result.output
+        assert "20260101T000000Z" in result.output
+        assert "20260102T000000Z" in result.output
+        assert "Total doctorable failed fixtures: 2" in result.output
+
+    def test_doctor_updates_input_file_by_default(self, runner, tmp_path):
+        from gitbench.harness.types import BenchmarkResult, Score
+
+        rerun_result = BenchmarkResult(
+            benchmark="commit_messages",
+            total=1,
+            passed=1,
+            pass_at_k=1.0,
+            errors=0,
+            scores=[
+                Score(
+                    fixture_id="f002",
+                    passed=True,
+                    similarity=1.0,
+                    model_output="fixed",
+                    error=None,
+                )
+            ],
+        )
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result_path = Path("results-v0.1.0.json")
+            result_path.write_text(json.dumps(_doctor_payload()))
+
+            config = {"models": {"local": {"models": ["mock"]}}}
+            Path("gitbench.json").write_text(json.dumps(config))
+
+            with patch("gitbench.cli._benchmark_registry", {"commit_messages": object()}), \
+                 patch("gitbench.harness.runner.BenchmarkRunner.run_benchmark", return_value=rerun_result) as run_benchmark:
+                result = runner.invoke(
+                    cli,
+                    [
+                        "doctor",
+                        str(result_path),
+                    ],
+                )
+
+        assert result.exit_code == 0
+        run_benchmark.assert_called_once()
+        assert run_benchmark.call_args.kwargs["selected_fixture_ids"] == ["f002"]
+        input_path = next(tmp_path.glob("*/results-v0.1.0.json"))
+
+        fixed = json.loads(input_path.read_text())
+        scores = fixed["profiles"][0]["models"][0]["results"][0]["scores"]
+        assert scores[1]["model_output"] == "fixed"
+        assert scores[2]["error"] == "expected got mismatch"
+        assert fixed["summary"]["total_passed"] == 2
+
+    def test_output_writes_explicit_copy_when_requested(self, runner, tmp_path):
+        from gitbench.harness.types import BenchmarkResult, Score
+
+        rerun_result = BenchmarkResult(
+            benchmark="commit_messages",
+            total=1,
+            passed=1,
+            pass_at_k=1.0,
+            errors=0,
+            scores=[
+                Score(
+                    fixture_id="f002",
+                    passed=True,
+                    similarity=1.0,
+                    model_output="fixed",
+                    error=None,
+                )
+            ],
+        )
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result_path = Path("results-v0.1.0.json")
+            output_path = Path("fixed.json")
+            original_payload = _doctor_payload()
+            result_path.write_text(json.dumps(original_payload))
+            Path("gitbench.json").write_text(json.dumps({"models": {"local": {"models": ["mock"]}}}))
+
+            with patch("gitbench.cli._benchmark_registry", {"commit_messages": object()}), \
+                 patch("gitbench.harness.runner.BenchmarkRunner.run_benchmark", return_value=rerun_result):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "doctor",
+                        str(result_path),
+                        "--output",
+                        str(output_path),
+                    ],
+                )
+
+        assert result.exit_code == 0
+        fixed_path = next(tmp_path.glob("*/fixed.json"))
+        input_path = fixed_path.parent / "results-v0.1.0.json"
+        assert json.loads(input_path.read_text()) == original_payload
+        assert json.loads(fixed_path.read_text())["summary"]["total_passed"] == 2
+
+
 class TtyStringIO(StringIO):
     """StringIO that behaves like an interactive terminal."""
 
@@ -1481,3 +1678,76 @@ class TestRunnerReasoningLevel:
         )
         _, score = runner._run_fixture(FakeBench(), fixture)
         assert score.reasoning_level is None
+
+
+class TestRunnerSelectedFixtures:
+    """Tests for internal selected fixture execution."""
+
+    def test_run_benchmark_executes_only_selected_fixtures_in_order(self):
+        from gitbench.harness.model import MockModelClient
+        from gitbench.harness.runner import BenchmarkRunner
+        from gitbench.harness.types import Fixture, Score
+
+        calls = []
+
+        class FakeBench:
+            def load_fixtures(self):
+                return [
+                    Fixture("f001", "one", [], "p1", "ok", {}),
+                    Fixture("f002", "two", [], "p2", "ok", {}),
+                    Fixture("f003", "three", [], "p3", "ok", {}),
+                ]
+
+            def setup_fixture(self, fixture):
+                calls.append(("setup", fixture.id))
+
+                class Executor:
+                    def cleanup(self):
+                        calls.append(("cleanup", fixture.id))
+
+                return Executor(), "/tmp/repo"
+
+            def get_diff(self, repo_path):
+                calls.append(("diff", repo_path))
+                return "diff"
+
+            def format_prompt(self, fixture, diff):
+                calls.append(("prompt", fixture.id, diff))
+                return fixture.prompt
+
+            def score(self, fixture, output, repo_path=None):
+                calls.append(("score", fixture.id, output, repo_path))
+                return Score(
+                    fixture_id=fixture.id,
+                    passed=True,
+                    similarity=1.0,
+                    model_output=output,
+                )
+
+        runner = BenchmarkRunner({"fake": FakeBench}, MockModelClient(response="ok"))
+        result = runner.run_benchmark("fake", selected_fixture_ids=["f003", "f001"])
+
+        assert [score.fixture_id for score in result.scores] == ["f003", "f001"]
+        assert [call for call in calls if call[0] == "setup"] == [
+            ("setup", "f003"),
+            ("setup", "f001"),
+        ]
+        assert result.total == 2
+        assert result.passed == 2
+
+    def test_run_benchmark_fails_before_execution_for_missing_selected_fixture(self):
+        from gitbench.harness.model import MockModelClient
+        from gitbench.harness.runner import BenchmarkRunner
+        from gitbench.harness.types import Fixture
+
+        class FakeBench:
+            def load_fixtures(self):
+                return [Fixture("f001", "one", [], "p1", "ok", {})]
+
+            def setup_fixture(self, fixture):
+                raise AssertionError("setup should not run")
+
+        runner = BenchmarkRunner({"fake": FakeBench}, MockModelClient())
+
+        with pytest.raises(ValueError, match="f999"):
+            runner.run_benchmark("fake", selected_fixture_ids=["f999"])

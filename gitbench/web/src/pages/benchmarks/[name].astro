@@ -16,13 +16,12 @@ export function getStaticPaths() {
 const { benchName, data } = Astro.props as { benchName: string; data: GitBenchData };
 
 // Collect all fixtures in this benchmark
-const fixtureIds = Object.values(data.fixture_index)
-  .filter(fi => fi.benchmark === benchName)
-  .map(fi => fi.id);
+const fixtureKeys = Object.keys(data.fixture_index)
+  .filter(k => data.fixture_index[k].benchmark === benchName);
 
 // Tag breakdown
 const tagCounts: Record<string, number> = {};
-for (const fid of fixtureIds) {
+for (const fid of fixtureKeys) {
   const fi = data.fixture_index[fid];
   for (const t of fi?.tags || []) {
     tagCounts[t] = (tagCounts[t] || 0) + 1;
@@ -35,12 +34,17 @@ for (const fid of fixtureIds) {
     <div class="font-mono text-[0.68rem] text-[var(--color-text-dim)] mb-1">Benchmark</div>
     <div class="text-lg font-semibold">{benchName}</div>
     <div class="font-mono text-[0.7rem] text-[var(--color-text-dim)] mt-2">
-      {fixtureIds.length} fixtures
+      {fixtureKeys.length} fixtures
     </div>
   </div>
 
   <section class="mb-10">
     <div class="section-label"><span>Model Leaderboard</span></div>
+    <p class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4">
+      Models ranked by pass rate on <strong class="text-[var(--color-text)]">{benchName}</strong> specifically.
+      A model that dominates overall might rank lower here — this reveals each model's true strengths and weaknesses per skill.
+      <a href="/compare" class="text-[var(--color-accent)] no-underline text-xs font-mono">Compare models side-by-side →</a>
+    </p>
     <PassRateBarChart client:load />
   </section>
 
@@ -61,27 +65,47 @@ for (const fid of fixtureIds) {
 
   <section>
     <div class="section-label"><span>Per-Fixture Comparison</span></div>
+    <p class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4">
+      Each row is one test fixture, each column is one model. Percentages show how similar the model's output was to the correct answer.
+      <span class="has-tooltip" data-tooltip="Green = the model's answer passed the similarity threshold (typically 80-90%). Red = it didn't.
+
+Click any fixture ID to see the full prompt and all model responses side-by-side." title="Green = passed, red = failed. Click fixture ID for full details.">Green cells passed, red cells failed.</span>
+      Click any fixture to drill into the full prompt and all model responses.
+    </p>
     <div class="card overflow-x-auto p-5">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Fixture</th>
-            <th>Difficulty</th>
+            <th><span class="has-tooltip" data-tooltip="The fixture identifier. Click to see the full prompt text, correct answer, and every model's response." title="Click to see the full fixture prompt and all model responses.">Fixture</span></th>
+            <th><span class="has-tooltip" data-tooltip="Complexity of this fixture.
+
+trivial = basic command recall.
+easy = single-step operation.
+medium = multi-step workflow.
+hard = complex with edge cases.
+expert = rare Git operations." title="Fixture complexity: trivial/easy/medium/hard/expert.">Difficulty</span></th>
             {data.models.map(m => <th>{m.name}</th>)}
           </tr>
         </thead>
         <tbody>
-          {fixtureIds.map(fid => {
+          {fixtureKeys.map(fid => {
             const fi = data.fixture_index[fid];
+            const shortId = fi.id;
             return (
               <tr>
                 <td>
-                  <a href={`/fixtures/${encodeURIComponent(benchName)}/${fid}`} class="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-[var(--color-text-mid)] border border-[var(--color-border)] no-underline">
-                    {fid}
+                  <a href={`/fixtures/${encodeURIComponent(benchName)}/${shortId}`} class="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-[var(--color-text-mid)] border border-[var(--color-border)] no-underline">
+                    {shortId}
                   </a>
                 </td>
                 <td class="font-mono text-[0.68rem] text-[var(--color-text-dim)]">
-                  {fi?.difficulty || '—'}
+                  <span class="has-tooltip" data-tooltip="Complexity level for this fixture.
+
+trivial = basic command recall
+easy = single-step operations
+medium = multi-step workflows
+hard = complex scenarios
+expert = rare Git operations" title="Fixture complexity: {fi?.difficulty || 'unknown'}.">{fi?.difficulty || '—'}</span>
                 </td>
                 {data.models.map(m => {
                   const results = data.fixtures[m.name]?.[benchName] || [];

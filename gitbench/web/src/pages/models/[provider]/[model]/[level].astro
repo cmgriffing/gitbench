@@ -18,12 +18,12 @@ export function getStaticPaths() {
         params: {
           provider: g.provider,
           model: g.baseModel,
-          level: l.level || '',
+          level: l.level || 'default',
         },
         props: {
           provider: g.provider,
           baseModel: g.baseModel,
-          level: l.level || '',
+          level: l.level || 'default',
           modelName: l.modelName,
           group: g,
           data,
@@ -73,6 +73,8 @@ for (const fid in data.fixture_index) {
   for (const t of fi.tags) allTags.add(t);
 }
 
+const DIFF_ORDER: Record<string, number> = { trivial: 0, easy: 1, medium: 2, hard: 3, expert: 4 };
+
 const passCls = summary.pass_at_k >= 0.8 ? 'pass' : summary.pass_at_k < 0.5 ? 'fail' : 'warn';
 const passColor = summary.pass_at_k >= 0.8
   ? 'bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]'
@@ -81,13 +83,15 @@ const passColor = summary.pass_at_k >= 0.8
     : 'bg-[var(--color-warn-bg)] text-[var(--color-warn)] border-[var(--color-warn-border)]';
 
 // Compute total tokens and cost
-let totalTokens = 0;
+let totalInputTokens = 0;
+let totalOutputTokens = 0;
 let totalCost = 0;
 let hasCost = false;
 for (const bench of data.benchmarks) {
   const results = data.fixtures[modelName]?.[bench] || [];
   for (const r of results) {
-    totalTokens += (r.total_tokens || 0);
+    totalInputTokens += (r.input_tokens || 0);
+    totalOutputTokens += (r.output_tokens || 0);
     if (r.cost_usd != null) {
       totalCost += r.cost_usd;
       hasCost = true;
@@ -102,14 +106,14 @@ for (const bench of data.benchmarks) {
     <ProviderIcon provider={provider} size={24} client:load />
     <div>
       <div class="text-xs font-mono text-[var(--color-text-dim)]">{providerName} / {baseModel}</div>
-      <h1 class="text-xl font-bold text-[var(--color-text)]">{level || 'default'}</h1>
+      <h1 class="text-xl font-bold text-[var(--color-text)]">{level}</h1>
     </div>
   </div>
 
   <!-- Reasoning level tab bar -->
   <div class="flex gap-1.5 flex-wrap mb-6">
     {group.levels.map(l => {
-      const lvl = l.level || '';
+      const lvl = l.level || 'default';
       const isCurrent = lvl === level;
       const href = modelLevelPath(provider, baseModel, lvl);
       return (
@@ -142,7 +146,7 @@ for (const bench of data.benchmarks) {
         </span>
       </div>
       <div class="font-mono text-[0.68rem] text-[var(--color-text-dim)] opacity-60 mt-1">
-        {totalTokens > 0 && <span class="mr-3">{totalTokens.toLocaleString()} tokens</span>}
+        {(totalInputTokens > 0 || totalOutputTokens > 0) && <span class="mr-3">{totalInputTokens.toLocaleString()} in / {totalOutputTokens.toLocaleString()} out tokens</span>}
         {hasCost && <span>${totalCost.toFixed(8)}</span>}
       </div>
     </div>
@@ -157,20 +161,42 @@ for (const bench of data.benchmarks) {
   <section>
     <div class="section-label"><span>Fixture Gallery ({allFixtures.length})</span></div>
 
+    <p class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4">
+      Each card represents one test fixture — a single Git task this model was asked to complete.
+      <span class="has-tooltip" data-tooltip="PASS means the model's output was similar enough to the correct answer (above the scoring threshold, typically 80-90%).
+
+FAIL means the output was too different from what was expected." title="PASS = similar enough to correct answer. FAIL = too different.">PASS/FAIL</span>
+      is determined by fuzzy similarity to the expected answer. Use the filters below to find patterns — for example,
+      filter to <em>expert</em> difficulty to see where this model struggles most.
+      <a href="/methodology#similarity-scoring" class="text-[var(--color-accent)] no-underline text-xs font-mono">Learn more →</a>
+    </p>
+
     <!-- Filter controls -->
     <div id="filter-bar" class="flex gap-1.5 flex-wrap mb-4 items-center">
-      <select id="filter-bench" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
-        <option value="">All benchmarks</option>
-        {benchmarkList.map(b => <option value={b}>{b}</option>)}
-      </select>
-      <select id="filter-diff" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
-        <option value="">All difficulties</option>
-        {Array.from(diffs).sort().map(d => <option value={d}>{d}</option>)}
-      </select>
-      <select id="filter-tag" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
-        <option value="">All tags</option>
-        {Array.from(allTags).sort().map(t => <option value={t}>{t}</option>)}
-      </select>
+      <span class="has-tooltip" data-tooltip="Filter fixtures to only show results from a specific benchmark category." title="Filter by benchmark category.">
+        <select id="filter-bench" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
+          <option value="">All benchmarks</option>
+          {benchmarkList.map(b => <option value={b}>{b}</option>)}
+        </select>
+      </span>
+      <span class="has-tooltip" data-tooltip="Filter by fixture difficulty.
+
+trivial = basic command recall.
+easy = single-step operations.
+medium = multi-step workflows.
+hard = complex scenarios with edge cases.
+expert = rare Git operations." title="Filter by difficulty: trivial/easy/medium/hard/expert.">
+        <select id="filter-diff" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
+          <option value="">All difficulties</option>
+          {Array.from(diffs).sort((a, b) => (DIFF_ORDER[a] ?? 99) - (DIFF_ORDER[b] ?? 99) || a.localeCompare(b)).map(d => <option value={d}>{d}</option>)}
+        </select>
+      </span>
+      <span class="has-tooltip" data-tooltip="Filter fixtures by tag. Tags describe which Git concepts each fixture tests (e.g., 'detached-head', 'restore', 'branching')." title="Filter fixtures by tag (Git concept).">
+        <select id="filter-tag" class="bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-2.5 py-1.5 font-mono text-[0.68rem]">
+          <option value="">All tags</option>
+          {Array.from(allTags).sort().map(t => <option value={t}>{t}</option>)}
+        </select>
+      </span>
       <button onclick="resetFilters()" class="bg-transparent border border-[var(--color-border)] text-[var(--color-text-dim)] rounded-md px-2.5 py-1.5 font-mono text-[0.65rem] cursor-pointer">
         Reset
       </button>
@@ -178,7 +204,7 @@ for (const bench of data.benchmarks) {
 
     <div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3" id="fixture-gallery">
       {allFixtures.map(fx => {
-        const fi = data.fixture_index[fx.fixture_id];
+        const fi = data.fixture_index[`${fx.benchmark}/${fx.fixture_id}`];
         const simPct = Math.round(fx.similarity * 1000) / 10;
         return (
           <FixtureCard
@@ -199,11 +225,11 @@ for (const bench of data.benchmarks) {
 
 <script>
   function applyFilters() {
-    const bench = (document.getElementById('filter-bench') as HTMLSelectElement)?.value || '';
-    const diff = (document.getElementById('filter-diff') as HTMLSelectElement)?.value || '';
-    const tag = (document.getElementById('filter-tag') as HTMLSelectElement)?.value || '';
+    const bench = document.getElementById('filter-bench')?.value || '';
+    const diff = document.getElementById('filter-diff')?.value || '';
+    const tag = document.getElementById('filter-tag')?.value || '';
     const cards = document.querySelectorAll('.fixture-card');
-    cards.forEach((card: any) => {
+    cards.forEach(function(card) {
       const cBench = card.dataset.benchmark || '';
       const cDiff = card.dataset.difficulty || '';
       const cTags = card.dataset.tags || '';
@@ -215,7 +241,7 @@ for (const bench of data.benchmarks) {
   }
   function resetFilters() {
     ['filter-bench', 'filter-diff', 'filter-tag'].forEach(id => {
-      const el = document.getElementById(id) as HTMLSelectElement;
+      const el = document.getElementById(id);
       if (el) el.value = '';
     });
     applyFilters();

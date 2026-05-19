@@ -34,6 +34,16 @@ const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
     </div>
   </div>
 
+  <p class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-6">
+    This model is available at multiple <span class="has-tooltip" data-tooltip="Controls how much compute the model spends thinking before answering.
+
+low = faster, cheaper, less thorough.
+high = slower, costlier, more accurate.
+default = the model's standard behavior." title="Reasoning effort level.">reasoning effort levels</span>.
+    Each card below shows the pass rate, fixtures completed, and cost for one level.
+    Click a card to explore fixture-by-fixture results for that configuration.
+  </p>
+
   <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
     {group.levels.map(l => {
       const passRate = Math.round(l.pass_at_k * 1000) / 10;
@@ -45,7 +55,7 @@ const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
           ? 'bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]'
           : 'bg-[var(--color-warn-bg)] text-[var(--color-warn)] border-[var(--color-warn-border)]';
       const levelLabel = l.level || 'default';
-      const href = modelLevelPath(provider, baseModel, l.level || '');
+      const href = modelLevelPath(provider, baseModel, l.level || 'default');
       const summary = data.model_summaries[l.modelName];
 
       return (

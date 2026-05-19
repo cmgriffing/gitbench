@@ -22,6 +22,14 @@ from gitbench.harness.runner import BenchmarkRunner, RunProgress
 from gitbench.harness.reasoning import validate_model_list
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
 from gitbench.render import aggregate_runs, _run_sort_key
+from gitbench.result_doctoring import (
+    build_rerun_plan,
+    find_latest_result_files,
+    format_dry_run_summary,
+    load_result_payload,
+    replace_scores_and_recompute,
+    write_result_payload,
+)
 from gitbench.ui.display import RichProgressDisplay
 from gitbench.version import BENCHMARK_SUITE_VERSION, RESULT_SCHEMA_VERSION
 
@@ -423,10 +431,160 @@ def stamp_benchmark_suite_version(payload: dict | list) -> dict | list:
     return payload
 
 
+def _resolve_doctor_profile(config: dict, profile_name: str, model_name: str) -> dict:
+    """Resolve the profile/model pair needed by doctor before rerunning."""
+    if not profile_name:
+        raise click.ClickException(
+            f"Cannot resolve model '{model_name}' because the result has no profile"
+        )
+
+    try:
+        profile_conf = resolve_profile(config, profile_name)
+    except SystemExit as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if model_name not in profile_conf.get("models", []):
+        raise click.ClickException(
+            f"Model '{model_name}' is not configured in profile '{profile_name}'"
+        )
+
+    api_key_env = profile_conf.get("_api_key_env")
+    if not model_name.startswith("mock") and api_key_env and not profile_conf.get("api_key"):
+        raise click.ClickException(
+            f"Environment variable {api_key_env} is not set "
+            f"(required by profile '{profile_name}')"
+        )
+
+    return profile_conf
+
+
+def _validate_doctor_targets(config: dict, plan) -> dict[tuple[str, str], dict]:
+    """Validate and cache config profiles for every doctor target."""
+    resolved: dict[tuple[str, str], dict] = {}
+    for target in plan.targets:
+        key = (target.profile, target.model)
+        if key not in resolved:
+            resolved[key] = _resolve_doctor_profile(
+                config,
+                target.profile,
+                target.model,
+            )
+    return resolved
+
+
+def _doctor_one_file(
+    input_path: Path,
+    *,
+    output_path: Path | None,
+) -> tuple[Path, int]:
+    """Doctor one result file and return output path plus repaired fixture count."""
+    payload = load_result_payload(input_path)
+    plan = build_rerun_plan(payload)
+    if plan.doctorable_count == 0:
+        return input_path, 0
+
+    config = load_config()
+    resolved_profiles = _validate_doctor_targets(config, plan)
+
+    global _benchmark_registry
+    if not _benchmark_registry:
+        _benchmark_registry = discover_benchmarks()
+
+    for target in plan.targets:
+        profile_conf = resolved_profiles[(target.profile, target.model)]
+        model_client = get_model_client(
+            target.model,
+            timeout=_effective_timeout(profile_conf, None),
+            retry_count=_effective_retry_count(profile_conf, None),
+            base_url=profile_conf.get("base_url"),
+            api_key=profile_conf.get("api_key"),
+            provider=profile_conf.get("provider"),
+        )
+        runner = BenchmarkRunner(_benchmark_registry, model_client)
+        result = runner.run_benchmark(
+            target.benchmark,
+            selected_fixture_ids=list(target.fixture_ids),
+            fixture_workers=1,
+            progress=None,
+            progress_model_name=target.model,
+        )
+        replace_scores_and_recompute(payload, target, result.to_dict())
+
+    final_output_path = output_path or input_path
+    write_result_payload(final_output_path, payload)
+    return final_output_path, plan.doctorable_count
+
+
 @click.group()
 def cli():
     """GitBench: Benchmark harness for evaluating LLM-generated git commit messages."""
     pass
+
+
+@cli.command("doctor")
+@click.argument("result_file", required=False, type=click.Path(exists=True))
+@click.option(
+    "--latest",
+    is_flag=True,
+    help="Doctor every active JSON result file under gitbench-results/.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Print the doctor plan without model calls or file writes.",
+)
+@click.option(
+    "--output",
+    "-o",
+    "output_path",
+    type=click.Path(),
+    default=None,
+    help="Path to write repaired JSON. Defaults to updating the input file.",
+)
+def doctor(result_file: str | None, latest: bool, dry_run: bool, output_path: str | None):
+    """Repair an existing result file by rerunning doctorable failures."""
+    if latest and result_file:
+        raise click.ClickException("Use either RESULT_FILE or --latest, not both.")
+    if not latest and not result_file:
+        raise click.ClickException("Provide RESULT_FILE or use --latest.")
+
+    input_paths = find_latest_result_files() if latest else [Path(result_file)]
+    if not input_paths:
+        raise click.ClickException("No result file found under gitbench-results")
+
+    if output_path and len(input_paths) > 1:
+        raise click.ClickException("--output can only be used with a single input file.")
+
+    if dry_run:
+        total_doctorable = 0
+        click.echo(f"Inputs: {len(input_paths)}")
+        for input_path in input_paths:
+            payload = load_result_payload(input_path)
+            plan = build_rerun_plan(payload)
+            total_doctorable += plan.doctorable_count
+            click.echo(f"\nInput: {input_path}")
+            click.echo(format_dry_run_summary(plan))
+        click.echo(f"\nTotal doctorable failed fixtures: {total_doctorable}")
+        return
+
+    repaired_files = 0
+    repaired_fixtures = 0
+    for input_path in input_paths:
+        written_path, count = _doctor_one_file(
+            input_path,
+            output_path=Path(output_path) if output_path else None,
+        )
+        if count == 0:
+            click.echo(f"No doctorable failures found in: {input_path}")
+            continue
+        repaired_files += 1
+        repaired_fixtures += count
+        click.echo(f"Doctored results written to: {written_path}")
+
+    click.echo(
+        f"Doctor complete: repaired {repaired_fixtures} fixture(s) "
+        f"across {repaired_files} file(s)."
+    )
 
 
 @cli.command()

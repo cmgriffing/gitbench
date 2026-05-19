@@ -71,7 +71,7 @@ export default function CostValueChart() {
         </div>
       ) : (
         <>
-          <div className="card">
+          <div className="card" title="Total API cost (USD) to evaluate each model across all 204 fixtures. — means local/Ollama (no cost tracked).">
             <ResponsiveContainer width="100%" height={350}>
               <BarChart
                 data={chartData}
@@ -138,6 +138,11 @@ export default function CostValueChart() {
                             {effort.modelName === entry.representativeEffort.modelName ? " (lowest cost)" : ""}
                           </div>
                         ))}
+                        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", margin: "6px 0" }} />
+                        <div style={{ color: "var(--text-dim)", fontSize: 10, lineHeight: 1.4 }}>
+                          Total API cost (USD) across all 204 fixtures.
+                          — means local/Ollama (no cost tracked).
+                        </div>
                       </div>
                     );
                   }}

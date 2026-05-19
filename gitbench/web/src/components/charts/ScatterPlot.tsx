@@ -87,7 +87,7 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
         </label>
       </div>
 
-      <div className="card mb-4">
+      <div className="card mb-4" title="Per-fixture similarity comparison between two models. Each dot = one fixture. Green = both passed, red = both failed, orange = disagreement.">
         <ResponsiveContainer width="100%" height={340}>
           <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
             <CartesianGrid stroke="rgba(255,255,255,0.04)" />
@@ -115,15 +115,34 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
             />
             <ZAxis range={[30, 30]} />
             <Tooltip
-              contentStyle={{
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.72rem',
-                color: 'var(--text)',
+              content={({ active, payload, label }) => {
+                if (!active || !payload || !payload.length) return null;
+                const d = payload[0]?.payload;
+                const aName = a || '';
+                const bName = b || '';
+                return (
+                  <div style={{
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.72rem',
+                    color: 'var(--text)',
+                  }}>
+                    <div style={{ marginBottom: 4, color: 'var(--text-dim)' }}>
+                      {d?.fixture || label}
+                    </div>
+                    <div>{aName}: {d?.x}%</div>
+                    <div>{bName}: {d?.y}%</div>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', margin: '6px 0' }} />
+                    <div style={{ color: 'var(--text-dim)', fontSize: 10, lineHeight: 1.4 }}>
+                      Green = both passed. Red = both failed.<br/>
+                      Orange = disagreement (one passed).
+                    </div>
+                  </div>
+                );
               }}
-              formatter={(value: number, name: string) => [`${value}%`, name]}
             />
             <Scatter
               data={scatterData}

@@ -56,7 +56,7 @@ export default function TimeSeriesChart() {
           onChange={setSelectedModels}
         />
       </div>
-      <div className="card">
+      <div className="card" title="Pass rate over calendar time. Each point = a benchmark run on that date. Changes may reflect model updates or benchmark suite changes.">
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
             <CartesianGrid stroke="rgba(255,255,255,0.04)" />
@@ -74,15 +74,34 @@ export default function TimeSeriesChart() {
               tickLine={false}
             />
             <Tooltip
-              contentStyle={{
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.75rem',
-                color: 'var(--text)',
+              content={({ active, payload, label }) => {
+                if (!active || !payload || !payload.length) return null;
+                return (
+                  <div style={{
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    padding: '8px 12px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.75rem',
+                    color: 'var(--text)',
+                  }}>
+                    <div style={{ marginBottom: 4, color: 'var(--text-dim)', fontSize: '0.7rem' }}>
+                      {label}
+                    </div>
+                    {payload.map((p: any) => (
+                      <div key={p.dataKey} style={{ color: p.color, marginBottom: 1 }}>
+                        {p.dataKey}: {p.value}%
+                      </div>
+                    ))}
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', margin: '6px 0' }} />
+                    <div style={{ color: 'var(--text-dim)', fontSize: 10, lineHeight: 1.4 }}>
+                      Pass rate on this date. Changes may reflect<br/>
+                      model updates or benchmark suite changes.
+                    </div>
+                  </div>
+                );
               }}
-              formatter={(value: number) => [`${value}%`, '']}
             />
             <Legend
               wrapperStyle={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-dim)' }}

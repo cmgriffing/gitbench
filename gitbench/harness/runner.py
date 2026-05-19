@@ -49,6 +49,7 @@ class BenchmarkRunner:
         benchmark_name: str,
         *,
         fixture_workers: int = 1,
+        selected_fixture_ids: list[str] | None = None,
         progress: RunProgress | None = None,
         progress_model_name: str | None = None,
     ) -> BenchmarkResult:
@@ -81,6 +82,20 @@ class BenchmarkRunner:
         logger.debug("Loading fixtures for %s ...", benchmark_name)
         fixtures = benchmark.load_fixtures()
         logger.debug("Loaded %d fixtures", len(fixtures))
+
+        if selected_fixture_ids is not None:
+            fixture_by_id = {fixture.id: fixture for fixture in fixtures}
+            missing = [
+                fixture_id
+                for fixture_id in selected_fixture_ids
+                if fixture_id not in fixture_by_id
+            ]
+            if missing:
+                raise ValueError(
+                    f"Unknown fixture id(s) for benchmark {benchmark_name}: "
+                    f"{', '.join(missing)}"
+                )
+            fixtures = [fixture_by_id[fixture_id] for fixture_id in selected_fixture_ids]
 
         if progress:
             progress.benchmark_started(model_name, benchmark_name, len(fixtures))
@@ -202,6 +217,7 @@ class BenchmarkRunner:
         in the returned :class:`Score`.
         """
         executor = None
+        score = None
         t_start = time.perf_counter()
         try:
             executor, repo_path = benchmark.setup_fixture(fixture)

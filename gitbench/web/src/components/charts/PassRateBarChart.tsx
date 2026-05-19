@@ -54,7 +54,7 @@ export default function PassRateBarChart() {
       <div className="max-w-xs ml-auto w-full mb-3">
         <ModelSelector value={selectedGroups} onChange={setSelectedGroups} />
       </div>
-      <div className="card">
+      <div className="card" title="Pass rate percentages for each model across all 204 Git fixtures. Higher bars = better Git skills.">
         <ResponsiveContainer width="100%" height={350}>
           <BarChart
             data={chartData}
@@ -120,6 +120,11 @@ export default function PassRateBarChart() {
                         {effort.modelName === entry.representativeEffort.modelName ? " (best)" : ""}
                       </div>
                     ))}
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", margin: "6px 0" }} />
+                    <div style={{ color: "var(--text-dim)", fontSize: 10, lineHeight: 1.4 }}>
+                      Pass rate = % of 204 Git fixtures answered correctly.
+                      Higher reasoning levels typically score better.
+                    </div>
                   </div>
                 );
               }}

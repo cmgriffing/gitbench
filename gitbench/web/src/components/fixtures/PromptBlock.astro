@@ -11,7 +11,7 @@ const { text } = Astro.props;
 
 <div class="mb-6">
   <div class="flex justify-between items-center mb-2.5">
-    <span class="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--color-accent)] opacity-75">
+    <span class="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--color-accent)] opacity-75 has-tooltip" data-tooltip="The exact text sent to the model. Models receive only this prompt — no additional context or instructions." title="The exact text sent to the model.">
       Prompt
     </span>
     <Button

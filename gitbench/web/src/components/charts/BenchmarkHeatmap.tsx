@@ -72,13 +72,15 @@ export default function BenchmarkHeatmap() {
                   const cell = data.matrix[m]?.[bench];
                   if (!cell) {
                     return (
-                      <td key={m}>
+                      <td key={m} title={`No data available for ${m} on ${bench}`}>
                         <span className="text-[var(--color-text-dim)] opacity-40 font-mono text-xs">—</span>
                       </td>
                     );
                   }
+                  const pct = Math.round(cell.pass_at_k * 1000) / 10;
+                  const descriptor = cell.pass_at_k >= 0.8 ? 'Strong' : cell.pass_at_k >= 0.5 ? 'Moderate' : 'Weak';
                   return (
-                    <td key={m}>
+                    <td key={m} title={`${m} on ${bench}: ${pct}% (${cell.passed}/${cell.total} passed) — ${descriptor}`}>
                       <a
                         href={`/benchmarks/${bench}`}
                         className="no-underline"
@@ -92,7 +94,7 @@ export default function BenchmarkHeatmap() {
                             borderColor: `${heatColor(cell.pass_at_k)}33`,
                           }}
                         >
-                          {Math.round(cell.pass_at_k * 1000) / 10}%
+                          {pct}%
                         </Badge>
                         <span className="font-mono text-[0.65rem] text-[var(--color-text-dim)] ml-1">
                           {cell.passed}/{cell.total}
