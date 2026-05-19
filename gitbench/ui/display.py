@@ -98,6 +98,7 @@ class RichProgressDisplay:
         self._refresh_interval = refresh_interval
         self._stop_refresh = Event()
         self._refresh_thread: Thread | None = None
+        self._closed = False
 
         # TTY detection
         self.enabled = sys.stderr.isatty()
@@ -229,6 +230,10 @@ class RichProgressDisplay:
             self._refresh()
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+
         self._stop_refresh.set()
         if self._refresh_thread is not None:
             self._refresh_thread.join(timeout=self._refresh_interval + 0.5)
@@ -240,6 +245,7 @@ class RichProgressDisplay:
                 except Exception:
                     pass
                 self._live = None
+            self._restore_terminal()
 
         # Print final static summary to stdout (if TTY)
         if sys.stdout.isatty():
@@ -253,6 +259,17 @@ class RichProgressDisplay:
         # Dump verbose log to file
         if self._verbose and self._log_lines:
             self._dump_verbose_log()
+
+    def _restore_terminal(self) -> None:
+        """Best-effort fallback for terminal state if Rich cleanup is incomplete."""
+        if not sys.stderr.isatty():
+            return
+        try:
+            # Show cursor, leave alternate screen, reset modes/styles, normal keypad.
+            sys.stderr.write("\x1b[?25h\x1b[?1049l\x1b[?1l\x1b>\x1b[0m\r\n")
+            sys.stderr.flush()
+        except Exception:
+            pass
 
     # -- refresh -------------------------------------------------------------
 

@@ -1299,6 +1299,9 @@ def run(
         logger.exception("Benchmark failed")
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+    finally:
+        if progress_display is not None:
+            progress_display.close()
 
 
 @cli.command("list")

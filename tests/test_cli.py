@@ -451,6 +451,22 @@ class TestRunCommand:
             assert len(logs) == 1
             assert "noisy benchmark warning" in logs[0].read_text()
 
+    def test_run_closes_progress_display_on_keyboard_interrupt(self, runner):
+        """Terminal display cleanup runs for Ctrl+C-style exits."""
+        progress_display = Mock()
+
+        with patch("gitbench.cli.check_git_availability", return_value=True), \
+             patch("gitbench.cli._benchmark_registry", {"commit_messages": object()}), \
+             patch("gitbench.cli.RichProgressDisplay", return_value=progress_display), \
+             patch("gitbench.harness.runner.BenchmarkRunner.run_all", side_effect=KeyboardInterrupt):
+            result = runner.invoke(
+                cli,
+                ["run", "--benchmark", "commit_messages", "--model", "mock"],
+            )
+
+        assert result.exit_code != 0
+        progress_display.close.assert_called_once()
+
     def test_run_exits_with_error_when_git_missing(self, runner):
         """Test that run exits with error when git is not available."""
         with patch("gitbench.cli.check_git_availability", return_value=False):
@@ -1319,6 +1335,20 @@ class TestRichProgressDisplay:
         d.close()
 
         assert d._live is None
+
+    def test_close_is_idempotent_and_restores_terminal(self):
+        """close() emits best-effort terminal restore only once."""
+        stream = TtyStringIO()
+        d = RichProgressDisplay(["mock"], ["commit_messages"])
+        d.enabled = True
+        d._live = Mock()
+
+        with patch("sys.stderr", stream):
+            d.close()
+            d.close()
+
+        assert d._live is None
+        assert "\x1b[?1049l" in stream.getvalue()
 
     def test_periodic_refresh_repaints_while_no_callbacks_arrive(self):
         """Heartbeat refresh keeps the live display moving during slow fixtures."""
