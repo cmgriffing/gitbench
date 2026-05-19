@@ -200,6 +200,26 @@ When running `--benchmark <name>`, output is a single benchmark result:
 }
 ```
 
+### Multi-model / multi-profile output
+
+When running `--all-models` or `--all-profiles`, results are nested:
+
+```json
+{
+  "benchmark_suite_version": "0.1.0",
+  "summary": {
+    "total_models": 2,
+    "total_fixtures": 408,
+    "total_passed": 220,
+    "overall_pass_at_k": 0.5392
+  },
+  "models": [
+    { "model": "gpt-4o", "summary": {...}, "results": [...] },
+    { "model": "gpt-4o-mini", "summary": {...}, "results": [...] }
+  ]
+}
+```
+
 ### All benchmarks combined
 
 When running `--all`, output is a combined JSON with a summary and per-benchmark results:
@@ -244,22 +264,48 @@ Each score object contains:
 | `similarity`   | `float`          | Text similarity score (0.0 – 1.0)             |
 | `model_output` | `string`         | The model's generated output                  |
 | `error`        | `string \| null` | Error message if processing failed            |
+| `reasoning_level` | `string \| null` | Reasoning level used (e.g. `"high"`)        |
+| `model`        | `string`         | Model name (present in multi-model output)    |
 
-### Adding New Fixtures
+## Running Tests
 
-Fixtures live in `fixtures/<benchmark>/`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full fixture authoring guide, including YAML gotchas, setup command tips, and validation.
+```bash
+pytest tests/
+```
 
-Quick start:
+Run with verbose output:
+
+```bash
+pytest tests/ -v
+```
+
+Run only integration tests:
+
+```bash
+pytest tests/test_integration.py -v
+```
+
+Run specific test files:
+
+```bash
+pytest tests/test_cli.py -v
+pytest tests/test_export.py -v
+pytest tests/test_parallel_fixtures.py -v
+pytest tests/test_result_doctoring.py -v
+```
+
+## Adding Fixtures and Benchmarks
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full fixture authoring guide and step-by-step instructions for adding new benchmark categories.
+
+**Quick fixture template:**
 
 ```yaml
 id: "f013"
 description: "My scenario"
-purpose: "Tests ability to generate a commit message for a new file. Evaluates basic diff comprehension."
+purpose: "Tests ability to generate a commit message for a new file."
 difficulty: easy
-tags:
-  - commit-message
-  - add
-  - basic
+tags: [commit-message, add, basic]
 setup:
   - "git init"
   - "git config user.email 'test@test.com'"
