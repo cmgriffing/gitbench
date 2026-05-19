@@ -19,74 +19,152 @@ Or with the included virtual environment:
 source .venv/bin/activate
 ```
 
-## Running Benchmarks
-
-### List available benchmarks
+## Quick Start
 
 ```bash
+# List available benchmarks
 gitbench list
-# or
-python -m gitbench.cli list
-```
 
-### Run all benchmarks at once
-
-```bash
+# Run all benchmarks with the mock model (no API key needed)
 gitbench run --all --model mock
-# or
-python -m gitbench.cli run --all --model mock
+
+# Run with a real model
+gitbench run --all --model gpt-4o
+
+# Run with a reasoning level
+gitbench run --all --model o3-mini#high
+
+# Run with Ollama locally
+gitbench run --all --model llama3.1:8b --provider ollama
 ```
 
-### Run a specific benchmark
+## Configuration
 
-```bash
-gitbench run --benchmark commit_messages --model mock
-```
-
-With a real model (requires `OPENAI_API_KEY` environment variable):
-
-```bash
-OPENAI_API_KEY=sk-... gitbench run --benchmark commit_messages --model openai
-```
-
-### Verbose output
-
-Add `--verbose` (or `-v`) to see per-fixture results including pass/fail and similarity scores:
-
-```bash
-gitbench run --all --model mock --verbose
-```
-
-### Output files
-
-```bash
-gitbench run --all --model mock
-```
-
-Each successful run writes results to:
-
-| Artifact | Default path |
-| -------- | ------------ |
-| JSON results | `gitbench-results/<timestamp>/results-v<benchmark_suite_version>.json` |
-
-Override the path on the CLI:
-
-```bash
-gitbench run --all --model mock --json-output results.json
-```
-
-You can also set defaults in `gitbench.json` or `.gitbench.json`:
+Model profiles can be defined in `gitbench.json` (searched in `./gitbench.json`, `./.gitbench.json`, `~/.gitbench.json`):
 
 ```json
 {
+  "models": {
+    "openai-gpt4o": {
+      "models": ["gpt-4o", "gpt-4o-mini"],
+      "provider": "openai",
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    "ollama-local": {
+      "models": ["llama3.1:8b", "qwen2.5-coder:7b"],
+      "provider": "ollama",
+      "base_url": "http://localhost:11434"
+    }
+  },
   "outputs": {
-    "json": "runs/latest.json",
-    "html": "runs/latest.html"
+    "json": "runs/latest.json"
   }
 }
 ```
 
-### Generate a report
+Then run with profiles:
+
+```bash
+gitbench run --all --profile openai-gpt4o
+gitbench run --all --all-profiles              # all profiles sequentially
+gitbench run --all --all-models                # flattened, can run concurrently
+```
+
+List configured profiles:
+
+```bash
+gitbench profiles
+```
+
+## Running Benchmarks
+
+### Full CLI reference
+
+```
+gitbench run [OPTIONS]
+```
+
+Key options:
+
+| Option | Description |
+| ------ | ----------- |
+| `--all`, `-a` | Run all benchmarks against all models (shortcut) |
+| `--all-benchmarks` | Run all available benchmarks |
+| `--benchmark`, `-b` | Run a specific benchmark by name |
+| `--model`, `-m` | Model to use. `mock` for testing, Ollama model names, or OpenAI-compatible model IDs |
+| `--profile`, `-p` | Model profile from gitbench.json |
+| `--all-profiles` | Run against all profiles defined in config |
+| `--all-models` | Run against all models across all profiles (flattened) |
+| `--provider` | Explicit provider type: `ollama` or `openai` (auto-detected from base_url if omitted) |
+| `--base-url` | API base URL. Defaults to `http://localhost:11434` for Ollama |
+| `--verbose`, `-v` | Print detailed per-fixture results |
+| `--timeout`, `-t` | Timeout in seconds per model attempt |
+| `--retry-count`, `-r` | Retry attempts on failure (default: 3) |
+| `--model-workers` | Number of models to run concurrently (default: 1) |
+| `--fixture-workers` | Number of fixtures to run concurrently within a benchmark (default: 1) |
+
+### Output options
+
+| Option | Description |
+| ------ | ----------- |
+| `--json-output` | Single JSON file for results (default: `gitbench-results/{timestamp}/results-v{version}.json`) |
+| `--output-dir`, `-d` | Write per-run auto-named JSON files to a directory |
+| `--jsonl`, `-j` | Append run results as a JSON line to a file (useful for accumulating runs) |
+| `--export`, `-e` | Export format(s): `csv`, `artificialanalysis` (repeatable) |
+| `--export-path` | Path for export file (auto-named from model + timestamp if omitted) |
+
+### Examples
+
+```bash
+# Run a specific benchmark with verbose output
+gitbench run --benchmark commit_messages --model mock --verbose
+
+# Run all benchmarks with Ollama, 4 concurrent fixtures
+gitbench run --all --model llama3.1:8b --provider ollama --fixture-workers 4
+
+# Run with profile, export results
+gitbench run --all --profile openai-gpt4o --export csv --export artificialanalysis
+
+# Accumulate runs in a JSONL file
+gitbench run --all --model gpt-4o --jsonl runs/history.jsonl
+
+# Run two models concurrently
+gitbench run --all --all-models --model-workers 2
+```
+
+### Model reasoning levels
+
+Models can be suffixed with `#level` to control reasoning effort:
+
+```bash
+gitbench run --all --model o3-mini#high
+gitbench run --all --model gpt-4o#minimal
+```
+
+Valid levels: `minimal`, `low`, `medium`, `high`, `xhigh` (model-dependent).
+The harness validates the combination before any calls are made, failing fast on invalid pairings.
+
+## Result doctoring
+
+Transient failures (rate limits, timeouts, server errors) can be repaired without re-running the entire suite:
+
+```bash
+# Preview what would be repaired
+gitbench doctor results.json --dry-run
+
+# Repair a single result file
+gitbench doctor results.json
+
+# Repair result files in every timestamped directory under gitbench-results/
+gitbench doctor --latest
+
+# Use a longer timeout for slow repair reruns
+gitbench doctor --latest --timeout 180
+```
+
+The `doctor` command identifies failures caused by known transient error patterns (HTTP 429, 500/502/503/504, timeouts, rate limits) and re-runs only those fixtures against the original models.
+
+## Report generation
 
 After running benchmarks, generate a static report site:
 
@@ -97,12 +175,26 @@ gitbench report
 This aggregates results from `gitbench-results/`, generates `web/public/results.json`, builds the Astro site to `web/dist/`, and starts a preview server.
 
 ```bash
-gitbench report --open    # build and open in browser
-gitbench report --dev     # start dev server with hot reload
-gitbench report --no-build  # only generate results.json (skip build)
+gitbench report --open       # build and open in browser
+gitbench report --dev        # start dev server with hot reload
+gitbench report --no-build   # only generate results.json (skip build)
+gitbench report -d my-results/ --open   # use custom input dir
 ```
 
-### Result versioning
+## Export formats
+
+Results can be exported to structured formats for external analysis:
+
+| Format | Description |
+| ------ | ----------- |
+| `csv` | One row per fixture result (benchmark, fixture_id, model, passed, similarity, error, etc.) |
+| `artificialanalysis` | One row per benchmark (model, benchmark, score, total, passed) — compatible with artificialanalysis.com |
+
+```bash
+gitbench run --all --model gpt-4o --export csv --export artificialanalysis
+```
+
+## Result versioning
 
 Saved run envelopes include two version fields:
 
@@ -176,6 +268,29 @@ scoring:
 ```
 
 ## Output Format
+
+### Envelope
+
+Every run produces an envelope wrapping benchmark results with metadata:
+
+```json
+{
+  "version": 1,
+  "schema_version": 1,
+  "benchmark_suite_version": "0.1.0",
+  "timestamp": "2025-01-15T10:30:00+00:00",
+  "git_sha": "abc1234",
+  "model": "gpt-4o",
+  "profile": "openai-gpt4o",
+  "summary": {
+    "total_benchmarks": 17,
+    "total_fixtures": 204,
+    "total_passed": 120,
+    "overall_pass_at_k": 0.5882
+  },
+  "results": [ ... ]
+}
+```
 
 ### Single benchmark
 
@@ -319,91 +434,106 @@ scoring:
   threshold: 0.5
 ```
 
-**YAML gotcha:** values containing colons (e.g., `"Fix: login"`) must use single quotes, or PyYAML will parse them as mapping keys.
+**Important gotchas:**
 
-### Adding a New Benchmark Category
-
-See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-benchmark) for the step-by-step guide. The short version: drop a Python module inheriting from `Benchmark` in `gitbench/benchmarks/`. No registration or harness changes needed — auto-discovered via `importlib`.
-
-**Important gotcha — rebase vs merge conflict polarity:** In merge conflicts, HEAD's changes appear above `=======`. In rebase conflicts, the polarity is reversed — upstream's changes appear _below_ `=======`. When writing rebase fixtures, describe the correct branch context in the prompt.
-
-**Important gotcha — GitExecutor exit codes:** `git merge` and `git rebase` exit with code 1 on conflicts. `GitExecutor.setup_repo()` handles this automatically — do not call `_run_command()` directly for merge/rebase commands in fixtures.
-
-## Running Tests
-
-```bash
-pytest tests/
-```
-
-Run with verbose output:
-
-```bash
-pytest tests/ -v
-```
-
-Run only integration tests:
-
-```bash
-pytest tests/test_integration.py -v
-```
+- **YAML colon values:** strings containing colons (e.g. `"Fix: login"`) must be single-quoted to prevent PyYAML from parsing them as mapping keys.
+- **Rebase vs merge conflict polarity:** In merge conflicts, HEAD's changes appear above `=======`. In rebase conflicts, the polarity is reversed — upstream's changes appear _below_ `=======`.
+- **GitExecutor exit codes:** `git merge` and `git rebase` exit with code 1 on conflicts. `GitExecutor.setup_repo()` handles this automatically — do not call `_run_command()` directly for merge/rebase commands in fixtures.
+- **New benchmarks:** Drop a Python module inheriting from `Benchmark` in `gitbench/benchmarks/`. No registration or harness changes needed — auto-discovered via `importlib`.
 
 ## Project Structure
 
 ```
 gitbench/
 ├── __init__.py
-├── cli.py                  # Click-based CLI (run, list)
+├── cli.py                  # Click-based CLI (run, list, doctor, profiles, report)
+├── config.py               # Configuration loader (gitbench.json profiles)
+├── export.py               # CSV and artificialanalysis format exporters
+├── render.py               # Result aggregation and JSON generation for reports
+├── result_doctoring.py     # Selective repair of transient failures
+├── version.py              # Version constants (schema, suite, package)
 ├── harness/
+│   ├── benchmark.py       # Benchmark abstract base class
 │   ├── types.py           # Dataclasses: ModelMessage, Fixture, Score, BenchmarkResult
-│   ├── model.py           # ModelInterface, OpenAIAdapter, MockModelClient
+│   ├── model.py           # ModelInterface, OpenAIAdapter, OllamaAdapter, MockModelClient
 │   ├── loader.py          # FixtureLoader: YAML loading and validation
-│   └── scorer.py          # Scorer: similarity, command equivalence, state assertions, pass@k
+│   ├── runner.py          # BenchmarkRunner: executes benchmarks with progress reporting
+│   ├── scorer.py          # Scorer: similarity, command equivalence, state assertions, pass@k
+│   └── reasoning.py       # Model reasoning level validation matrix
 ├── benchmarks/
-│   ├── __init__.py       # Benchmark abstract base class
+│   ├── __init__.py        # Auto-discovery import (no registration needed)
 │   ├── blame_forensics.py # Blame/forensics benchmark
-│   ├── branch_cleanup.py # Branch cleanup benchmark
-│   ├── cherry_pick.py    # Cherry-pick benchmark
+│   ├── branch_cleanup.py  # Branch cleanup benchmark
+│   ├── cherry_pick.py     # Cherry-pick benchmark
 │   ├── commit_messages.py # Commit message generation benchmark
-│   ├── commit_squash.py  # Commit squash benchmark
-│   ├── git_bisect.py     # Git bisect benchmark
-│   ├── git_clean.py      # Git clean benchmark
-│   ├── git_grep.py       # Git grep benchmark
-│   ├── git_log_format.py # Git log formatting benchmark
-│   ├── git_show.py       # Git show benchmark
+│   ├── commit_squash.py   # Commit squash benchmark
+│   ├── git_bisect.py      # Git bisect benchmark
+│   ├── git_clean.py       # Git clean benchmark
+│   ├── git_grep.py        # Git grep benchmark
+│   ├── git_log_format.py  # Git log formatting benchmark
+│   ├── git_show.py        # Git show benchmark
 │   ├── merge_conflicts.py # Merge conflict resolution benchmark
-│   ├── rebase.py         # Interactive rebase benchmark
-│   ├── reflog.py         # Reflog/detached HEAD recovery benchmark
-│   ├── stash_recovery.py # Stash recovery benchmark
+│   ├── rebase.py          # Interactive rebase benchmark
+│   ├── reflog.py          # Reflog/detached HEAD recovery benchmark
+│   ├── stash_recovery.py  # Stash recovery benchmark
 │   ├── submodule_usage.py # Submodule usage benchmark
-│   ├── tag_management.py # Tag management benchmark
-│   └── worktree_usage.py # Worktree usage benchmark
+│   ├── tag_management.py  # Tag management benchmark
+│   └── worktree_usage.py  # Worktree usage benchmark
+├── ui/
+│   ├── __init__.py
+│   ├── display.py         # RichProgressDisplay: live TUI with progress bars
+│   └── format.py          # Duration, cost, and human-readable formatting
 └── utils/
-    └── git.py            # GitExecutor: sandboxed git repo management
+    └── git.py             # GitExecutor: sandboxed git repo management
 fixtures/
-├── blame_forensics/     # 12 YAML fixtures for blame/forensics benchmark
-├── branch_cleanup/      # 12 YAML fixtures for branch cleanup benchmark
-├── cherry_pick/         # 12 YAML fixtures for cherry-pick benchmark
-├── commit_messages/     # 12 YAML fixtures for commit message benchmark
-├── commit_squash/       # 12 YAML fixtures for commit squash benchmark
-├── git_bisect/          # 12 YAML fixtures for git bisect benchmark
-├── git_clean/           # 12 YAML fixtures for git clean benchmark
-├── git_grep/            # 12 YAML fixtures for git grep benchmark
-├── git_log_format/      # 12 YAML fixtures for git log formatting benchmark
-├── git_show/            # 12 YAML fixtures for git show benchmark
-├── merge_conflicts/     # 12 YAML fixtures for merge conflict benchmark
-├── rebase/              # 12 YAML fixtures for rebase benchmark
-├── reflog/              # 12 YAML fixtures for reflog benchmark
-├── stash_recovery/      # 12 YAML fixtures for stash recovery benchmark
-├── submodule_usage/     # 12 YAML fixtures for submodule usage benchmark
-├── tag_management/      # 12 YAML fixtures for tag management benchmark
-└── worktree_usage/      # 12 YAML fixtures for worktree usage benchmark
-tests/                    # Unit and integration tests
+├── blame_forensics/       # 12 YAML fixtures
+├── branch_cleanup/        # 12 YAML fixtures
+├── cherry_pick/           # 12 YAML fixtures
+├── commit_messages/       # 12 YAML fixtures
+├── commit_squash/         # 12 YAML fixtures
+├── git_bisect/            # 12 YAML fixtures
+├── git_clean/             # 12 YAML fixtures
+├── git_grep/              # 12 YAML fixtures
+├── git_log_format/        # 12 YAML fixtures
+├── git_show/              # 12 YAML fixtures
+├── merge_conflicts/       # 12 YAML fixtures
+├── rebase/                # 12 YAML fixtures
+├── reflog/                # 12 YAML fixtures
+├── stash_recovery/        # 12 YAML fixtures
+├── submodule_usage/       # 12 YAML fixtures
+├── tag_management/        # 12 YAML fixtures
+└── worktree_usage/        # 12 YAML fixtures
+tests/
+├── conftest.py            # Shared test fixtures
+├── test_benchmarks.py     # Benchmark correctness tests
+├── test_cli.py            # CLI integration tests
+├── test_config.py         # Config loader tests
+├── test_export.py         # Export format tests
+├── test_format.py         # UI formatting tests
+├── test_git.py            # GitExecutor tests
+├── test_integration.py    # End-to-end integration tests
+├── test_loader.py         # Fixture loader tests
+├── test_model.py          # Model adapter tests
+├── test_parallel_fixtures.py  # Parallel fixture execution tests
+├── test_reasoning.py      # Reasoning level validation tests
+├── test_render.py         # Render/aggregation tests
+├── test_result_doctoring.py   # Doctor command tests
+├── test_scorer.py         # Scoring logic tests
+└── test_types.py          # Data type tests
 ```
 
 ## Architecture
 
-- **Benchmark ABC** (`gitbench/benchmarks/__init__.py`): Abstract base class enforcing `load_fixtures()` and `score()` interface. Drop a new Python module in `benchmarks/` to add a new benchmark category. See [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-benchmark) for the full guide.
-- **Model adapters** (`gitbench/harness/model.py`): `ModelInterface` ABC with `OpenAIAdapter` and `MockModelClient` implementations. Add a new adapter for model-specific needs.
+- **CLI** (`gitbench/cli.py`): Click-based command group with `run`, `list`, `doctor`, `profiles`, and `report` commands.
+- **Configuration** (`gitbench/config.py`): Loads model profiles from `gitbench.json`. Profiles define model lists, provider type, base URL, API key resolution, timeout, and retry settings.
+- **Benchmark ABC** (`gitbench/harness/benchmark.py`): Abstract base class enforcing `run_setup()`, `load_fixtures()`, and `score()` interface. Drop a new Python module in `benchmarks/` to add a new benchmark category — auto-discovered via `importlib`.
+- **Benchmark Runner** (`gitbench/harness/runner.py`): Orchestrates fixture execution against a model, supports concurrent fixtures, and reports progress via the `RunProgress` protocol.
+- **Model adapters** (`gitbench/harness/model.py`): `ModelInterface` ABC with `OpenAIAdapter`, `OllamaAdapter`, and `MockModelClient` implementations. Models can specify a reasoning level with `model#level` syntax.
+- **Reasoning validation** (`gitbench/harness/reasoning.py`): Validates model + reasoning level combinations before any API calls. Fails fast on invalid pairings.
 - **Fixture loader** (`gitbench/harness/loader.py`): Parses and validates YAML fixtures. Supports single fixture per file (dict) or multiple (list).
-- **Scorer** (`gitbench/harness/scorer.py`): Computes text similarity via `difflib.SequenceMatcher` and `pass_at_k` across fixtures.
+- **Scorer** (`gitbench/harness/scorer.py`): Computes text similarity via `difflib.SequenceMatcher`, command equivalence, state assertions, structured field scoring, and `pass_at_k` across fixtures.
 - **Git executor** (`gitbench/utils/git.py`): Manages sandboxed temporary git repositories for fixture isolation. Uses `_run_command_permissive` internally for `git merge` and `git rebase` which intentionally exit code 1 on conflicts.
+- **Progress display** (`gitbench/ui/display.py`): Rich-based live TUI with progress bars, model panels, throughput stats, cost estimation, and final summary tables.
+- **Export** (`gitbench/export.py`): Pluggable format registry. Ships with CSV (per-fixture) and artificialanalysis (per-benchmark) exporters.
+- **Result doctoring** (`gitbench/result_doctoring.py`): Identifies transient failures (rate limits, timeouts, server errors) and re-runs only affected fixtures against the original models.
+- **Report rendering** (`gitbench/render.py`): Aggregates run envelopes from directories or JSONL files, resolves model metadata, and produces `results.json` for the Astro report site.
