@@ -9,22 +9,25 @@ import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 
 import click
+from rich.console import Console
+from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 
 from gitbench.benchmarks import Benchmark
 from gitbench.config import find_profile_for_model, load_config, resolve_profile
 from gitbench.export import FORMAT_REGISTRY, get_available_formats
-from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter
-from gitbench.harness.runner import BenchmarkRunner, RunProgress
+from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter, parse_model_name
 from gitbench.harness.reasoning import validate_model_list
+from gitbench.harness.runner import BenchmarkRunner, RunProgress
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
-from gitbench.render import aggregate_runs, _run_sort_key
+from gitbench.render import _run_sort_key, aggregate_runs
 from gitbench.result_doctoring import (
     build_rerun_plan,
-    find_latest_result_files,
+    find_timestamped_result_files,
     format_dry_run_summary,
     load_result_payload,
     replace_scores_and_recompute,
@@ -36,6 +39,7 @@ from gitbench.version import BENCHMARK_SUITE_VERSION, RESULT_SCHEMA_VERSION
 DEFAULT_JSON_OUTPUT_PATH = "gitbench-results/{timestamp}/results-v{version}.json"
 DEFAULT_LOG_DIR = "gitbench-logs"
 DEFAULT_RETRY_COUNT = 3
+DEFAULT_DOCTOR_TIMEOUT = 120
 
 
 def _progress_model_names(models: list[str]) -> list[str]:
@@ -99,6 +103,41 @@ def _effective_retry_count(
     if profile_retry_count is None:
         return DEFAULT_RETRY_COUNT
     return int(profile_retry_count)
+
+
+def _effective_doctor_timeout(
+    profile_conf: dict,
+    cli_timeout: int | None,
+) -> int:
+    """Return the timeout to use for doctor repair reruns."""
+    if cli_timeout is not None:
+        return cli_timeout
+    profile_timeout = profile_conf.get("timeout")
+    if profile_timeout is None:
+        return DEFAULT_DOCTOR_TIMEOUT
+    return int(profile_timeout)
+
+
+def _resolved_provider_name(profile_conf: dict) -> str:
+    """Return the provider name that get_model_client will use."""
+    provider = profile_conf.get("provider")
+    if provider:
+        return str(provider)
+
+    base_url = profile_conf.get("base_url")
+    if base_url and ("localhost" in base_url or "127.0.0.1" in base_url):
+        return "ollama"
+    return "openai"
+
+
+def _doctor_progress_label(profile_conf: dict, model: str) -> str:
+    """Format doctor progress as provider/model:effort when effort exists."""
+    provider = _resolved_provider_name(profile_conf)
+    base_model, effort = parse_model_name(model)
+    model_label = f"{base_model}:{effort}" if effort else base_model
+    if model_label.startswith(f"{provider}/"):
+        return model_label
+    return f"{provider}/{model_label}"
 
 # Keep package logs off stderr unless a command explicitly installs a handler.
 logging.getLogger("gitbench").addHandler(logging.NullHandler())
