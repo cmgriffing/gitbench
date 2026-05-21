@@ -32,6 +32,11 @@ def parse_model_name(model: str) -> tuple[str, str | None]:
     return model, None
 
 
+def _is_openrouter_base_url(base_url: str | None) -> bool:
+    """Return whether a custom OpenAI-compatible URL points at OpenRouter."""
+    return base_url is not None and "openrouter.ai" in base_url.lower()
+
+
 class ModelResponseError(RuntimeError):
     """Raised when a provider response cannot be parsed as model text."""
 
@@ -165,7 +170,10 @@ class OpenAIAdapter(ModelInterface):
         last_error: Exception | None = None
 
         if self.reasoning_level:
-            kwargs["reasoning_effort"] = self.reasoning_level
+            if _is_openrouter_base_url(self._base_url):
+                kwargs["reasoning"] = {"effort": self.reasoning_level}
+            else:
+                kwargs["reasoning_effort"] = self.reasoning_level
 
         for attempt in range(1, self.retry_count + 1):
             try:

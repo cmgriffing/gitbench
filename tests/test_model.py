@@ -440,6 +440,12 @@ class TestParseModelName:
         assert base == "llama3.1:8b"
         assert level is None
 
+    def test_colon_variant_with_reasoning_level(self):
+        """OpenRouter :variant model IDs still use # for reasoning."""
+        base, level = parse_model_name("baidu/cobuddy:free#high")
+        assert base == "baidu/cobuddy:free"
+        assert level == "high"
+
 
 class TestOpenAIAdapterReasoning:
     """Tests for OpenAIAdapter reasoning level handling."""
@@ -477,6 +483,56 @@ class TestOpenAIAdapterReasoning:
         call_kwargs = mock_client.chat.completions.create.call_args
         assert call_kwargs.kwargs["reasoning_effort"] == "high"
         assert call_kwargs.kwargs["model"] == "o3-mini"
+        assert "reasoning" not in call_kwargs.kwargs
+
+    @patch("openai.OpenAI")
+    def test_generate_forwards_openrouter_reasoning_object(self, mock_openai_class):
+        """OpenRouter receives its native reasoning object shape."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.error = None
+        mock_response.choices[0].message.content = "Output"
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai_class.return_value = mock_client
+
+        adapter = OpenAIAdapter(
+            model="baidu/cobuddy:free#high",
+            api_key="test-key",
+            base_url="https://openrouter.ai/api/v1",
+        )
+        adapter._client = mock_client
+
+        messages = [ModelMessage(role="user", content="Hi")]
+        adapter.generate(messages)
+
+        call_kwargs = mock_client.chat.completions.create.call_args
+        assert call_kwargs.kwargs["model"] == "baidu/cobuddy:free"
+        assert call_kwargs.kwargs["reasoning"] == {"effort": "high"}
+        assert "reasoning_effort" not in call_kwargs.kwargs
+
+    @patch("openai.OpenAI")
+    def test_generate_forwards_openrouter_reasoning_none(self, mock_openai_class):
+        """OpenRouter can explicitly disable reasoning."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.error = None
+        mock_response.choices[0].message.content = "Output"
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai_class.return_value = mock_client
+
+        adapter = OpenAIAdapter(
+            model="baidu/cobuddy:free#none",
+            api_key="test-key",
+            base_url="https://openrouter.ai/api/v1",
+        )
+        adapter._client = mock_client
+
+        messages = [ModelMessage(role="user", content="Hi")]
+        adapter.generate(messages)
+
+        call_kwargs = mock_client.chat.completions.create.call_args
+        assert call_kwargs.kwargs["reasoning"] == {"effort": "none"}
+        assert "reasoning_effort" not in call_kwargs.kwargs
 
     @patch("openai.OpenAI")
     def test_generate_without_reasoning_omits_effort(self, mock_openai_class):
@@ -496,6 +552,7 @@ class TestOpenAIAdapterReasoning:
 
         call_kwargs = mock_client.chat.completions.create.call_args
         assert "reasoning_effort" not in call_kwargs.kwargs
+        assert "reasoning" not in call_kwargs.kwargs
 
 
 class TestOllamaAdapterReasoning:
