@@ -152,9 +152,8 @@ class TestValidateModelList:
         with pytest.raises(click.ClickException) as exc_info:
             validate_model_list(["gpt-4o-mini#xhigh"])
         message = str(exc_info.value)
-        for level in VALID_REASONING_LEVELS:
-            if level != "xhigh":
-                assert level in message
+        for level in get_supported_levels("gpt-4o-mini") or []:
+            assert level in message
 
     def test_invalid_level_error_message_shows_valid_list(self):
         with pytest.raises(click.ClickException) as exc_info:
