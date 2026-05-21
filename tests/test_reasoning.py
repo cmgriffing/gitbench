@@ -59,10 +59,10 @@ class TestParseModelReasoning:
 
 class TestValidReasoningLevels:
     def test_expected_levels(self):
-        assert VALID_REASONING_LEVELS == ["minimal", "low", "medium", "high", "xhigh"]
+        assert VALID_REASONING_LEVELS == ["none", "minimal", "low", "medium", "high", "xhigh"]
 
     def test_level_count(self):
-        assert len(VALID_REASONING_LEVELS) == 5
+        assert len(VALID_REASONING_LEVELS) == 6
 
 
 class TestGetSupportedLevels:
@@ -106,6 +106,7 @@ class TestValidateModelList:
         validate_model_list(["gpt-4o#high"])
         validate_model_list(["o3-mini#medium"])
         validate_model_list(["gpt-4o#xhigh"])
+        validate_model_list(["baidu/cobuddy:free#none"])
 
     def test_model_without_level_passes(self):
         validate_model_list(["gpt-4o"])

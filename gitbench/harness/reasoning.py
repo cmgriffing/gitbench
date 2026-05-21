@@ -7,7 +7,7 @@ prevent wasted API calls on invalid configurations.
 
 import click
 
-VALID_REASONING_LEVELS = ["minimal", "low", "medium", "high", "xhigh"]
+VALID_REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh"]
 
 _MODEL_MATRIX: dict[str, list[str]] = {
     "o3-mini": ["minimal", "low", "medium", "high"],
