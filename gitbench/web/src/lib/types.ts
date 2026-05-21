@@ -67,6 +67,7 @@ export interface FixtureInfo {
   prompt: string;
   expected: string;
   description: string;
+  setup: string[];
   purpose: string;
   difficulty: string;
   tags: string[];

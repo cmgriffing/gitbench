@@ -400,6 +400,7 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
                         "prompt": score.get("prompt") or "",
                         "expected": score.get("expected") or "",
                         "description": score.get("description") or "",
+                        "setup": score.get("setup") or [],
                         "purpose": score.get("purpose") or "",
                         "difficulty": score.get("difficulty") or "",
                         "tags": score.get("tags") or [],
@@ -446,19 +447,28 @@ def render_json(data: dict[str, Any], output_path: str) -> None:
 def _supplement_fixture_index_from_yaml(fixture_index: dict[str, dict]) -> None:
     """Fill in missing fixture metadata by loading YAML fixture files.
 
-    Only touches fixtures whose ``prompt`` field is empty in the index.
+    Only fills fields that are missing in the index.
     """
     fixtures_dir = Path(__file__).parent.parent / "fixtures"
     if not fixtures_dir.exists():
         return
 
     for key, entry in fixture_index.items():
-        if entry.get("prompt"):
-            continue  # already has data from scores
-
         fid = entry.get("id", "")
         bench = entry.get("benchmark", "")
         if not fid or not bench:
+            continue
+
+        needs_yaml = (
+            not entry.get("prompt")
+            or not entry.get("expected")
+            or not entry.get("description")
+            or not entry.get("setup")
+            or not entry.get("purpose")
+            or not entry.get("difficulty")
+            or not entry.get("tags")
+        )
+        if not needs_yaml:
             continue
 
         # Try to find the fixture YAML file
@@ -470,9 +480,10 @@ def _supplement_fixture_index_from_yaml(fixture_index: dict[str, dict]) -> None:
             import yaml
             data = yaml.safe_load(yaml_path.read_text())
             if isinstance(data, dict):
-                entry["prompt"] = data.get("prompt", "")
-                entry["expected"] = data.get("expected", "")
-                entry["description"] = data.get("description", "")
+                entry["prompt"] = entry.get("prompt") or data.get("prompt", "")
+                entry["expected"] = entry.get("expected") or data.get("expected", "")
+                entry["description"] = entry.get("description") or data.get("description", "")
+                entry["setup"] = entry.get("setup") or data.get("setup", [])
                 entry["purpose"] = entry["purpose"] or data.get("purpose", "")
                 entry["difficulty"] = entry["difficulty"] or data.get("difficulty", "")
                 entry["tags"] = entry["tags"] or data.get("tags", [])

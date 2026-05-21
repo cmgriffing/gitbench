@@ -321,6 +321,7 @@ class TestAggregateRunsFixtureIndex:
                 "prompt": "Write a commit message for this diff",
                 "expected": "fix: resolve null pointer in parser",
                 "description": "Test commit message generation",
+                "setup": ["git init", "touch parser.py", "git add parser.py"],
                 "purpose": "Tests the model's ability to generate concise commit messages",
                 "difficulty": "easy",
                 "tags": ["commit", "basic"],
@@ -356,6 +357,7 @@ class TestAggregateRunsFixtureIndex:
         assert fi["prompt"] == "Write a commit message for this diff"
         assert fi["expected"] == "fix: resolve null pointer in parser"
         assert fi["description"] == "Test commit message generation"
+        assert fi["setup"] == ["git init", "touch parser.py", "git add parser.py"]
         assert fi["purpose"] == "Tests the model's ability to generate concise commit messages"
         assert fi["difficulty"] == "easy"
         assert fi["tags"] == ["commit", "basic"]
