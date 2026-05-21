@@ -1,8 +1,8 @@
 """Tests for gitbench.harness.reasoning validation module."""
 
-import click
 import json
 
+import click
 import pytest
 from click.testing import CliRunner
 
