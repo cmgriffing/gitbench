@@ -101,7 +101,7 @@ export function MultiSelect({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="w-[--radix-popover-trigger-width] p-0 border-2 border-border shadow"
         align="start"
       >
         <Command shouldFilter={false}>
@@ -138,19 +138,19 @@ export function MultiSelect({
                     key={option.value}
                     value={option.value}
                     onSelect={() => toggle(option.value)}
-                    className="pr-8"
                   >
                     <span className="flex min-w-0 flex-1 items-center">
                       <span className="mr-2 inline-flex size-4 shrink-0 items-center justify-center rounded-[3px] border border-input">
-                        {isSelected ? <Check className="size-3" /> : <Square className="size-3 opacity-0" />}
+                        {isSelected ? (
+                          <Check className="size-3" />
+                        ) : (
+                          <Square className="size-3 opacity-0" />
+                        )}
                       </span>
                       {renderItemStart?.(option)}
                       <span className="truncate">{option.label}</span>
                     </span>
                     {renderItemEnd?.(option)}
-                    {isSelected && (
-                      <Check className="absolute right-2 h-4 w-4" />
-                    )}
                   </CommandItem>
                 );
               })}
