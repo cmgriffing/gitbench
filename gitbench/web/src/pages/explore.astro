@@ -27,7 +27,7 @@ const allFixtures = Object.values(data.fixture_index);
 
 <Layout title="Explore">
   <p
-    class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-6"
+    class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-6"
   >
     The complete fixture index — all 204 test cases searchable by topic,
     difficulty, and benchmark.
@@ -50,7 +50,7 @@ const allFixtures = Object.values(data.fixture_index);
       type="search"
       id="tag-search"
       placeholder="Filter tags & fixtures..."
-      class="w-full bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] rounded-md px-3 py-2 font-mono text-xs placeholder:text-[var(--color-text-dim)] focus:outline-none focus:border-[var(--color-border-accent)] mb-3"
+      class="w-full bg-(--color-card) text-(--color-text) border border-border rounded-md px-3 py-2 font-mono text-xs placeholder:text-(--color-text-dim) focus:outline-none focus:border-(--color-border-accent) mb-3"
     />
 
     <!-- Popular tags row -->
@@ -73,7 +73,7 @@ const allFixtures = Object.values(data.fixture_index);
     <!-- Show all toggle + full tag list -->
     <button
       id="tag-toggle"
-      class="font-mono text-[0.65rem] text-[var(--color-accent)] cursor-pointer bg-transparent border-none p-0 mb-1"
+      class="font-mono text-[0.65rem] text-accent cursor-pointer bg-transparent border-none p-0 mb-1"
     >
       Show all {sortedTags.length} tags ▾
     </button>
@@ -117,7 +117,7 @@ const allFixtures = Object.values(data.fixture_index);
       </span>
       <button
         onclick="resetExploreFilters()"
-        class="bg-transparent border border-[var(--color-border)] text-[var(--color-text-dim)] rounded-md px-2.5 py-1.5 font-mono text-[0.65rem] cursor-pointer"
+        class="bg-transparent border border-border text-(--color-text-dim) rounded-md px-2.5 py-1.5 font-mono text-[0.65rem] cursor-pointer"
       >
         Reset
       </button>
@@ -129,7 +129,7 @@ const allFixtures = Object.values(data.fixture_index);
       <span>Results</span>
       <span
         id="result-count"
-        class="font-mono text-xs text-[var(--color-text-dim)]"></span>
+        class="font-mono text-xs text-(--color-text-dim)"></span>
     </div>
     <div class="flex flex-col gap-2.5" id="explore-results">
       {
@@ -142,7 +142,7 @@ const allFixtures = Object.values(data.fixture_index);
             onclick={`window.location='/fixtures/${encodeURIComponent(fi.benchmark)}/${fi.id}'`}
           >
             <div class="flex gap-2 items-center flex-wrap">
-              <span class="font-mono text-xs text-[var(--color-text-mid)] font-medium">
+              <span class="font-mono text-xs text-(--color-text-mid) font-medium">
                 {fi.id}
               </span>
               <Badge variant="secondary" class="font-mono text-[0.6rem]">
@@ -151,7 +151,7 @@ const allFixtures = Object.values(data.fixture_index);
               {fi.difficulty && (
                 <Badge
                   variant="outline"
-                  class="font-mono text-[0.55rem] opacity-50 border-[var(--color-pass-border)] text-[var(--color-pass)]"
+                  class="font-mono text-[0.55rem] opacity-50 border-pass-border text-pass"
                 >
                   {fi.difficulty}
                 </Badge>
@@ -167,7 +167,7 @@ const allFixtures = Object.values(data.fixture_index);
                 </Badge>
               ))}
               {fi.tags.length > 3 && (
-                <span class="font-mono text-[0.6rem] text-[var(--color-text-dim)]">
+                <span class="font-mono text-[0.6rem] text-(--color-text-dim)">
                   +{fi.tags.length - 3}
                 </span>
               )}

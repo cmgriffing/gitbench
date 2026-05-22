@@ -88,10 +88,10 @@ const passCls =
   summary.pass_at_k >= 0.8 ? "pass" : summary.pass_at_k < 0.5 ? "fail" : "warn";
 const passColor =
   summary.pass_at_k >= 0.8
-    ? "bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]"
+    ? "bg-pass-bg text-pass border-pass-border"
     : summary.pass_at_k < 0.5
-      ? "bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]"
-      : "bg-[var(--color-warn-bg)] text-[var(--color-warn)] border-[var(--color-warn-border)]";
+      ? "bg-fail-bg text-fail border-(--color-fail-border)"
+      : "bg-warn-bg text-(--color-warn) border-(--color-warn-border)";
 
 // Compute total tokens and cost
 let totalInputTokens = 0;
@@ -116,10 +116,10 @@ for (const bench of data.benchmarks) {
   <div class="flex items-center gap-3 mb-2">
     <ProviderIcon provider={provider} size={24} client:load />
     <div>
-      <div class="text-xs font-mono text-[var(--color-text-dim)]">
+      <div class="text-xs font-mono text-(--color-text-dim)">
         {providerName} / {baseModel}
       </div>
-      <h1 class="text-xl font-bold text-[var(--color-text)]">{level}</h1>
+      <h1 class="text-xl font-bold text-(--color-text)">{level}</h1>
     </div>
   </div>
 
@@ -136,8 +136,8 @@ for (const bench of data.benchmarks) {
             data-effort-link
             class={`no-underline px-3 py-1.5 rounded-md font-mono text-[0.7rem] transition-colors ${
               isCurrent
-                ? "bg-[var(--color-accent)] text-white"
-                : "bg-[var(--color-card)] text-[var(--color-text-mid)] hover:text-[var(--color-text)]"
+                ? "bg-accent text-white"
+                : "bg-(--color-card) text-(--color-text-mid) hover:text-(--color-text)"
             }`}
           >
             {l.level || "default"}
@@ -154,17 +154,17 @@ for (const bench of data.benchmarks) {
         <Badge variant="outline" className={`font-mono text-xs ${passColor}`}>
           {passRate}%
         </Badge>
-        <span class="font-mono text-xs text-[var(--color-text-dim)]">
+        <span class="font-mono text-xs text-(--color-text-dim)">
           {summary.total_passed} / {summary.total_fixtures} fixtures
         </span>
         <span
-          class="font-mono text-[0.68rem] text-[var(--color-text-dim)] opacity-60"
+          class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60"
         >
           {summary.total_runs} run(s)
         </span>
       </div>
       <div
-        class="font-mono text-[0.68rem] text-[var(--color-text-dim)] opacity-60 mt-1"
+        class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60 mt-1"
       >
         {
           (totalInputTokens > 0 || totalOutputTokens > 0) && (
@@ -181,7 +181,7 @@ for (const bench of data.benchmarks) {
       <Button
         variant="outline"
         size="sm"
-        class="font-mono text-xs border-[var(--color-border-accent)] text-[var(--color-accent)]"
+        class="font-mono text-xs border-(--color-border-accent) text-accent"
       >
         <GitCompare class="size-3.5" />
         Compare
@@ -195,7 +195,7 @@ for (const bench of data.benchmarks) {
     </div>
 
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Each card represents one test fixture — a single Git task this model was
       asked to complete.
@@ -208,7 +208,7 @@ for (const bench of data.benchmarks) {
       where this model struggles most.
       <a
         href="/methodology#similarity-scoring"
-        class="text-[var(--color-accent)] no-underline text-xs font-mono"
+        class="text-accent no-underline text-xs font-mono"
         >Learn more →</a
       >
     </p>
@@ -247,7 +247,7 @@ for (const bench of data.benchmarks) {
       </span>
       <button
         onclick="resetFilters()"
-        class="bg-transparent border border-[var(--color-border)] text-[var(--color-text-dim)] rounded-md px-2.5 py-1.5 font-mono text-[0.65rem] cursor-pointer"
+        class="bg-transparent border border-border text-(--color-text-dim) rounded-md px-2.5 py-1.5 font-mono text-[0.65rem] cursor-pointer"
       >
         Reset
       </button>

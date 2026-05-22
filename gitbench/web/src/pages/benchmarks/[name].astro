@@ -35,11 +35,11 @@ for (const fid of fixtureKeys) {
 
 <Layout title={benchName}>
   <div class="card mb-8">
-    <div class="font-mono text-[0.68rem] text-[var(--color-text-dim)] mb-1">
+    <div class="font-mono text-[0.68rem] text-(--color-text-dim) mb-1">
       Benchmark
     </div>
     <div class="text-lg font-semibold">{benchName}</div>
-    <div class="font-mono text-[0.7rem] text-[var(--color-text-dim)] mt-2">
+    <div class="font-mono text-[0.7rem] text-(--color-text-dim) mt-2">
       {fixtureKeys.length} fixtures
     </div>
   </div>
@@ -47,15 +47,15 @@ for (const fid of fixtureKeys) {
   <section class="mb-10">
     <div class="section-label"><span>Model Leaderboard</span></div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
-      Models ranked by pass rate on <strong class="text-[var(--color-text)]"
+      Models ranked by pass rate on <strong class="text-(--color-text)"
         >{benchName}</strong
       > specifically. A model that dominates overall might rank lower here — this
       reveals each model's true strengths and weaknesses per skill.
       <a
         href="/compare"
-        class="text-[var(--color-accent)] no-underline text-xs font-mono"
+        class="text-accent no-underline text-xs font-mono"
         >Compare models side-by-side →</a
       >
     </p>
@@ -92,7 +92,7 @@ for (const fid of fixtureKeys) {
   <section>
     <div class="section-label"><span>Per-Fixture Comparison</span></div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Each row is one test fixture, each column is one model. Percentages show
       how similar the model's output was to the correct answer.
@@ -131,12 +131,12 @@ for (const fid of fixtureKeys) {
                   <td>
                     <a
                       href={`/fixtures/${encodeURIComponent(benchName)}/${shortId}`}
-                      class="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-[var(--color-text-mid)] border border-[var(--color-border)] no-underline"
+                      class="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-(--color-text-mid) border border-border no-underline"
                     >
                       {shortId}
                     </a>
                   </td>
-                  <td class="font-mono text-[0.68rem] text-[var(--color-text-dim)]">
+                  <td class="font-mono text-[0.68rem] text-(--color-text-dim)">
                     <span title="Fixture complexity: {fi?.difficulty || 'unknown'}.">
                       {fi?.difficulty || "—"}
                     </span>
@@ -146,7 +146,7 @@ for (const fid of fixtureKeys) {
                     const fr = results.find((r) => r.fixture_id === fid);
                     if (!fr) {
                       return (
-                        <td class="text-[var(--color-text-dim)] opacity-40 font-mono text-xs">
+                        <td class="text-(--color-text-dim) opacity-40 font-mono text-xs">
                           —
                         </td>
                       );
@@ -154,8 +154,8 @@ for (const fid of fixtureKeys) {
                     const sim = Math.round(fr.similarity * 1000) / 10;
                     const isPass = fr.passed;
                     const color = isPass
-                      ? "bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]"
-                      : "bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]";
+                      ? "bg-pass-bg text-pass border-pass-border"
+                      : "bg-fail-bg text-fail border-(--color-fail-border)";
                     return (
                       <td>
                         <Badge

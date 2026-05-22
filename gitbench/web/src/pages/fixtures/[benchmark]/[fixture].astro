@@ -63,7 +63,7 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
   <div class="mb-6">
     <a
       href={`/benchmarks/${fi.benchmark}`}
-      class="font-mono text-[0.68rem] text-[var(--color-accent)] no-underline"
+      class="font-mono text-[0.68rem] text-accent no-underline"
     >
       ← {fi.benchmark}
     </a>
@@ -77,14 +77,14 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
         </div>
         {
           fi.description && (
-            <div class="font-mono text-xs text-[var(--color-text-mid)] mb-2">
+            <div class="font-mono text-xs text-(--color-text-mid) mb-2">
               {fi.description}
             </div>
           )
         }
         {
           fi.purpose && (
-            <div class="font-display text-sm text-[var(--color-text-dim)] leading-relaxed mb-3 max-w-[700px]">
+            <div class="font-display text-sm text-(--color-text-dim) leading-relaxed mb-3 max-w-[700px]">
               {fi.purpose}
             </div>
           )
@@ -123,7 +123,7 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
         <div class="section-label">
           <span>Baseline Repository</span>
         </div>
-        <p class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4">
+        <p class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4">
           These commands are replayed before the model sees the prompt. They
           define the starting file structure, staged changes, and Git history
           for this fixture.
@@ -131,10 +131,10 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
         <ol class="m-0 p-0 list-none flex flex-col gap-2">
           {setupCommands.map((command, index) => (
             <li class="grid grid-cols-[2.5rem_1fr] gap-3 items-start">
-              <span class="font-mono text-[0.7rem] text-[var(--color-text-dim)] pt-2 text-right">
+              <span class="font-mono text-[0.7rem] text-(--color-text-dim) pt-2 text-right">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <code class="block font-mono text-[0.78rem] leading-relaxed text-[var(--color-text)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md px-3 py-2 overflow-x-auto">
+              <code class="block font-mono text-[0.78rem] leading-relaxed text-(--color-text) bg-(--color-surface) border border-border rounded-md px-3 py-2 overflow-x-auto">
                 {command}
               </code>
             </li>
@@ -152,7 +152,7 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
       <span>Model Outputs ({modelOutputs.length})</span>
     </div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       All model responses for this fixture, sorted by similarity to the correct
       answer.
@@ -163,7 +163,7 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
       model name to explore its full results.
       <a
         href="/methodology#similarity-scoring"
-        class="text-[var(--color-accent)] no-underline text-xs font-mono"
+        class="text-accent no-underline text-xs font-mono"
         >Learn more →</a
       >
     </p>

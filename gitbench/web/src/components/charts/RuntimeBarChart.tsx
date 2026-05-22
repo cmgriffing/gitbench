@@ -77,10 +77,10 @@ export default function RuntimeBarChart() {
       </div>
       {chartData.length === 0 ? (
         <div className="card p-8 text-center">
-          <div className="font-display text-base text-[var(--text-dim)] mb-1">
+          <div className="font-display text-base text-(--text-dim) mb-1">
             No runtime data available
           </div>
-          <div className="font-mono text-xs text-[var(--text-dim)] opacity-60">
+          <div className="font-mono text-xs text-(--text-dim) opacity-60">
             Runtime data was not collected for these benchmark runs.
           </div>
         </div>

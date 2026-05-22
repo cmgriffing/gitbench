@@ -83,7 +83,7 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
   return (
     <div>
       <div className="flex gap-4 mb-4 flex-wrap items-center">
-        <label className="font-mono text-xs text-[var(--color-text-dim)]">
+        <label className="font-mono text-xs text-(--color-text-dim)">
           X:{" "}
           <select
             value={a}
@@ -97,7 +97,7 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
             ))}
           </select>
         </label>
-        <label className="font-mono text-xs text-[var(--color-text-dim)]">
+        <label className="font-mono text-xs text-(--color-text-dim)">
           Y:{" "}
           <select
             value={b}
@@ -254,24 +254,24 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
           </thead>
           <tbody>
             <tr>
-              <td className="font-mono text-xs text-[var(--color-text-mid)]">
+              <td className="font-mono text-xs text-(--color-text-mid)">
                 {a} pass
               </td>
-              <td className="text-[var(--color-pass)] font-mono text-sm font-semibold">
+              <td className="text-pass font-mono text-sm font-semibold">
                 {bothPass}
               </td>
-              <td className="text-[var(--color-warn)] font-mono text-sm font-semibold">
+              <td className="text-(--color-warn) font-mono text-sm font-semibold">
                 {aOnly}
               </td>
             </tr>
             <tr>
-              <td className="font-mono text-xs text-[var(--color-text-mid)]">
+              <td className="font-mono text-xs text-(--color-text-mid)">
                 {a} fail
               </td>
-              <td className="text-[var(--color-warn)] font-mono text-sm font-semibold">
+              <td className="text-(--color-warn) font-mono text-sm font-semibold">
                 {bOnly}
               </td>
-              <td className="text-[var(--color-fail)] font-mono text-sm font-semibold">
+              <td className="text-fail font-mono text-sm font-semibold">
                 {bothFail}
               </td>
             </tr>
@@ -298,7 +298,7 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
                 const [bench, fid] = d.fixture.split("/");
                 return (
                   <tr key={d.fixture}>
-                    <td className="font-mono text-xs text-[var(--color-text-mid)]">
+                    <td className="font-mono text-xs text-(--color-text-mid)">
                       <a href={`/benchmarks/${bench}`} className="text-inherit">
                         {bench}
                       </a>
@@ -306,7 +306,7 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
                     <td>
                       <a
                         href={`/fixtures/${encodeURIComponent(bench)}/${fid}`}
-                        className="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-[var(--color-text-mid)] border border-[var(--color-border)] no-underline"
+                        className="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-(--color-text-mid) border border-border no-underline"
                       >
                         {fid}
                       </a>
@@ -314,7 +314,7 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
                     <td>
                       <Badge
                         variant="outline"
-                        className={`font-mono text-[0.62rem] border-[var(--color-pass-border)] text-[var(--color-pass)] bg-[var(--color-pass-bg)]`}
+                        className={`font-mono text-[0.62rem] border-pass-border text-pass bg-pass-bg`}
                         style={{ opacity: d.aPassed ? 1 : 0.3 }}
                       >
                         {d.x}%
@@ -323,7 +323,7 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
                     <td>
                       <Badge
                         variant="outline"
-                        className={`font-mono text-[0.62rem] border-[var(--color-pass-border)] text-[var(--color-pass)] bg-[var(--color-pass-bg)]`}
+                        className={`font-mono text-[0.62rem] border-pass-border text-pass bg-pass-bg`}
                         style={{ opacity: d.bPassed ? 1 : 0.3 }}
                       >
                         {d.y}%

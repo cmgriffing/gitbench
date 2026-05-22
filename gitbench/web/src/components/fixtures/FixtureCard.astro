@@ -24,20 +24,20 @@ const {
 } = Astro.props;
 const passVariant = passed ? "default" : "destructive";
 const passColor = passed
-  ? "bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]"
-  : "bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]";
+  ? "bg-pass-bg text-pass border-pass-border"
+  : "bg-fail-bg text-fail border-(--color-fail-border)";
 const tagsStr = tags.join(",");
 ---
 
 <a
   href={`/fixtures/${encodeURIComponent(benchmark)}/${fixtureId}`}
-  class="no-underline card fixture-card p-4 cursor-pointer transition-colors hover:border-[var(--color-border-accent)]"
+  class="no-underline card fixture-card p-4 cursor-pointer transition-colors hover:border-(--color-border-accent)"
   data-benchmark={benchmark}
   data-difficulty={difficulty}
   data-tags={tagsStr}
 >
   <div class="flex justify-between items-center mb-2">
-    <span class="font-mono text-xs text-[var(--color-text-mid)] font-medium">
+    <span class="font-mono text-xs text-(--color-text-mid) font-medium">
       {fixtureId}
     </span>
     <Badge variant="outline" className={`font-mono text-[0.6rem] ${passColor}`}>
@@ -45,10 +45,10 @@ const tagsStr = tags.join(",");
     </Badge>
   </div>
   <div class="flex justify-between items-center">
-    <span class="font-mono text-[0.62rem] text-[var(--color-text-dim)]">
+    <span class="font-mono text-[0.62rem] text-(--color-text-dim)">
       {benchmark}
     </span>
-    <span class="font-mono text-xs font-semibold text-[var(--color-text)]">
+    <span class="font-mono text-xs font-semibold text-(--color-text)">
       {similarity}%
     </span>
   </div>
@@ -63,7 +63,7 @@ const tagsStr = tags.join(",");
   }
   {
     inputTokens != null && outputTokens != null && (
-      <div class="mt-1.5 font-mono text-[0.58rem] text-[var(--color-text-dim)] opacity-60">
+      <div class="mt-1.5 font-mono text-[0.58rem] text-(--color-text-dim) opacity-60">
         {inputTokens}→{outputTokens} tokens
       </div>
     )

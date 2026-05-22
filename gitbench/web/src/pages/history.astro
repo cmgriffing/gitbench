@@ -32,7 +32,7 @@ const runsWithDelta = sortedRuns.map((run, idx) => {
   <section class="mb-10">
     <div class="section-label"><span>Pass Rate Over Time</span></div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Track how model pass rates change over calendar time. Each point
       represents a benchmark run on that date. Improvements may reflect model
@@ -45,7 +45,7 @@ const runsWithDelta = sortedRuns.map((run, idx) => {
   <section>
     <div class="section-label"><span>Run Log ({sortedRuns.length})</span></div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Every benchmark evaluation on record. Use this to audit when results
       changed, track model improvements, or find regressions.
@@ -117,32 +117,32 @@ const runsWithDelta = sortedRuns.map((run, idx) => {
                 : "";
               return (
                 <tr>
-                  <td class="font-mono text-xs text-[var(--color-text-dim)]">
+                  <td class="font-mono text-xs text-(--color-text-dim)">
                     {ts}
                   </td>
                   <td>
                     <a
                       href={modelPath(run.model)}
-                      class="text-[var(--color-text-mid)] no-underline font-mono text-xs"
+                      class="text-(--color-text-mid) no-underline font-mono text-xs"
                     >
                       {run.model}
                     </a>
                   </td>
-                  <td class="font-mono text-[0.68rem] text-[var(--color-text-dim)]">
+                  <td class="font-mono text-[0.68rem] text-(--color-text-dim)">
                     {run.profile || "—"}
                   </td>
-                  <td class="font-mono text-[0.68rem] text-[var(--color-text-dim)]">
+                  <td class="font-mono text-[0.68rem] text-(--color-text-dim)">
                     {rl}
                   </td>
                   <td>
                     <Badge
                       variant="outline"
-                      class="font-mono text-[0.65rem] border-[var(--color-pass-border)] text-[var(--color-pass)] bg-[var(--color-pass-bg)]"
+                      class="font-mono text-[0.65rem] border-pass-border text-pass bg-pass-bg"
                     >
                       {passRate}%
                     </Badge>
                   </td>
-                  <td class="font-mono text-[0.65rem] text-[var(--color-text-dim)] opacity-60">
+                  <td class="font-mono text-[0.65rem] text-(--color-text-dim) opacity-60">
                     {run.benchmark_suite_version || "—"}
                   </td>
                   <td
@@ -153,13 +153,13 @@ const runsWithDelta = sortedRuns.map((run, idx) => {
                       ? (run.delta! >= 0 ? "+" : "") + run.delta + "%"
                       : "—"}
                   </td>
-                  <td class="font-mono text-[0.65rem] text-[var(--color-accent)] opacity-50">
+                  <td class="font-mono text-[0.65rem] text-accent opacity-50">
                     {sha}
                   </td>
                   <td>
                     <a
                       href={`/compare?with=${encodeURIComponent(run.model)}`}
-                      class="font-mono text-[0.6rem] text-[var(--color-accent)] no-underline"
+                      class="font-mono text-[0.6rem] text-accent no-underline"
                     >
                       Compare
                     </a>

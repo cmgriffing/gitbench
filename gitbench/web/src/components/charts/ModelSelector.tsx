@@ -21,10 +21,10 @@ const EVENT_NAME = "model-selection-changed";
 
 function getPassColor(passRate: number): string {
   if (passRate >= 0.8)
-    return "text-[var(--color-pass)] bg-[var(--color-pass-bg)] border-[var(--color-pass-border)]";
+    return "text-pass bg-pass-bg border-pass-border";
   if (passRate >= 0.5)
-    return "text-[var(--color-warn)] bg-[var(--color-warn-bg)] border-[var(--color-warn-border)]";
-  return "text-[var(--color-fail)] bg-[var(--color-fail-bg)] border-[var(--color-fail-border)]";
+    return "text-(--color-warn) bg-warn-bg border-(--color-warn-border)";
+  return "text-fail bg-fail-bg border-(--color-fail-border)";
 }
 
 function readStoredSelection(groups: ModelGroup[]): string[] | null {

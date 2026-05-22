@@ -245,7 +245,7 @@ function ProviderDotLegend({ points }: { points: QuadrantPoint[] }) {
   if (providers.length === 0) return null;
 
   return (
-    <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2 font-mono text-[0.625rem] text-[var(--text-dim)]">
+    <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-2 font-mono text-[0.625rem] text-(--text-dim)">
       {providers.map((provider) => (
         <span key={provider} className="inline-flex items-center gap-1.5">
           <span
@@ -271,7 +271,7 @@ function MetricSelect({
   exclude: MetricKey;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-[0.65rem] font-mono uppercase tracking-[0.08em] text-[var(--text-dim)]">
+    <label className="flex flex-col gap-1 text-[0.65rem] font-mono uppercase tracking-[0.08em] text-(--text-dim)">
       {label}
       <select
         className="brand-select w-full normal-case"
@@ -396,10 +396,10 @@ export default function QuadrantComparisonChart() {
 
       {chartData.length === 0 ? (
         <div className="card p-8 text-center">
-          <div className="font-display text-base text-[var(--text-dim)] mb-1">
+          <div className="font-display text-base text-(--text-dim) mb-1">
             No comparable data available
           </div>
-          <div className="font-mono text-xs text-[var(--text-dim)] opacity-60">
+          <div className="font-mono text-xs text-(--text-dim) opacity-60">
             Choose two metrics that are present for the selected benchmark runs.
           </div>
         </div>
@@ -407,9 +407,9 @@ export default function QuadrantComparisonChart() {
         <>
           <div className="card">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-3 px-1">
-              <div className="font-mono text-xs text-[var(--text-mid)]">
+              <div className="font-mono text-xs text-(--text-mid)">
                 Optimal quadrant:{" "}
-                <span className="text-[var(--accent)]">
+                <span className="text-(--accent)">
                   {xMetric.better === "higher" ? "higher" : "lower"}{" "}
                   {xMetric.shortLabel.toLowerCase()} +{" "}
                   {yMetric.better === "higher" ? "higher" : "lower"}{" "}
@@ -418,7 +418,7 @@ export default function QuadrantComparisonChart() {
               </div>
               {best ? (
                 <a
-                  className="inline-flex items-center gap-1.5 font-mono text-xs text-[var(--text-mid)] no-underline hover:text-[var(--accent)]"
+                  className="inline-flex items-center gap-1.5 font-mono text-xs text-(--text-mid) no-underline hover:text-(--accent)"
                   href={modelGroupPath(best.provider, best.baseModel)}
                 >
                   <ProviderIcon provider={best.provider} size={14} />
@@ -551,21 +551,21 @@ export default function QuadrantComparisonChart() {
                 <Scatter data={chartData} shape={<PointShape />} />
               </ScatterChart>
             </ResponsiveContainer>
-            <div className="mt-2 grid gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-2 grid gap-2 border-t border-(--border) pt-3 sm:grid-cols-2 lg:grid-cols-3">
               {chartData.slice(0, 6).map((point, index) => (
                 <a
                   key={point.id}
                   href={modelGroupPath(point.provider, point.baseModel)}
-                  className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-[var(--text-mid)] no-underline transition hover:bg-white/[0.03] hover:text-[var(--text)]"
+                  className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-(--text-mid) no-underline transition hover:bg-white/3 hover:text-(--text)"
                 >
-                  <span className="font-mono text-[var(--text-dim)]">
+                  <span className="font-mono text-(--text-dim)">
                     {index + 1}
                   </span>
                   <ProviderIcon provider={point.provider} size={14} />
                   <span className="truncate">
                     {truncateName(point.baseModel, 24)}
                   </span>
-                  <span className="ml-auto font-mono text-[var(--text-dim)]">
+                  <span className="ml-auto font-mono text-(--text-dim)">
                     {formatCompactDecimal(point.compositeScore * 100, 0)}
                   </span>
                 </a>

@@ -29,15 +29,15 @@ const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
   <div class="flex items-center gap-3 mb-6">
     <ProviderIcon provider={provider} size={28} client:load />
     <div>
-      <div class="text-sm font-mono text-[var(--color-text-dim)]">
+      <div class="text-sm font-mono text-(--color-text-dim)">
         {providerName}
       </div>
-      <h1 class="text-2xl font-bold text-[var(--color-text)]">{baseModel}</h1>
+      <h1 class="text-2xl font-bold text-(--color-text)">{baseModel}</h1>
     </div>
   </div>
 
   <p
-    class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-6"
+    class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-6"
   >
     This model is available at multiple <span title="Reasoning effort level."
       >reasoning effort levels</span
@@ -54,18 +54,18 @@ const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
           l.pass_at_k >= 0.8 ? "pass" : l.pass_at_k < 0.5 ? "fail" : "warn";
         const passColor =
           l.pass_at_k >= 0.8
-            ? "bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]"
+            ? "bg-pass-bg text-pass border-pass-border"
             : l.pass_at_k < 0.5
-              ? "bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]"
-              : "bg-[var(--color-warn-bg)] text-[var(--color-warn)] border-[var(--color-warn-border)]";
+              ? "bg-fail-bg text-fail border-(--color-fail-border)"
+              : "bg-warn-bg text-(--color-warn) border-(--color-warn-border)";
         const levelLabel = l.level || "default";
         const href = modelLevelPath(provider, baseModel, l.level || "default");
         const summary = data.model_summaries[l.modelName];
 
         return (
           <a href={href} class="no-underline">
-            <div class="card p-5 cursor-pointer transition-colors hover:border-[var(--color-border-accent)]">
-              <div class="text-xs font-mono text-[var(--color-text-dim)] mb-2">
+            <div class="card p-5 cursor-pointer transition-colors hover:border-(--color-border-accent)">
+              <div class="text-xs font-mono text-(--color-text-dim) mb-2">
                 {levelLabel}
               </div>
               <div class="flex gap-2 items-center flex-wrap mb-3">
@@ -77,7 +77,7 @@ const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
                 </Badge>
               </div>
               {summary && (
-                <div class="font-mono text-[0.65rem] text-[var(--color-text-dim)]">
+                <div class="font-mono text-[0.65rem] text-(--color-text-dim)">
                   {summary.total_passed} / {summary.total_fixtures} fixtures ·{" "}
                   {summary.total_runs} run(s)
                   {summary.total_cost_usd != null && (

@@ -7,10 +7,10 @@ import Layout from "@/components/Layout.astro";
     <div class="section-label"><span>How GitBench Works</span></div>
 
     <div
-      class="space-y-6 text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl"
+      class="space-y-6 text-sm text-(--color-text-mid) leading-relaxed max-w-3xl"
     >
       <section>
-        <h3 class="text-base font-bold text-[var(--color-text)] mb-2">
+        <h3 class="text-base font-bold text-(--color-text) mb-2">
           Benchmark Design
         </h3>
         <p>
@@ -18,38 +18,38 @@ import Layout from "@/components/Layout.astro";
           a Git task (e.g., "show the last 3 commits as one-liners"), an expected
           output (the correct command or output), and a scoring configuration. Fixtures
           are defined in YAML files under the <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >fixtures/</code
           > directory and grouped into benchmarks by Git task domain.
         </p>
         <p class="mt-2">
           The current benchmark suite covers ~17 domains, including
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >log</code
           >,
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >branch</code
           >,
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >commit</code
           >,
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >rebase</code
           >,
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >merge</code
           >,
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >bisect</code
           >,
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >cherry-pick</code
           >, and more. Each fixture runs in an isolated Git repository set up
           specifically for that test, ensuring deterministic execution.
@@ -57,13 +57,13 @@ import Layout from "@/components/Layout.astro";
       </section>
 
       <section>
-        <h3 class="text-base font-bold text-[var(--color-text)] mb-2">
+        <h3 class="text-base font-bold text-(--color-text) mb-2">
           Similarity Scoring
         </h3>
         <p>
           Each model output is compared to the expected answer using a fuzzy
           similarity algorithm (Python's <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             title="difflib.SequenceMatcher — Python's fuzzy string comparison algorithm."
             >SequenceMatcher</code
           > from the standard library). The similarity score ranges from 0% (completely
@@ -83,7 +83,7 @@ import Layout from "@/components/Layout.astro";
       </section>
 
       <section>
-        <h3 class="text-base font-bold text-[var(--color-text)] mb-2">
+        <h3 class="text-base font-bold text-(--color-text) mb-2">
           Pass@k Metric
         </h3>
         <p>
@@ -91,16 +91,16 @@ import Layout from "@/components/Layout.astro";
           passed:
         </p>
         <div
-          class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-4 my-3 font-mono text-xs"
+          class="bg-(--color-surface) border border-border rounded-lg p-4 my-3 font-mono text-xs"
         >
           pass@k = passed_fixtures / total_fixtures
         </div>
         <p>
           For single-run evaluations (the default), <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >k = 1</code
           >. When a model is run multiple times, <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >k</code
           > represents the number of runs, and pass@k is computed per benchmark or
           across all benchmarks. Pass rates are shown as percentages on the Overview
@@ -109,7 +109,7 @@ import Layout from "@/components/Layout.astro";
       </section>
 
       <section>
-        <h3 class="text-base font-bold text-[var(--color-text)] mb-2">
+        <h3 class="text-base font-bold text-(--color-text) mb-2">
           Model Selection &amp; Run Metadata
         </h3>
         <p>
@@ -141,10 +141,10 @@ import Layout from "@/components/Layout.astro";
         </ul>
         <p class="mt-2">
           Model names may include a <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >#level</code
           > suffix to specify a reasoning effort level. For example, <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >o3-mini#high</code
           >
           runs the o3-mini model with high reasoning effort. The base model name is
@@ -153,13 +153,13 @@ import Layout from "@/components/Layout.astro";
       </section>
 
       <section>
-        <h3 class="text-base font-bold text-[var(--color-text)] mb-2">
+        <h3 class="text-base font-bold text-(--color-text) mb-2">
           Cost Data
         </h3>
         <p>
           When models are called through OpenRouter, the API response includes a
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >cost</code
           > field (in USD). GitBench extracts this cost and surfaces it on the Models
           overview page (per-model total and average cost) and on the Cost vs Quality
@@ -168,7 +168,7 @@ import Layout from "@/components/Layout.astro";
         </p>
         <p class="mt-2">
           Raw run files in <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >gitbench-results/</code
           >
           remain untouched and contain the full run data, including any models filtered
@@ -177,7 +177,7 @@ import Layout from "@/components/Layout.astro";
       </section>
 
       <section>
-        <h3 class="text-base font-bold text-[var(--color-text)] mb-2">
+        <h3 class="text-base font-bold text-(--color-text) mb-2">
           Limitations
         </h3>
         <ul class="list-disc list-inside space-y-1">

@@ -14,10 +14,10 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
     <div class="card">
       <div class="section-label"><span>About</span></div>
       <div
-        class="space-y-3 text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl"
+        class="space-y-3 text-sm text-(--color-text-mid) leading-relaxed max-w-3xl"
       >
         <p>
-          <strong class="text-[var(--color-text)]"
+          <strong class="text-(--color-text)"
             >GitBench is a benchmark suite that evaluates how well language
             models perform on real-world Git tasks.</strong
           >
@@ -30,15 +30,15 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
           Each model is tested across 204 fixtures — prompts that ask it to
           write commands like
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >git log</code
           >,
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >git rebase</code
           >, or
           <code
-            class="font-mono text-[0.75rem] bg-[var(--color-surface)] px-1 py-0.5 rounded"
+            class="font-mono text-[0.75rem] bg-(--color-surface) px-1 py-0.5 rounded"
             >git bisect</code
           >
           — and its output is compared against the expected command using a fuzzy
@@ -54,7 +54,7 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
           detailed benchmark matrix across all evaluated models.
           <a
             href="/methodology"
-            class="text-[var(--color-accent)] no-underline text-xs font-mono"
+            class="text-accent no-underline text-xs font-mono"
             >Learn more about how GitBench works →</a
           >
         </p>
@@ -70,7 +70,7 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
       >
     </div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Overall Git competency across all 204 fixtures. Higher bars mean the model
       answered more Git tasks correctly. Hover any bar for a breakdown by
@@ -87,7 +87,7 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
       >
     </div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Pick two criteria to see where models land against both tradeoffs at once.
       The shaded quadrant is the optimal direction — for example, lower cost
@@ -104,13 +104,13 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
       >
     </div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Total API cost (USD) to evaluate each model across all 204 fixtures.
       Models showing "—" run locally via Ollama and have no tracked cost.
       <a
         href="/methodology#cost-data"
-        class="text-[var(--color-accent)] no-underline text-xs font-mono"
+        class="text-accent no-underline text-xs font-mono"
         >Learn more →</a
       >
     </p>
@@ -125,7 +125,7 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
       >
     </div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Total wall-clock time to run all 204 fixtures. This includes API latency
       and rate limiting overhead — it's not a pure model speed benchmark.
@@ -141,7 +141,7 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
       >
     </div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       Total tokens consumed (input + output) across all 204 fixtures. A rough
       measure of efficiency — delivering correct answers with fewer tokens is
@@ -158,7 +158,7 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
       >
     </div>
     <p
-      class="text-sm text-[var(--color-text-mid)] leading-relaxed max-w-3xl mb-4"
+      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
     >
       The deep dive. Rows are Git task categories, columns are models. Green
       cells show where a model excels on a specific skill; red cells reveal its
@@ -166,7 +166,7 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
       with complex workflows.
       <a
         href="/methodology#benchmark-design"
-        class="text-[var(--color-accent)] no-underline text-xs font-mono"
+        class="text-accent no-underline text-xs font-mono"
         >Learn more →</a
       >
     </p>

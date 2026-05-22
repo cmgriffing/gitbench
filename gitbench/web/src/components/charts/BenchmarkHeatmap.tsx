@@ -55,7 +55,7 @@ export default function BenchmarkHeatmap() {
           <tbody>
             {data.benchmarks.map((bench) => (
               <tr key={bench}>
-                <td className="font-mono text-xs text-[var(--color-text-mid)]">
+                <td className="font-mono text-xs text-(--color-text-mid)">
                   <a
                     href={`/benchmarks/${bench}`}
                     className="text-inherit no-underline"
@@ -71,7 +71,7 @@ export default function BenchmarkHeatmap() {
                         key={m}
                         title={`No data available for ${m} on ${bench}`}
                       >
-                        <span className="text-[var(--color-text-dim)] opacity-40 font-mono text-xs">
+                        <span className="text-(--color-text-dim) opacity-40 font-mono text-xs">
                           —
                         </span>
                       </td>
@@ -101,7 +101,7 @@ export default function BenchmarkHeatmap() {
                         >
                           {pct}%
                         </Badge>
-                        <span className="font-mono text-[0.65rem] text-[var(--color-text-dim)] ml-1">
+                        <span className="font-mono text-[0.65rem] text-(--color-text-dim) ml-1">
                           {cell.passed}/{cell.total}
                         </span>
                       </a>

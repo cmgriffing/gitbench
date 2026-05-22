@@ -12,7 +12,7 @@ const { text } = Astro.props;
 <div class="mb-6">
   <div class="flex justify-between items-center mb-2.5">
     <span
-      class="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--color-accent)] opacity-75"
+      class="font-mono text-[0.65rem] uppercase tracking-wider text-accent opacity-75"
       title="The exact text sent to the model."
     >
       Prompt
@@ -29,7 +29,7 @@ const { text } = Astro.props;
     </Button>
   </div>
   <div
-    class="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 font-mono text-xs text-[var(--color-text-mid)] whitespace-pre-wrap break-words leading-relaxed max-h-[500px] overflow-y-auto"
+    class="bg-(--color-surface) border border-border rounded-xl p-5 font-mono text-xs text-(--color-text-mid) whitespace-pre-wrap wrap-break-word leading-relaxed max-h-[500px] overflow-y-auto"
   >
     {text}
   </div>
