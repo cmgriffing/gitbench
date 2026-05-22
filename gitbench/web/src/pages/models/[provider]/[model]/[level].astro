@@ -10,42 +10,42 @@ import { GitCompare } from 'lucide-react';
 import ProviderIcon from '../../../../components/ProviderIcon.tsx';
 
 export function getStaticPaths() {
-  const data = loadDataSync();
-  const paths: { params: { provider: string; model: string; level: string }; props: any }[] = [];
-  for (const g of data.base_model_groups) {
-    for (const l of g.levels) {
-      paths.push({
-        params: {
-          provider: g.provider,
-          model: g.baseModel,
-          level: l.level || 'default',
-        },
-        props: {
-          provider: g.provider,
-          baseModel: g.baseModel,
-          level: l.level || 'default',
-          modelName: l.modelName,
-          group: g,
-          data,
-        },
-      });
-    }
-  }
-  return paths;
+ const data = loadDataSync();
+ const paths: { params: { provider: string; model: string; level: string }; props: any }[] = [];
+ for (const g of data.base_model_groups) {
+ for (const l of g.levels) {
+ paths.push({
+ params: {
+ provider: g.provider,
+ model: g.baseModel,
+ level: l.level || 'default',
+ },
+ props: {
+ provider: g.provider,
+ baseModel: g.baseModel,
+ level: l.level || 'default',
+ modelName: l.modelName,
+ group: g,
+ data,
+ },
+ });
+ }
+ }
+ return paths;
 }
 
 const { provider, baseModel, level, modelName, group, data } = Astro.props as {
-  provider: string;
-  baseModel: string;
-  level: string;
-  modelName: string;
-  group: BaseModelGroup;
-  data: GitBenchData;
+ provider: string;
+ baseModel: string;
+ level: string;
+ modelName: string;
+ group: BaseModelGroup;
+ data: GitBenchData;
 };
 
 const summary = data.model_summaries[modelName];
 if (!summary) {
-  return new Response('Model not found', { status: 404 });
+ return new Response('Model not found', { status: 404 });
 }
 
 const passRate = Math.round(summary.pass_at_k * 1000) / 10;

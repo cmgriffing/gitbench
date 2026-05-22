@@ -14,7 +14,9 @@ interface Props {
 
 const { fixtureId, benchmark, passed, similarity, difficulty, tags, inputTokens, outputTokens } = Astro.props;
 const passVariant = passed ? 'default' : 'destructive';
-const passColor = passed ? 'bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]' : 'bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]';
+const passColor = passed
+  ? 'bg-[var(--color-pass-bg)] text-[var(--color-pass)] border-[var(--color-pass-border)]'
+  : 'bg-[var(--color-fail-bg)] text-[var(--color-fail)] border-[var(--color-fail-border)]';
 const tagsStr = tags.join(',');
 ---
 
