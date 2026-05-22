@@ -409,68 +409,6 @@ select.brand-select option {
   border-bottom: none;
 }
 
-/* ── Tooltips ── */
-.has-tooltip {
-  cursor: help;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25em;
-}
-
-.has-tooltip::before {
-  content: "i";
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  border: 1px solid var(--text-dim);
-  color: var(--text-dim);
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 700;
-  line-height: 1;
-  opacity: 0.35;
-  flex-shrink: 0;
-  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
-  order: 1;
-}
-
-.has-tooltip:hover::before {
-  opacity: 0.8;
-  color: var(--text-link-hover);
-  border-color: var(--text-link-hover);
-}
-
-.has-tooltip::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--card);
-  border: 2px solid var(--border-accent);
-  color: var(--text-mid);
-  padding: 0.65rem 0.85rem;
-  border-radius: 10px;
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  width: max-content;
-  max-width: 280px;
-  z-index: 1000;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.15s;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-
-.has-tooltip:hover::after {
-  opacity: 1;
-}
-
 /* ── Responsive ── */
 @media (max-width: 960px) {
   .app-sidebar {
