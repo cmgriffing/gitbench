@@ -124,9 +124,8 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
           <span>Baseline Repository</span>
         </div>
         <p class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4">
-          These commands are replayed before the model sees the prompt. They
-          define the starting file structure, staged changes, and Git history
-          for this fixture.
+          These commands set up the repo before the model sees the prompt. They
+          define the starting file structure, staged changes, and Git history.
         </p>
         <ol class="m-0 p-0 list-none flex flex-col gap-2">
           {setupCommands.map((command, index) => (
@@ -151,22 +150,6 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
     <div class="section-label">
       <span>Model Outputs ({modelOutputs.length})</span>
     </div>
-    <p
-      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
-    >
-      All model responses for this fixture, sorted by similarity to the correct
-      answer.
-      <span title="PASS = met similarity threshold. FAIL = below threshold."
-        >PASS</span
-      >
-      means the model's output was close enough to the expected answer. Click any
-      model name to explore its full results.
-      <a
-        href="/methodology#similarity-scoring"
-        class="text-accent no-underline text-xs font-mono"
-        >Learn more →</a
-      >
-    </p>
     <div class="flex flex-col gap-4">
       {
         modelOutputs.map((mo) => (

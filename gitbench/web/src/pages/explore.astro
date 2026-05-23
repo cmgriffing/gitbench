@@ -29,22 +29,13 @@ const allFixtures = Object.values(data.fixture_index);
 ---
 
 <Layout title="Explore">
-  <p
-    class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-6"
-  >
-    The complete fixture index — all 204 test cases searchable by topic,
-    difficulty, and benchmark.
-    <span
-      title="Tags describe Git concepts each fixture tests. Click to filter."
-      >Tags</span
-    >
-    let you browse by Git concept,
-    <span title="Fixture difficulty: trivial/easy/medium/hard/expert."
-      >difficulty</span
-    >
-    lets you filter by complexity, and benchmark lets you focus on a single skill
-    domain. Click any fixture card to see its full prompt and all model responses.
-  </p>
+  <div class="info-tip">
+    <div class="section-label"><span>About</span></div>
+    <p class="info-blurb">
+      204 test cases. Filter by tag, difficulty, or benchmark.
+      Click any fixture card to see the full prompt and all model responses.
+    </p>
+  </div>
   <div class="mb-8">
     <div class="section-label"><span>Explore Tags</span></div>
 
@@ -100,19 +91,19 @@ const allFixtures = Object.values(data.fixture_index);
   <div class="mb-8">
     <div class="section-label"><span>Filters</span></div>
     <div class="flex gap-2 flex-wrap items-center" id="filter-controls">
-      <span title="Filter fixtures by Git concept tag.">
+      <span>
         <select id="explore-tag" class="brand-select text-xs">
           <option value="">Any tag</option>
           {sortedTags.map(([tag]) => <option value={tag}>{tag}</option>)}
         </select>
       </span>
-      <span title="Filter by difficulty: trivial/easy/medium/hard/expert.">
+      <span>
         <select id="explore-diff" class="brand-select text-xs">
           <option value="">Any difficulty</option>
           {diffsSorted.map((d) => <option value={d}>{d}</option>)}
         </select>
       </span>
-      <span title="Filter by benchmark category.">
+      <span>
         <select id="explore-bench" class="brand-select text-xs">
           <option value="">Any benchmark</option>
           {data.benchmarks.map((b) => <option value={b}>{b}</option>)}
