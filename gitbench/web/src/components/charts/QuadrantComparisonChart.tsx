@@ -527,23 +527,6 @@ export default function QuadrantComparisonChart() {
                         <div style={{ color: "var(--text-dim)" }}>
                           {yMetric.shortLabel}: {yMetric.format(point.y)}
                         </div>
-                        <div
-                          style={{
-                            borderTop: "1px solid rgba(255,255,255,0.06)",
-                            margin: "6px 0",
-                          }}
-                        />
-                        <div
-                          style={{
-                            color: "var(--text-dim)",
-                            fontSize: 10,
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          Composite fit:{" "}
-                          {formatCompactDecimal(point.compositeScore * 100, 1)}
-                          %. Click to open the model page.
-                        </div>
                       </div>
                     );
                   }}

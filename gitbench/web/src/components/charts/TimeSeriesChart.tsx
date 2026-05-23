@@ -83,7 +83,6 @@ export default function TimeSeriesChart() {
       </div>
       <div
         className="card"
-        title="Pass rate over calendar time. Each point = a benchmark run on that date. Changes may reflect model updates or benchmark suite changes."
       >
         <ResponsiveContainer width="100%" height={300}>
           <LineChart
@@ -157,9 +156,7 @@ export default function TimeSeriesChart() {
                         lineHeight: 1.4,
                       }}
                     >
-                      Pass rate on this date. Changes may reflect
-                      <br />
-                      model updates or benchmark suite changes.
+                      Pass rate on this.
                     </div>
                   </div>
                 );

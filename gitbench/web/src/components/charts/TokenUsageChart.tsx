@@ -82,7 +82,6 @@ export default function TokenUsageChart() {
         <>
           <div
             className="card"
-            title="Total tokens (input + output) consumed across all 204 fixture evaluations. Less output for same accuracy = more efficient."
           >
             <ResponsiveContainer width="100%" height={350}>
               <BarChart
@@ -194,8 +193,7 @@ export default function TokenUsageChart() {
                             lineHeight: 1.4,
                           }}
                         >
-                          Total tokens (input + output) across all 204 fixtures.
-                          Less output for same accuracy = more efficient.
+                          Tokens in + out. Fewer is more efficient.
                         </div>
                       </div>
                     );

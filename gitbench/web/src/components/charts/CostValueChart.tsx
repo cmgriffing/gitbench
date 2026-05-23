@@ -75,10 +75,7 @@ export default function CostValueChart() {
         </div>
       ) : (
         <>
-          <div
-            className="card"
-            title="Total API cost (USD) to evaluate each model across all 204 fixtures. — means local/Ollama (no cost tracked)."
-          >
+          <div className="card">
             <ResponsiveContainer width="100%" height={350}>
               <BarChart
                 data={chartData}
@@ -185,8 +182,7 @@ export default function CostValueChart() {
                             lineHeight: 1.4,
                           }}
                         >
-                          Total API cost (USD) across all 204 fixtures. — means
-                          local/Ollama (no cost tracked).
+                        API cost for 204-fixture run. — = local/Ollama
                         </div>
                       </div>
                     );

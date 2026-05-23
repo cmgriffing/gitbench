@@ -88,7 +88,6 @@ export default function RuntimeBarChart() {
         <>
           <div
             className="card"
-            title="Total wall-clock time to run all 204 fixtures. Affected by API latency and rate limits. Not a pure speed benchmark."
           >
             <ResponsiveContainer width="100%" height={350}>
               <BarChart
@@ -196,8 +195,7 @@ export default function RuntimeBarChart() {
                             lineHeight: 1.4,
                           }}
                         >
-                          Wall-clock time for all 204 fixtures. Affected by API
-                          latency and rate limits.
+                          Wall-clock time. Includes API latency.
                         </div>
                       </div>
                     );

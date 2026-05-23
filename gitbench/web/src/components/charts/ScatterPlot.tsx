@@ -115,7 +115,6 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
 
       <div
         className="card mb-4"
-        title="Per-fixture similarity comparison between two models. Each dot = one fixture. Green = both passed, red = both failed, orange = disagreement."
       >
         <ResponsiveContainer width="100%" height={340}>
           <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
@@ -190,23 +189,6 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
                     </div>
                     <div>
                       {bName}: {d?.y}%
-                    </div>
-                    <div
-                      style={{
-                        borderTop: "1px solid rgba(255,255,255,0.06)",
-                        margin: "6px 0",
-                      }}
-                    />
-                    <div
-                      style={{
-                        color: "var(--text-dim)",
-                        fontSize: 10,
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      Green = both passed. Red = both failed.
-                      <br />
-                      Orange = disagreement (one passed).
                     </div>
                   </div>
                 );

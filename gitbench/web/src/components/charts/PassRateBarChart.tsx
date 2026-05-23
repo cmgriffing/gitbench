@@ -62,7 +62,6 @@ export default function PassRateBarChart() {
       </div>
       <div
         className="card"
-        title="Pass rate percentages for each model across all 204 Git fixtures. Higher bars = better Git skills."
       >
         <ResponsiveContainer width="100%" height={350}>
           <BarChart
@@ -163,8 +162,7 @@ export default function PassRateBarChart() {
                         lineHeight: 1.4,
                       }}
                     >
-                      Pass rate = % of 204 Git fixtures answered correctly.
-                      Higher reasoning levels typically score better.
+                      % of 204 fixtures passed
                     </div>
                   </div>
                 );
