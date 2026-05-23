@@ -66,7 +66,7 @@ The Fixture Detail page (`fixtures/[fixture].astro`) SHALL render the fixture me
 - **THEN** the full prompt text is copied to the system clipboard
 
 ### Requirement: Explore page provides tag-based fixture search
-The Explore page (`explore.astro`) SHALL render a tag cloud showing all tags with fixture counts, and a React island for filter bar and filtered results. Selecting tags or difficulty levels SHALL filter the fixture list to show matching fixtures with per-model pass/fail sparkline bars.
+The Explore page (`explore.astro`) SHALL render a tag cloud showing all tags with fixture counts, and filter controls for tag, difficulty, and benchmark. Difficulty filter dropdown options SHALL be sorted by difficulty order (trivial, easy, medium, hard, expert), not alphabetically. Selecting tags or difficulty levels SHALL filter the fixture list to show matching fixtures.
 
 #### Scenario: Tag cloud displays all tags
 - **WHEN** navigating to `/explore`
@@ -79,6 +79,10 @@ The Explore page (`explore.astro`) SHALL render a tag cloud showing all tags wit
 #### Scenario: Multiple filters combine with AND logic
 - **WHEN** a user selects tag "rename" and difficulty "medium"
 - **THEN** only fixtures matching BOTH criteria are displayed
+
+#### Scenario: Difficulty dropdown sorted by difficulty order
+- **WHEN** navigating to `/explore`
+- **THEN** the difficulty filter dropdown options appear in order: trivial, easy, medium, hard, expert
 
 ### Requirement: Compare page enables multi-model analysis
 The Compare page (`compare.astro`) SHALL be a React island component that provides: a multi-select model picker at the top, an overall pass rate comparison bar chart, a per-benchmark grouped comparison chart, a head-to-head scatter plot for two chosen models, an agreement matrix for the same two models, and a per-fixture detail table across all selected models.
@@ -115,7 +119,7 @@ The History page (`history.astro`) SHALL render a static run log table showing t
 - **THEN** the expanded area lists fixtures whose pass status or similarity changed significantly from the previous run
 
 ### Requirement: Models index page groups by provider and base model
-The Models index page (`/models`) SHALL render models grouped by provider, then by base model within each provider. Each provider section SHALL display the provider brand icon and provider name as a header. Within each provider section, base models SHALL be displayed as cards containing sub-cards for each reasoning level. Each level sub-card SHALL show: the level name, pass rate percentage (color-coded), and total cost in USD. Clicking a level sub-card SHALL navigate to `/models/<provider>/<base-model>/<level>/`.
+The Models index page (`/models`) SHALL render models grouped by provider, then by base model within each provider. Each provider section SHALL display the provider brand icon and provider name as a header. Within each provider section, base models SHALL be displayed as cards containing sub-cards for each reasoning level. Reasoning level sub-cards SHALL be sorted by reasoning effort order: default/none, low, medium, high, xhigh, max. Each level sub-card SHALL show: the level name, pass rate percentage (color-coded), and total cost in USD. Clicking a level sub-card SHALL navigate to `/models/<provider>/<base-model>/<level>/`.
 
 #### Scenario: Models grouped by provider
 - **WHEN** the Models page renders with models from anthropic and openai
@@ -125,27 +129,31 @@ The Models index page (`/models`) SHALL render models grouped by provider, then 
 - **WHEN** anthropic/claude-opus-4.7 has runs at low, medium, high, xhigh, and max
 - **THEN** five level sub-cards appear inside the claude-opus-4.7 card, each showing its pass rate and total cost
 
+#### Scenario: Reasoning levels sorted by effort order
+- **WHEN** a base model has levels "high", "low", "medium", "default"
+- **THEN** the sub-cards appear in order: default, low, medium, high
+
 #### Scenario: Clicking a level sub-card navigates to drill-down
 - **WHEN** a user clicks the "low" sub-card under claude-opus-4.7
 - **THEN** the browser navigates to `/models/anthropic/claude-opus-4.7/low/`
 
 ### Requirement: Base model overview page shows level comparison
-The base model overview page (`/models/[provider]/[model]/`) SHALL display the provider icon, provider name, and base model name as a header. Below, it SHALL render reasoning level cards (same layout as the sub-cards on the index page) showing pass rate and total cost for each level. Each card SHALL link to the level's fixture gallery page.
+The base model overview page (`/models/[provider]/[model]/`) SHALL display the provider icon, provider name, and base model name as a header. Below, it SHALL render reasoning level cards sorted by effort order (default/none, low, medium, high, xhigh, max) showing pass rate and total cost for each level. Each card SHALL link to the level's fixture gallery page.
 
 #### Scenario: Level cards displayed for base model
 - **WHEN** navigating to `/models/anthropic/claude-opus-4.7/`
-- **THEN** cards for low, medium, high, xhigh, and max are displayed with pass rates and costs
+- **THEN** cards for low, medium, high, xhigh, and max are displayed with pass rates and costs, in ascending effort order
 
 #### Scenario: Header shows provider and base model
 - **WHEN** navigating to `/models/anthropic/claude-opus-4.7/`
 - **THEN** the page heading includes the Anthropic icon and "Anthropic / claude-opus-4.7"
 
 ### Requirement: Model level drill-down page shows fixture gallery
-The model level page (`/models/[provider]/[model]/[level]/`) SHALL display: the full model identity (provider icon, base model, level), a reasoning level tab bar linking to sibling levels of the same base model, a summary stats area (pass rate, total cost, input/output token counts), a "Compare" button linking to `/compare?with=<encoded-full-model-name>`, and a fixture gallery with filter controls (benchmark, difficulty, tag). Fixture gallery filter controls SHALL be implemented using plain JavaScript (no TypeScript syntax) so they execute correctly in the browser. Difficulty values in the filter dropdown SHALL be sorted by difficulty order (trivial, easy, medium, hard, expert), not alphabetically. The token summary in the header SHALL display separate input and output token counts (e.g., "15.2K in / 48.7K out tokens") rather than a single total.
+The model level page (`/models/[provider]/[model]/[level]/`) SHALL display: the full model identity (provider icon, base model, level), a reasoning level tab bar linking to sibling levels of the same base model and sorted by effort order, a summary stats area (pass rate, total cost, input/output token counts), a "Compare" button linking to `/compare?with=<encoded-full-model-name>`, and a fixture gallery with filter controls (benchmark, difficulty, tag). Fixture gallery filter controls SHALL be implemented using plain JavaScript (no TypeScript syntax) so they execute correctly in the browser. Difficulty values in the filter dropdown SHALL be sorted by difficulty order (trivial, easy, medium, hard, expert), not alphabetically. The token summary in the header SHALL display separate input and output token counts (e.g., "15.2K in / 48.7K out tokens") rather than a single total.
 
-#### Scenario: Tabs link to sibling levels
+#### Scenario: Tabs link to sibling levels sorted by effort order
 - **WHEN** viewing `/models/anthropic/claude-opus-4.7/low/`
-- **THEN** a tab bar shows [low] [medium] [high] [xhigh] [max] with "low" visually active; clicking "high" navigates to `/models/anthropic/claude-opus-4.7/high/`
+- **THEN** a tab bar shows sibling levels in effort order [default, low, medium, high, xhigh, max] with "low" visually active; clicking "high" navigates to `/models/anthropic/claude-opus-4.7/high/`
 
 #### Scenario: Fixture gallery filters work
 - **WHEN** user selects benchmark "git_grep" in the filter bar

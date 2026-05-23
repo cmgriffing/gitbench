@@ -5,6 +5,7 @@ import { modelLevelPath } from '@/lib/routes';
 import type { BaseModelGroup } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 import ProviderIcon from '@/components/ProviderIcon.tsx';
+import { REASONING_LEVEL_ORDER } from '@/lib/sort-orders';
 
 const data = loadDataSync();
 
@@ -15,7 +16,7 @@ for (const g of data.base_model_groups) {
   providers.get(g.provider)!.push(g);
 }
 
-const LEVEL_ORDER: Record<string, number> = { none: 0, low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
+const LEVEL_ORDER = REASONING_LEVEL_ORDER;
 ---
 
 <Layout title="Models">

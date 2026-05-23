@@ -3,6 +3,7 @@ import Layout from "@/components/Layout.astro";
 import { loadDataSync } from "@/lib/data";
 import type { GitBenchData } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { DIFFICULTY_ORDER } from "@/lib/sort-orders";
 
 const data = loadDataSync();
 
@@ -18,7 +19,9 @@ for (const fid in data.fixture_index) {
 }
 
 const sortedTags = Object.entries(tagCounts).sort(([, a], [, b]) => b - a);
-const diffsSorted = Array.from(allDiffs).sort();
+const diffsSorted = Array.from(allDiffs).sort(
+  (a, b) => (DIFFICULTY_ORDER[a] ?? 99) - (DIFFICULTY_ORDER[b] ?? 99) || a.localeCompare(b),
+);
 const maxCount = Math.max(...sortedTags.map((t) => t[1]));
 
 // Build fixture list for client-side filtering

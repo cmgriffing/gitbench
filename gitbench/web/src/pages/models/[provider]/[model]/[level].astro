@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GitCompare } from "lucide-react";
 import ProviderIcon from "@/components/ProviderIcon.tsx";
+import { REASONING_LEVEL_ORDER, DIFFICULTY_ORDER } from "@/lib/sort-orders";
 
 export function getStaticPaths() {
   const data = loadDataSync();
@@ -76,14 +77,6 @@ for (const fid in data.fixture_index) {
   for (const t of fi.tags) allTags.add(t);
 }
 
-const DIFF_ORDER: Record<string, number> = {
-  trivial: 0,
-  easy: 1,
-  medium: 2,
-  hard: 3,
-  expert: 4,
-};
-
 const passCls =
   summary.pass_at_k >= 0.8 ? "pass" : summary.pass_at_k < 0.5 ? "fail" : "warn";
 const passColor =
@@ -126,7 +119,13 @@ for (const bench of data.benchmarks) {
   <!-- Reasoning level tab bar -->
   <div class="flex gap-1.5 flex-wrap mb-6">
     {
-      group.levels.map((l) => {
+      group.levels
+        .sort((a, b) => {
+          const aOrder = REASONING_LEVEL_ORDER[a.level || ""] ?? 99;
+          const bOrder = REASONING_LEVEL_ORDER[b.level || ""] ?? 99;
+          return aOrder - bOrder;
+        })
+        .map((l) => {
         const lvl = l.level || "default";
         const isCurrent = lvl === level;
         const href = modelLevelPath(provider, baseModel, lvl);
@@ -228,7 +227,7 @@ for (const bench of data.benchmarks) {
             Array.from(diffs)
               .sort(
                 (a, b) =>
-                  (DIFF_ORDER[a] ?? 99) - (DIFF_ORDER[b] ?? 99) ||
+                  (DIFFICULTY_ORDER[a] ?? 99) - (DIFFICULTY_ORDER[b] ?? 99) ||
                   a.localeCompare(b),
               )
               .map((d) => <option value={d}>{d}</option>)

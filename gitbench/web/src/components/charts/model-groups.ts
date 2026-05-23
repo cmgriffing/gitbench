@@ -4,6 +4,7 @@ import type {
   GitBenchData,
   ModelInfo,
 } from "@/lib/types";
+import { compareReasoningLevels } from "@/lib/sort-orders";
 
 export type ModelGroupId = string;
 
@@ -50,25 +51,11 @@ export type MetricExtractor = (
   data: GitBenchData
 ) => MetricEffort | null;
 
-const REASONING_LEVEL_ORDER = new Map<string, number>([
-  ["", 0],
-  ["none", 0],
-  ["default", 0],
-  ["low", 1],
-  ["medium", 2],
-  ["high", 3],
-  ["xhigh", 4],
-  ["max", 5],
-]);
-
 function compareReasoningEfforts(a: MetricEffort, b: MetricEffort): number {
-  const aLevel = String(a.reasoningLevel ?? "").toLowerCase();
-  const bLevel = String(b.reasoningLevel ?? "").toLowerCase();
-  const aOrder = REASONING_LEVEL_ORDER.get(aLevel) ?? Number.MAX_SAFE_INTEGER;
-  const bOrder = REASONING_LEVEL_ORDER.get(bLevel) ?? Number.MAX_SAFE_INTEGER;
-  if (aOrder !== bOrder) return aOrder - bOrder;
-  if (aLevel !== bLevel) return aLevel.localeCompare(bLevel);
-  return a.modelName.localeCompare(b.modelName);
+  return compareReasoningLevels(
+    String(a.reasoningLevel ?? ""),
+    String(b.reasoningLevel ?? ""),
+  ) || a.modelName.localeCompare(b.modelName);
 }
 
 export function modelGroupId(

@@ -5,6 +5,7 @@ import { modelLevelPath } from "@/lib/routes";
 import type { GitBenchData, BaseModelGroup } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import ProviderIcon from "@/components/ProviderIcon.tsx";
+import { REASONING_LEVEL_ORDER } from "@/lib/sort-orders";
 
 export function getStaticPaths() {
   const data = loadDataSync();
@@ -48,7 +49,13 @@ const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 
   <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
     {
-      group.levels.map((l) => {
+      group.levels
+        .sort((a, b) => {
+          const aOrder = REASONING_LEVEL_ORDER[a.level || ""] ?? 99;
+          const bOrder = REASONING_LEVEL_ORDER[b.level || ""] ?? 99;
+          return aOrder - bOrder;
+        })
+        .map((l) => {
         const passRate = Math.round(l.pass_at_k * 1000) / 10;
         const passCls =
           l.pass_at_k >= 0.8 ? "pass" : l.pass_at_k < 0.5 ? "fail" : "warn";
