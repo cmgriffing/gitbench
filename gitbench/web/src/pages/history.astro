@@ -31,68 +31,30 @@ const runsWithDelta = sortedRuns.map((run, idx) => {
 <Layout title="Run History">
   <section class="mb-10">
     <div class="section-label"><span>Pass Rate Over Time</span></div>
-    <p
-      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
-    >
-      Track how model pass rates change over calendar time. Each point
-      represents a benchmark run on that date. Improvements may reflect model
-      updates, benchmark suite changes, or new evaluation runs with different
-      configurations.
-    </p>
     <TimeSeriesChart client:load />
   </section>
 
   <section>
-    <div class="section-label"><span>Run Log ({sortedRuns.length})</span></div>
-    <p
-      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
-    >
-      Every benchmark evaluation on record. Use this to audit when results
-      changed, track model improvements, or find regressions.
-      <span
-        title="Δ prev: change in pass rate from previous run. Green = improved, red = regressed."
-        >Green Δ means improvement, red Δ means regression.</span
-      >
-    </p>
+    <div class="info-tip">
+      <div class="section-label"><span>Run Log ({sortedRuns.length})</span></div>
+      <p class="info-blurb">
+        Every benchmark evaluation on record. Green Δ means improved since
+        last run. Red Δ means regressed.
+      </p>
+    </div>
     <div class="card overflow-x-auto p-5">
       <table class="data-table">
         <thead>
           <tr>
             <th>Timestamp</th>
             <th>Model</th>
-            <th
-              ><span
-                title="Runner profile: OpenRouter = cloud API, Ollama = local server."
-                >Profile</span
-              ></th
-            >
-            <th
-              ><span title="Reasoning effort level for this run."
-                >Reasoning</span
-              ></th
-            >
+            <th>Profile</th>
+            <th>Reasoning</th>
             <th>Pass</th>
-            <th
-              ><span
-                title="Benchmark suite version. Different versions may have different fixtures."
-                >Suite</span
-              ></th
-            >
-            <th
-              ><span
-                title="Change in pass rate from previous run. Green = improved, red = regressed."
-                >Δ prev</span
-              ></th
-            >
-            <th
-              ><span title="GitBench code version (commit SHA) at time of run."
-                >Git SHA</span
-              ></th
-            >
-            <th
-              ><span title="Compare this model against others.">Compare</span
-              ></th
-            >
+            <th>Suite</th>
+            <th>Δ prev</th>
+            <th>Git SHA</th>
+            <th>Compare</th>
           </tr>
         </thead>
         <tbody>

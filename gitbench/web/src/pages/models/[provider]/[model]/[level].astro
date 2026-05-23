@@ -193,34 +193,15 @@ for (const bench of data.benchmarks) {
       <span>Fixture Gallery ({allFixtures.length})</span>
     </div>
 
-    <p
-      class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-4"
-    >
-      Each card represents one test fixture — a single Git task this model was
-      asked to complete.
-      <span
-        title="PASS = similar enough to correct answer. FAIL = too different."
-        >PASS/FAIL</span
-      >
-      is determined by fuzzy similarity to the expected answer. Use the filters below
-      to find patterns — for example, filter to <em>expert</em> difficulty to see
-      where this model struggles most.
-      <a
-        href="/methodology#similarity-scoring"
-        class="text-accent no-underline text-xs font-mono"
-        >Learn more →</a
-      >
-    </p>
-
     <!-- Filter controls -->
     <div id="filter-bar" class="flex gap-1.5 flex-wrap mb-4 items-center">
-      <span title="Filter by benchmark category.">
+      <span>
         <select id="filter-bench" class="brand-select text-xs">
           <option value="">All benchmarks</option>
           {benchmarkList.map((b) => <option value={b}>{b}</option>)}
         </select>
       </span>
-      <span title="Filter by difficulty: trivial/easy/medium/hard/expert.">
+      <span>
         <select id="filter-diff" class="brand-select text-xs">
           <option value="">All difficulties</option>
           {
@@ -234,7 +215,7 @@ for (const bench of data.benchmarks) {
           }
         </select>
       </span>
-      <span title="Filter fixtures by tag (Git concept).">
+      <span>
         <select id="filter-tag" class="brand-select text-xs">
           <option value="">All tags</option>
           {

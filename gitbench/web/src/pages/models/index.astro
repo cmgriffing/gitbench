@@ -22,11 +22,9 @@ const LEVEL_ORDER = REASONING_LEVEL_ORDER;
 <Layout title="Models">
   <section class="mb-8">
     <p class="text-sm text-(--color-text-mid) leading-relaxed max-w-3xl mb-2">
-      Models are organized in three levels: <strong class="text-(--color-text)">Provider</strong> → <strong class="text-(--color-text)">Base Model</strong> → <strong class="text-(--color-text)">Reasoning Level</strong>.
-      Each base model may have multiple reasoning effort levels — variants that dial up or down how much compute the model spends "thinking" before answering.
-      <span title="Reasoning effort: low = faster/cheaper, high = more accurate but costlier.">Higher reasoning levels</span>
-      are typically more accurate but slower and costlier. Click any card to explore fixture-by-fixture results.
-      <a href="/methodology#model-selection--run-metadata" class="text-accent no-underline text-xs font-mono">Learn more →</a>
+      Three levels: <strong class="text-(--color-text)">Provider</strong> → <strong class="text-(--color-text)">Base Model</strong> → <strong class="text-(--color-text)">Reasoning Level</strong>.
+      Each base model can have multiple reasoning levels. Higher levels are usually more accurate but slower and costlier.
+      Click any card to drill into fixture-by-fixture results.
     </p>
   </section>
 
@@ -63,7 +61,7 @@ const LEVEL_ORDER = REASONING_LEVEL_ORDER;
                     <a href={href} class="no-underline">
                       <div class="bg-neutral-700 rounded-md border border-[#3E3E3E] p-2 transition-colors hover:border-(--color-border-accent) cursor-pointer">
                         <div class="flex items-center justify-between gap-2">
-                          <span class="text-xs font-mono text-(--color-text-dim)" title="Reasoning effort level: low = faster/cheaper, high = more accurate.">{l.level || 'default'}</span>
+                          <span class="text-xs font-mono text-(--color-text-dim)">{l.level || 'default'}</span>
                           <Badge variant="outline" className={`font-mono text-[0.6rem] px-1.5 min-w-[2.8rem] text-center ${passColor}`}>
                             {passRate}%
                           </Badge>
