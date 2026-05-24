@@ -1,6 +1,7 @@
 ---
 import Layout from "@/components/Layout.astro";
 import PassRateBarChart from "@/components/charts/PassRateBarChart";
+import FixtureComparisonTable from "@/components/charts/FixtureComparisonTable";
 import { loadDataSync } from "@/lib/data";
 import type { GitBenchData } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +55,7 @@ for (const fid of fixtureKeys) {
         the point.
       </p>
     </div>
-    <PassRateBarChart client:load />
+    <PassRateBarChart client:load benchmarkName={benchName} />
   </section>
 
   {
@@ -86,65 +87,6 @@ for (const fid of fixtureKeys) {
 
   <section>
     <div class="section-label"><span>Per-Fixture Comparison</span></div>
-    <div class="card overflow-x-auto p-5">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Fixture</th>
-            <th>Difficulty</th>
-            {data.models.map((m) => <th>{m.name}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {
-            fixtureKeys.map((fid) => {
-              const fi = data.fixture_index[fid];
-              const shortId = fi.id;
-              return (
-                <tr>
-                  <td>
-                    <a
-                      href={`/fixtures/${encodeURIComponent(benchName)}/${shortId}`}
-                      class="inline-flex items-center px-2 py-0.5 rounded font-mono text-xs bg-white/5 text-(--color-text-mid) border border-border no-underline"
-                    >
-                      {shortId}
-                    </a>
-                  </td>
-                  <td class="font-mono text-[0.68rem] text-(--color-text-dim)">
-                    {fi?.difficulty || "—"}
-                  </td>
-                  {data.models.map((m) => {
-                    const results = data.fixtures[m.name]?.[benchName] || [];
-                    const fr = results.find((r) => r.fixture_id === fid);
-                    if (!fr) {
-                      return (
-                        <td class="text-(--color-text-dim) opacity-40 font-mono text-xs">
-                          —
-                        </td>
-                      );
-                    }
-                    const sim = Math.round(fr.similarity * 1000) / 10;
-                    const isPass = fr.passed;
-                    const color = isPass
-                      ? "bg-pass-bg text-pass border-pass-border"
-                      : "bg-fail-bg text-fail border-(--color-fail-border)";
-                    return (
-                      <td>
-                        <Badge
-                          variant="outline"
-                          className={`font-mono text-[0.62rem] ${color}`}
-                        >
-                          {sim}%
-                        </Badge>
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })
-          }
-        </tbody>
-      </table>
-    </div>
+    <FixtureComparisonTable client:load benchName={benchName} />
   </section>
 </Layout>
