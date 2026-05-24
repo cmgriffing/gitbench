@@ -183,6 +183,14 @@ export function passRateMetric(effort: ModelGroupEffort): MetricEffort | null {
   return { ...effort, value: effort.passRate * 100 };
 }
 
+export function benchPassRateMetric(benchName: string): MetricExtractor {
+  return (effort: ModelGroupEffort, data: GitBenchData): MetricEffort | null => {
+    const cell = data.matrix[effort.modelName]?.[benchName];
+    if (!cell) return null;
+    return { ...effort, value: cell.pass_at_k * 100 };
+  };
+}
+
 export function costMetric(effort: ModelGroupEffort): MetricEffort | null {
   if (effort.totalCostUsd == null) return null;
   return { ...effort, value: effort.totalCostUsd };
