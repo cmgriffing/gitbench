@@ -19,6 +19,7 @@ import { useSyncedModelSelection } from "@/components/charts/useSyncedModelSelec
 import {
   buildGroupedMetricRows,
   passRateMetric,
+  benchPassRateMetric,
 } from "@/components/charts/model-groups";
 import {
   ProviderLegend,
@@ -29,7 +30,11 @@ import {
   tooltipStyle,
 } from "@/components/charts/grouped-chart-ui";
 
-export default function PassRateBarChart() {
+interface PassRateBarChartProps {
+  benchmarkName?: string;
+}
+
+export default function PassRateBarChart({ benchmarkName }: PassRateBarChartProps = {}) {
   const [data, setData] = useState<GitBenchData | null>(null);
   const { selectedGroups, setSelectedGroups } = useSyncedModelSelection(data);
 
@@ -39,19 +44,29 @@ export default function PassRateBarChart() {
 
   const chartData = useMemo(() => {
     if (!data) return [];
+    const extractor = benchmarkName
+      ? benchPassRateMetric(benchmarkName)
+      : passRateMetric;
     return buildGroupedMetricRows(
       data,
       selectedGroups,
-      passRateMetric,
+      extractor,
       "max",
     ).sort((a, b) => b.representativeValue - a.representativeValue);
-  }, [data, selectedGroups]);
+  }, [data, selectedGroups, benchmarkName]);
 
   const rowsById = useMemo(() => rowMap(chartData), [chartData]);
   const yDomain = useMemo(
     () => paddedDomain(chartData, [0, 100], { floor: 0, ceiling: 100 }),
     [chartData],
   );
+
+  const fixtureCount = useMemo(() => {
+    if (!data || !benchmarkName) return 204;
+    return Object.values(data.fixture_index).filter(
+      (fi) => fi.benchmark === benchmarkName,
+    ).length;
+  }, [data, benchmarkName]);
 
   if (!data) return <div>Loading...</div>;
 
@@ -162,7 +177,7 @@ export default function PassRateBarChart() {
                         lineHeight: 1.4,
                       }}
                     >
-                      % of 204 fixtures passed
+                      % of {fixtureCount} fixture{fixtureCount !== 1 ? "s" : ""} passed
                     </div>
                   </div>
                 );
