@@ -26,10 +26,17 @@ from gitbench.harness.runner import BenchmarkRunner, RunProgress
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
 from gitbench.render import _run_sort_key, aggregate_runs
 from gitbench.result_doctoring import (
+    RerunPlan,
+    ZeroPassFixture,
+    ZeroPassModel,
+    ZeroPassModelBenchmark,
     build_rerun_plan,
+    build_zero_pass_targets,
     find_timestamped_result_files,
     format_dry_run_summary,
+    format_zero_pass_summary,
     load_result_payload,
+    mark_scores_retried,
     replace_scores_and_recompute,
     write_result_payload,
 )
@@ -40,6 +47,7 @@ DEFAULT_JSON_OUTPUT_PATH = "gitbench-results/{timestamp}/results-v{version}.json
 DEFAULT_LOG_DIR = "gitbench-logs"
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_DOCTOR_TIMEOUT = 120
+DEFAULT_BAILOUT_FAILURES = 3
 
 
 def _progress_model_names(models: list[str]) -> list[str]:
@@ -482,11 +490,6 @@ def _resolve_doctor_profile(config: dict, profile_name: str, model_name: str) ->
     except SystemExit as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if model_name not in profile_conf.get("models", []):
-        raise click.ClickException(
-            f"Model '{model_name}' is not configured in profile '{profile_name}'"
-        )
-
     api_key_env = profile_conf.get("_api_key_env")
     if not model_name.startswith("mock") and api_key_env and not profile_conf.get("api_key"):
         raise click.ClickException(
@@ -498,16 +501,24 @@ def _resolve_doctor_profile(config: dict, profile_name: str, model_name: str) ->
 
 
 def _validate_doctor_targets(config: dict, plan) -> dict[tuple[str, str], dict]:
-    """Validate and cache config profiles for every doctor target."""
+    """Validate and cache config profiles for every doctor target.
+
+    Historical result models can be rerun through their original profile even
+    when they are no longer listed in the current profile config. Targets are
+    skipped only when the profile itself or its required credentials are missing.
+    """
     resolved: dict[tuple[str, str], dict] = {}
     for target in plan.targets:
         key = (target.profile, target.model)
         if key not in resolved:
-            resolved[key] = _resolve_doctor_profile(
-                config,
-                target.profile,
-                target.model,
-            )
+            try:
+                resolved[key] = _resolve_doctor_profile(
+                    config,
+                    target.profile,
+                    target.model,
+                )
+            except click.ClickException:
+                resolved[key] = None
     return resolved
 
 
@@ -516,25 +527,74 @@ def _doctor_one_file(
     *,
     output_path: Path | None,
     timeout: int | None,
+    include_all_failures: bool = False,
+    bailout_failures: int = DEFAULT_BAILOUT_FAILURES,
     progress: Progress | None = None,
     progress_task: TaskID | None = None,
 ) -> tuple[Path, int]:
     """Doctor one result file and return output path plus repaired fixture count."""
     payload = load_result_payload(input_path)
     plan = build_rerun_plan(payload)
-    if plan.doctorable_count == 0:
+
+    zero_pass_targets: list = []
+    if include_all_failures:
+        zero_pass_targets = build_zero_pass_targets(payload)
+
+    all_targets = list(plan.targets) + zero_pass_targets
+
+    # Remove duplicates: if a (profile, model, benchmark, fixture_id) combo
+    # appears in both doctorable and zero-pass targets, keep only once
+    seen_fixtures: dict[tuple[str, str, str], set[str]] = {}
+    deduped: list = []
+    for t in all_targets:
+        key = (t.profile, t.model, t.benchmark)
+        if key not in seen_fixtures:
+            seen_fixtures[key] = set()
+        new_ids = set(t.fixture_ids) - seen_fixtures[key]
+        if new_ids:
+            seen_fixtures[key] |= new_ids
+            deduped.append(
+                type(t)(t.profile, t.model, t.benchmark, tuple(sorted(new_ids)))
+            )
+
+    total_fixture_count = sum(len(t.fixture_ids) for t in deduped)
+    if total_fixture_count == 0:
         return input_path, 0
 
     config = load_config()
-    resolved_profiles = _validate_doctor_targets(config, plan)
+    resolved_profiles = _validate_doctor_targets(config, RerunPlan(targets=deduped))
 
     global _benchmark_registry
     if not _benchmark_registry:
         _benchmark_registry = discover_benchmarks()
 
     final_output_path = output_path or input_path
-    for target in plan.targets:
-        profile_conf = resolved_profiles[(target.profile, target.model)]
+    consecutive_failures: dict[tuple[str, str], int] = {}
+    repaired_count = 0
+
+    for target in deduped:
+        model_key = (target.profile, target.model)
+        profile_conf = resolved_profiles.get(model_key)
+        if profile_conf is None:
+            # Model not in config — skip
+            if progress is not None and progress_task is not None:
+                progress.update(
+                    progress_task,
+                    advance=len(target.fixture_ids),
+                    description=f"Skipping {target.model}/{target.benchmark} (not in config)",
+                )
+            continue
+
+        if consecutive_failures.get(model_key, 0) >= bailout_failures:
+            if progress is not None and progress_task is not None:
+                progress.update(
+                    progress_task,
+                    advance=len(target.fixture_ids),
+                    description=f"Skipping {target.model}/{target.benchmark} "
+                    f"({consecutive_failures[model_key]} consecutive failures)",
+                )
+            continue
+
         progress_label = _doctor_progress_label(profile_conf, target.model)
         progress_description = (
             f"Doctoring {input_path.parent.name}/{progress_label}/"
@@ -542,6 +602,7 @@ def _doctor_one_file(
         )
         if progress is not None and progress_task is not None:
             progress.update(progress_task, description=progress_description)
+
         model_client = get_model_client(
             target.model,
             timeout=_effective_doctor_timeout(profile_conf, timeout),
@@ -559,14 +620,23 @@ def _doctor_one_file(
             progress_model_name=target.model,
         )
         replace_scores_and_recompute(payload, target, result.to_dict())
+        mark_scores_retried(payload, target)
         write_result_payload(final_output_path, payload)
+
+        # Track consecutive failures for bailout
+        if result.passed == 0 and result.total > 0:
+            consecutive_failures[model_key] = consecutive_failures.get(model_key, 0) + 1
+        else:
+            consecutive_failures[model_key] = 0
+
+        repaired_count += len(target.fixture_ids)
         if progress is not None and progress_task is not None:
             progress.update(
                 progress_task,
                 advance=len(target.fixture_ids),
                 description=progress_description,
             )
-    return final_output_path, plan.doctorable_count
+    return final_output_path, repaired_count
 
 
 @click.group()
@@ -605,12 +675,21 @@ def cli():
         f"(default: profile timeout or {DEFAULT_DOCTOR_TIMEOUT})."
     ),
 )
+@click.option(
+    "--include-all-failures",
+    is_flag=True,
+    help=(
+        "Also rerun fixtures from 100%-failure models and fixtures, "
+        f"with early bailout after {DEFAULT_BAILOUT_FAILURES} consecutive zero-pass reruns per model."
+    ),
+)
 def doctor(
     result_file: str | None,
     latest: bool,
     dry_run: bool,
     output_path: str | None,
     timeout: int | None,
+    include_all_failures: bool,
 ):
     """Repair an existing result file by rerunning doctorable failures."""
     if latest and result_file:
@@ -627,6 +706,7 @@ def doctor(
 
     if dry_run:
         total_doctorable = 0
+        total_zero_pass_fixtures = 0
         click.echo(f"Inputs: {len(input_paths)}")
         for input_path in input_paths:
             payload = load_result_payload(input_path)
@@ -634,7 +714,51 @@ def doctor(
             total_doctorable += plan.doctorable_count
             click.echo(f"\nInput: {input_path}")
             click.echo(format_dry_run_summary(plan))
+
+            if include_all_failures:
+                zp_targets = build_zero_pass_targets(payload)
+                zp_count = sum(len(t.fixture_ids) for t in zp_targets)
+                total_zero_pass_fixtures += zp_count
+                if zp_count:
+                    click.echo(
+                        f"[--include-all-failures] Would also rerun "
+                        f"{zp_count} fixture(s) from zero-pass models/fixtures "
+                        f"({len(zp_targets)} target(s))"
+                    )
+
         click.echo(f"\nTotal doctorable failed fixtures: {total_doctorable}")
+        if include_all_failures and total_zero_pass_fixtures:
+            click.echo(
+                f"Total zero-pass rerun fixtures: {total_zero_pass_fixtures}"
+            )
+
+        # Consolidated zero-pass summary across all inputs
+        if not include_all_failures:
+            zero_pass_models: dict[tuple[str, str], ZeroPassModel] = {}
+            zero_pass_fixtures: dict[tuple[str, frozenset[str]], ZeroPassFixture] = {}
+            zero_pass_mbs: dict[tuple[str, str, str], ZeroPassModelBenchmark] = {}
+            for input_path in input_paths:
+                plan = build_rerun_plan(load_result_payload(input_path))
+                for m in plan.zero_pass_models:
+                    key = (m.profile, m.model)
+                    if key not in zero_pass_models:
+                        zero_pass_models[key] = m
+                for f in plan.zero_pass_fixtures:
+                    key = (f.fixture_id, frozenset(f.benchmarks))
+                    if key not in zero_pass_fixtures:
+                        zero_pass_fixtures[key] = f
+                for mb in plan.zero_pass_model_benchmarks:
+                    key = (mb.profile, mb.model, mb.benchmark)
+                    if key not in zero_pass_mbs:
+                        zero_pass_mbs[key] = mb
+            if zero_pass_models or zero_pass_fixtures or zero_pass_mbs:
+                consolidated_plan = RerunPlan(
+                    targets=[],
+                    zero_pass_models=sorted(zero_pass_models.values(), key=lambda m: (m.profile, m.model)),
+                    zero_pass_fixtures=sorted(zero_pass_fixtures.values(), key=lambda f: f.fixture_id),
+                    zero_pass_model_benchmarks=sorted(zero_pass_mbs.values(), key=lambda m: (m.profile, m.model, m.benchmark)),
+                )
+                click.echo(f"\n{format_zero_pass_summary(consolidated_plan)}")
         return
 
     repaired_files = 0
@@ -642,6 +766,44 @@ def doctor(
     total_doctorable = 0
     for input_path in input_paths:
         total_doctorable += build_rerun_plan(load_result_payload(input_path)).doctorable_count
+        if include_all_failures:
+            total_doctorable += sum(
+                len(t.fixture_ids)
+                for t in build_zero_pass_targets(load_result_payload(input_path))
+            )
+
+    # Consolidated warning about zero-pass models/fixtures
+    if not include_all_failures:
+        zero_pass_models: dict[tuple[str, str], ZeroPassModel] = {}
+        zero_pass_fixtures: dict[tuple[str, frozenset[str]], ZeroPassFixture] = {}
+        zero_pass_mbs: dict[tuple[str, str, str], ZeroPassModelBenchmark] = {}
+        for input_path in input_paths:
+            plan = build_rerun_plan(load_result_payload(input_path))
+            for m in plan.zero_pass_models:
+                key = (m.profile, m.model)
+                if key not in zero_pass_models:
+                    zero_pass_models[key] = m
+            for f in plan.zero_pass_fixtures:
+                key = (f.fixture_id, frozenset(f.benchmarks))
+                if key not in zero_pass_fixtures:
+                    zero_pass_fixtures[key] = f
+            for mb in plan.zero_pass_model_benchmarks:
+                key = (mb.profile, mb.model, mb.benchmark)
+                if key not in zero_pass_mbs:
+                    zero_pass_mbs[key] = mb
+        if zero_pass_models or zero_pass_fixtures or zero_pass_mbs:
+            consolidated_plan = RerunPlan(
+                targets=[],
+                zero_pass_models=sorted(zero_pass_models.values(), key=lambda m: (m.profile, m.model)),
+                zero_pass_fixtures=sorted(zero_pass_fixtures.values(), key=lambda f: f.fixture_id),
+                zero_pass_model_benchmarks=sorted(zero_pass_mbs.values(), key=lambda m: (m.profile, m.model, m.benchmark)),
+            )
+            click.echo(
+                "\nWarning: The following models/fixtures scored 0% across all runs. "
+                "Doctor will NOT repair these (they may indicate config or fixture data issues):\n",
+                err=True,
+            )
+            click.echo(format_zero_pass_summary(consolidated_plan), err=True)
 
     progress_context = nullcontext(None)
     if total_doctorable > 0:
@@ -667,6 +829,7 @@ def doctor(
                 input_path,
                 output_path=Path(output_path) if output_path else None,
                 timeout=timeout,
+                include_all_failures=include_all_failures,
                 progress=progress,
                 progress_task=progress_task,
             )

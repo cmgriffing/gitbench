@@ -21,6 +21,7 @@ from gitbench.cli import (
     _effective_timeout,
     _progress_model_names,
     _progress_model_names_for_runs,
+    _resolve_doctor_profile,
     check_git_availability,
     cli,
     get_model_client,
@@ -1026,6 +1027,26 @@ class TestDoctorCommand:
             "gemma4:26b",
         ) == "ollama/gemma4:26b"
 
+    def test_doctor_allows_historical_model_through_existing_profile(self):
+        config = {
+            "models": {
+                "openrouter": {
+                    "models": ["new-model"],
+                    "base_url": "https://openrouter.ai/api/v1",
+                    "api_key": "test-key",
+                }
+            }
+        }
+
+        profile = _resolve_doctor_profile(
+            config,
+            "openrouter",
+            "old-model:no-longer-listed",
+        )
+
+        assert profile["base_url"] == "https://openrouter.ai/api/v1"
+        assert profile["api_key"] == "test-key"
+
     def test_latest_updates_all_timestamped_files_then_second_run_does_nothing(self, runner, tmp_path):
         from gitbench.harness.types import BenchmarkResult, Score
 
@@ -1172,6 +1193,300 @@ class TestDoctorCommand:
         input_path = fixed_path.parent / "results-v0.1.0.json"
         assert json.loads(input_path.read_text()) == original_payload
         assert json.loads(fixed_path.read_text())["summary"]["total_passed"] == 2
+
+    def test_dry_run_reports_zero_pass_models_and_fixtures(self, runner, tmp_path):
+        payload = {
+            "benchmark_suite_version": "0.1.0",
+            "profiles": [
+                {
+                    "profile": "local",
+                    "models": [
+                        {
+                            "model": "dead-model",
+                            "summary": {"total_fixtures": 2, "total_passed": 0, "overall_pass_at_k": 0.0},
+                            "results": [
+                                {
+                                    "benchmark": "commit_messages",
+                                    "total": 2,
+                                    "passed": 0,
+                                    "pass_at_k": 0.0,
+                                    "errors": 2,
+                                    "scores": [
+                                        {
+                                            "fixture_id": "fx",
+                                            "passed": False,
+                                            "similarity": 0.0,
+                                            "model_output": "",
+                                            "error": "expected got mismatch",
+                                        },
+                                        {
+                                            "fixture_id": "fy",
+                                            "passed": False,
+                                            "similarity": 0.0,
+                                            "model_output": "",
+                                            "error": "expected got mismatch",
+                                        },
+                                    ],
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result_path = Path("results-v0.1.0.json")
+            result_path.write_text(json.dumps(payload))
+            result = runner.invoke(cli, ["doctor", str(result_path), "--dry-run"])
+
+        assert result.exit_code == 0
+        assert "100%-failure models (1):" in result.output
+        assert "local/dead-model: 2 fixtures, 2 errors" in result.output
+        assert "100%-failure fixtures (2):" in result.output
+        assert "fx" in result.output
+        assert "fy" in result.output
+        assert "Doctorable failed fixtures: 0" in result.output
+
+    def test_doctor_warns_about_zero_pass_models_before_repair(self, runner, tmp_path):
+        from gitbench.harness.types import BenchmarkResult, Score
+
+        payload = {
+            "benchmark_suite_version": "0.1.0",
+            "profiles": [
+                {
+                    "profile": "local",
+                    "models": [
+                        {
+                            "model": "dead-model",
+                            "summary": {"total_fixtures": 2, "total_passed": 0, "overall_pass_at_k": 0.0},
+                            "results": [
+                                {
+                                    "benchmark": "commit_messages",
+                                    "total": 2,
+                                    "passed": 0,
+                                    "pass_at_k": 0.0,
+                                    "errors": 2,
+                                    "scores": [
+                                        {
+                                            "fixture_id": "fx",
+                                            "passed": False,
+                                            "similarity": 0.0,
+                                            "model_output": "",
+                                            "error": "expected got mismatch",
+                                        },
+                                        {
+                                            "fixture_id": "fy",
+                                            "passed": False,
+                                            "similarity": 0.0,
+                                            "model_output": "",
+                                            "error": "expected got mismatch",
+                                        },
+                                    ],
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result_path = Path("results-v0.1.0.json")
+            result_path.write_text(json.dumps(payload))
+            Path("gitbench.json").write_text(json.dumps({"models": {"local": {"models": ["dead-model"]}}}))
+
+            result = runner.invoke(cli, ["doctor", str(result_path)])
+
+        assert result.exit_code == 0
+        assert "Warning" in result.output
+        assert "scored 0% across all runs" in result.output
+        assert "dead-model" in result.output
+        assert "No doctorable failures found" in result.output
+
+    def test_dry_run_with_include_all_failures_shows_extra_targets(self, runner, tmp_path):
+        payload = {
+            "benchmark_suite_version": "0.1.0",
+            "profiles": [
+                {
+                    "profile": "local",
+                    "models": [
+                        {
+                            "model": "dead-model",
+                            "summary": {"total_fixtures": 2, "total_passed": 0, "overall_pass_at_k": 0.0},
+                            "results": [
+                                {
+                                    "benchmark": "commit_messages",
+                                    "total": 2,
+                                    "passed": 0,
+                                    "pass_at_k": 0.0,
+                                    "errors": 2,
+                                    "scores": [
+                                        {"fixture_id": "fx", "passed": False, "similarity": 0.0, "model_output": "", "error": "x"},
+                                        {"fixture_id": "fy", "passed": False, "similarity": 0.0, "model_output": "", "error": "y"},
+                                    ],
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result_path = Path("results-v0.1.0.json")
+            result_path.write_text(json.dumps(payload))
+            result = runner.invoke(cli, ["doctor", str(result_path), "--dry-run", "--include-all-failures"])
+
+        assert result.exit_code == 0
+        assert "[--include-all-failures] Would also rerun 2 fixture(s)" in result.output
+        assert "Total zero-pass rerun fixtures: 2" in result.output
+
+    def test_include_all_failures_reruns_zero_pass_fixtures(self, runner, tmp_path):
+        from gitbench.harness.types import BenchmarkResult, Score
+
+        payload = {
+            "benchmark_suite_version": "0.1.0",
+            "profiles": [
+                {
+                    "profile": "local",
+                    "models": [
+                        {
+                            "model": "dead-model",
+                            "summary": {"total_fixtures": 2, "total_passed": 0, "overall_pass_at_k": 0.0},
+                            "results": [
+                                {
+                                    "benchmark": "commit_messages",
+                                    "total": 2,
+                                    "passed": 0,
+                                    "pass_at_k": 0.0,
+                                    "errors": 2,
+                                    "scores": [
+                                        {"fixture_id": "fx", "passed": False, "similarity": 0.0, "model_output": "", "error": "x"},
+                                        {"fixture_id": "fy", "passed": False, "similarity": 0.0, "model_output": "", "error": "y"},
+                                    ],
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+
+        rerun_result = BenchmarkResult(
+            benchmark="commit_messages",
+            total=2,
+            passed=1,
+            pass_at_k=0.5,
+            errors=1,
+            scores=[
+                Score(fixture_id="fx", passed=True, similarity=1.0, model_output="ok", error=None),
+                Score(fixture_id="fy", passed=False, similarity=0.0, model_output="", error="still broken"),
+            ],
+        )
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result_path = Path("results-v0.1.0.json")
+            result_path.write_text(json.dumps(payload))
+            Path("gitbench.json").write_text(json.dumps({"models": {"local": {"models": ["dead-model"]}}}))
+
+            with patch("gitbench.cli._benchmark_registry", {"commit_messages": object()}), \
+                 patch("gitbench.harness.runner.BenchmarkRunner.run_benchmark", return_value=rerun_result):
+                result = runner.invoke(
+                    cli, ["doctor", str(result_path), "--include-all-failures"]
+                )
+
+        assert result.exit_code == 0
+        written = next(tmp_path.glob("*/results-v0.1.0.json"))
+        saved = json.loads(written.read_text())
+        assert saved["profiles"][0]["models"][0]["results"][0]["passed"] == 1
+        assert "Doctored results written" in result.output
+
+    def test_bailout_skips_after_consecutive_zero_pass_results(self, runner, tmp_path):
+        from gitbench.harness.types import BenchmarkResult, Score
+
+        payload = {
+            "profiles": [
+                {
+                    "profile": "local",
+                    "models": [
+                        {
+                            "model": "dead-model",
+                            "summary": {"total_fixtures": 4, "total_passed": 0},
+                            "results": [
+                                {
+                                    "benchmark": "bm1",
+                                    "total": 1,
+                                    "passed": 0,
+                                    "errors": 1,
+                                    "scores": [
+                                        {"fixture_id": "f1", "passed": False, "error": "x"},
+                                    ],
+                                },
+                                {
+                                    "benchmark": "bm2",
+                                    "total": 1,
+                                    "passed": 0,
+                                    "errors": 1,
+                                    "scores": [
+                                        {"fixture_id": "f2", "passed": False, "error": "y"},
+                                    ],
+                                },
+                                {
+                                    "benchmark": "bm3",
+                                    "total": 1,
+                                    "passed": 0,
+                                    "errors": 1,
+                                    "scores": [
+                                        {"fixture_id": "f3", "passed": False, "error": "z"},
+                                    ],
+                                },
+                                {
+                                    "benchmark": "bm4",
+                                    "total": 1,
+                                    "passed": 0,
+                                    "errors": 1,
+                                    "scores": [
+                                        {"fixture_id": "f4", "passed": False, "error": "w"},
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+
+        def make_zero_result(benchmark, **kwargs):
+            fixture_ids = kwargs.get("selected_fixture_ids", [])
+            return BenchmarkResult(
+                benchmark=benchmark,
+                total=len(fixture_ids),
+                passed=0,
+                pass_at_k=0.0,
+                errors=len(fixture_ids),
+                scores=[
+                    Score(fixture_id=fid, passed=False, similarity=0.0, model_output="", error="fail")
+                    for fid in fixture_ids
+                ],
+            )
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            result_path = Path("results-v0.1.0.json")
+            result_path.write_text(json.dumps(payload))
+            Path("gitbench.json").write_text(json.dumps({"models": {"local": {"models": ["dead-model"]}}}))
+
+            run_benchmark_mock = MagicMock(side_effect=make_zero_result)
+            with patch("gitbench.cli._benchmark_registry", {"bm1": object(), "bm2": object(), "bm3": object(), "bm4": object()}), \
+                 patch("gitbench.harness.runner.BenchmarkRunner.run_benchmark", run_benchmark_mock):
+                result = runner.invoke(
+                    cli, ["doctor", str(result_path), "--include-all-failures"]
+                )
+
+        assert result.exit_code == 0
+        # Should only call run_benchmark 3 times (bailout after 3 consecutive 0-pass results)
+        # bm1, bm2, bm3 -> 3 consecutive failures, bm4 skipped
+        assert run_benchmark_mock.call_count == 3
 
 
 class TtyStringIO(StringIO):
