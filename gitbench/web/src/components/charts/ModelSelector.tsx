@@ -11,6 +11,7 @@ import {
 } from "@/components/charts/model-groups";
 
 interface ModelSelectorProps {
+  data?: GitBenchData;
   initialSelected?: string[];
   value?: string[];
   onChange?: (selected: string[]) => void;
@@ -58,6 +59,7 @@ function passRange(group: ModelGroup): { label: string; colorValue: number } {
 }
 
 export default function ModelSelector({
+  data: providedData,
   initialSelected,
   value,
   onChange,
@@ -69,6 +71,21 @@ export default function ModelSelector({
   const currentSelected = value ?? selected;
 
   useEffect(() => {
+    if (providedData) {
+      const groups = deriveModelGroups(providedData);
+      setData(providedData);
+      groupsRef.current = groups;
+      if (isControlled) return;
+
+      const next = initialSelected
+        ? sanitizeGroupSelection(initialSelected, groups)
+        : readStoredSelection(groups);
+      setSelected(
+        next && next.length > 0 ? next : groups.map((group) => group.id),
+      );
+      return;
+    }
+
     loadData().then((loaded) => {
       const groups = deriveModelGroups(loaded);
       setData(loaded);
@@ -82,7 +99,7 @@ export default function ModelSelector({
         next && next.length > 0 ? next : groups.map((group) => group.id),
       );
     });
-  }, []);
+  }, [providedData, initialSelected, isControlled]);
 
   useEffect(() => {
     if (!isControlled && initialSelected && groupsRef.current.length > 0) {

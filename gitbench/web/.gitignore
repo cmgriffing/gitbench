@@ -2,6 +2,7 @@
 dist/
 # generated data (produced by Python CLI)
 public/results.json
+data/gitbench.db
 # generated types
 .astro/
 
@@ -24,3 +25,4 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+.vercel

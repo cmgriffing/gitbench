@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import type { GitBenchData } from "@/lib/types";
 import { loadData } from "@/lib/load-data";
+import { loadModelResults } from "@/lib/report-client";
 import { Badge } from "@/components/ui/badge";
 
 interface Props {
@@ -26,6 +27,9 @@ function dotColor(aPassed: boolean, bPassed: boolean): string {
 
 export default function ScatterPlot({ modelA, modelB }: Props) {
   const [data, setData] = useState<GitBenchData | null>(null);
+  const [modelResults, setModelResults] = useState<
+    Record<string, Awaited<ReturnType<typeof loadModelResults>>["results"]>
+  >({});
   const [a, setA] = useState(modelA || "");
   const [b, setB] = useState(modelB || "");
 
@@ -37,10 +41,30 @@ export default function ScatterPlot({ modelA, modelB }: Props) {
     });
   }, []);
 
-  if (!data || !a || !b) return <div>Loading...</div>;
+  useEffect(() => {
+    const models = [a, b].filter(Boolean);
+    const missing = models.filter((model) => !modelResults[model]);
+    if (missing.length === 0) return;
 
-  const aFixtures = data.fixtures[a] || {};
-  const bFixtures = data.fixtures[b] || {};
+    Promise.all(missing.map((model) => loadModelResults(model))).then(
+      (responses) => {
+        setModelResults((current) => {
+          const next = { ...current };
+          for (const response of responses) {
+            next[response.model] = response.results;
+          }
+          return next;
+        });
+      },
+    );
+  }, [a, b, modelResults]);
+
+  if (!data || !a || !b || !modelResults[a] || !modelResults[b]) {
+    return <div>Loading...</div>;
+  }
+
+  const aFixtures = modelResults[a] || {};
+  const bFixtures = modelResults[b] || {};
 
   const scatterData: {
     x: number;

@@ -79,7 +79,11 @@ export default function TimeSeriesChart() {
   return (
     <div>
       <div className="max-w-xs ml-auto w-full mb-3">
-        <ModelSelector value={selectedGroups} onChange={setSelectedGroups} />
+        <ModelSelector
+          data={data}
+          value={selectedGroups}
+          onChange={setSelectedGroups}
+        />
       </div>
       <div
         className="card"

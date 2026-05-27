@@ -79,26 +79,35 @@ All routes SHALL be defined as `.astro` files in `src/pages/`. Dynamic routes SH
 - **THEN** the Fixture Detail page (`fixtures/[fixture].astro`) is rendered with fixture data for `f001`
 
 ### Requirement: results.json served as static asset
-The aggregated benchmark data SHALL be written to `ui/public/results.json` by the Python CLI. The Astro site SHALL NOT embed this data in page HTML but SHALL serve it as a static file accessible at `/results.json` for React islands to fetch.
+The aggregated benchmark data MAY be written to `ui/public/results.json` by the Python CLI as a compatibility artifact. The Astro site SHALL NOT embed the full report data in page HTML. React islands SHALL load query-specific report data through the report API client instead of fetching the full `/results.json` payload.
 
-#### Scenario: results.json is accessible
-- **WHEN** the built site is served
+#### Scenario: results.json is accessible when emitted
+- **WHEN** the built site is served and compatibility JSON was emitted during report generation
 - **THEN** `GET /results.json` returns the aggregated benchmark data as JSON
 
 #### Scenario: results.json is gitignored
 - **WHEN** checking the gitignore
 - **THEN** `ui/public/results.json` and `ui/dist/` are listed
 
+#### Scenario: React islands do not fetch full report payload
+- **WHEN** a hydrated React chart or interactive table loads in the browser
+- **THEN** it requests only the query-specific API payload needed for that view
+- **AND** it does not fetch `/results.json` as the canonical report data source
+
 ### Requirement: Build produces static dist/ directory
-Running `npm run build` in `gitbench/ui/` SHALL produce a fully static site in `ui/dist/` with HTML, CSS, JS, and `results.json` assets. The output SHALL require no server-side code to serve.
+Running `npm run build` in `gitbench/ui/` SHALL produce a static Astro site in `ui/dist/` with HTML, CSS, JS, and static assets. The Astro page output SHALL remain static, while API-backed report data SHALL be served by deployment-specific API functions during local development and hosted production.
 
 #### Scenario: Build completes successfully
 - **WHEN** `npm run build` is executed
 - **THEN** `ui/dist/` contains `index.html`, subdirectories for routes, and static assets
 
-#### Scenario: Static site is deployable
-- **WHEN** `ui/dist/` is served by any static file server
-- **THEN** all routes are accessible and functional
+#### Scenario: Static page output is deployable
+- **WHEN** `ui/dist/` is served by a static file server
+- **THEN** statically generated Astro routes and assets are accessible
+
+#### Scenario: API-backed deployment provides report queries
+- **WHEN** the app is served through the supported API-backed local or hosted deployment
+- **THEN** static Astro pages can request `/api/*` report endpoints for interactive report data
 
 ### Requirement: Overview page includes introductory content
 The root page (`/`) SHALL be titled "Overview" and SHALL include an About section with multi-paragraph introductory text written in the conversational prose voice. The About text SHALL explain what GitBench is, what it tests (204 fixtures across 17 Git skill categories), and that results are transparent and reproducible. It SHALL NOT include a "Learn more →" link to methodology. Chart sections on the Overview page SHALL use the info-tip pattern for blurb text that provides non-obvious context. Chart sections where the title and axes are self-explanatory SHALL have no blurb text at all.

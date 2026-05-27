@@ -1,6 +1,5 @@
 import type {
   BaseModelGroup,
-  FixtureResult,
   GitBenchData,
   ModelInfo,
 } from "@/lib/types";
@@ -210,35 +209,20 @@ export function runtimeMetric(
   };
 }
 
-function sumFixtureTokens(
-  fixtures: Record<string, FixtureResult[]> | undefined
-) {
-  let total = 0;
-  let input = 0;
-  let output = 0;
-  if (!fixtures) return { total, input, output };
-
-  for (const fixtureRuns of Object.values(fixtures)) {
-    for (const fixture of fixtureRuns) {
-      total += fixture.total_tokens ?? 0;
-      input += fixture.input_tokens ?? 0;
-      output += fixture.output_tokens ?? 0;
-    }
-  }
-
-  return { total, input, output };
-}
-
 export function tokenMetric(
   effort: ModelGroupEffort,
   data: GitBenchData
 ): MetricEffort {
-  const tokens = sumFixtureTokens(data.fixtures[effort.modelName]);
+  const tokens = data.model_token_summaries[effort.modelName] ?? {
+    input_tokens: 0,
+    output_tokens: 0,
+    total_tokens: 0,
+  };
   return {
     ...effort,
-    value: tokens.total,
-    inputTokens: tokens.input,
-    outputTokens: tokens.output,
+    value: tokens.total_tokens,
+    inputTokens: tokens.input_tokens,
+    outputTokens: tokens.output_tokens,
   };
 }
 

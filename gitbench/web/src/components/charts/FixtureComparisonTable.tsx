@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { GitBenchData } from "@/lib/types";
 import { loadData } from "@/lib/load-data";
+import type { BenchmarkDetail } from "@/lib/report-store";
+import { loadBenchmark } from "@/lib/report-client";
 import ModelSelector from "@/components/charts/ModelSelector";
 import { useSyncedModelSelection } from "@/components/charts/useSyncedModelSelection";
 import { deriveModelGroups } from "@/components/charts/model-groups";
@@ -39,11 +41,19 @@ export default function FixtureComparisonTable({
   benchName,
 }: FixtureComparisonTableProps) {
   const [data, setData] = useState<GitBenchData | null>(null);
+  const [benchmarkData, setBenchmarkData] = useState<BenchmarkDetail | null>(
+    null,
+  );
   const { selectedGroups, setSelectedGroups } = useSyncedModelSelection(data);
 
   useEffect(() => {
-    loadData().then(setData);
-  }, []);
+    Promise.all([loadData(), loadBenchmark(benchName)]).then(
+      ([summary, benchmark]) => {
+        setData(summary);
+        setBenchmarkData(benchmark);
+      },
+    );
+  }, [benchName]);
 
   // Build ordered list of model->effort columns from selected groups
   const allEfforts = useMemo((): EffortColumn[] => {
@@ -87,18 +97,22 @@ export default function FixtureComparisonTable({
 
   // Fixture entries for this benchmark, sorted
   const fixtures = useMemo(() => {
-    if (!data) return [];
-    return Object.entries(data.fixture_index)
+    if (!benchmarkData) return [];
+    return Object.entries(benchmarkData.fixtures)
       .filter(([, fi]) => fi.benchmark === benchName)
       .sort(([a], [b]) => a.localeCompare(b));
-  }, [data, benchName]);
+  }, [benchmarkData, benchName]);
 
-  if (!data) return <div>Loading...</div>;
+  if (!data || !benchmarkData) return <div>Loading...</div>;
 
   return (
     <div>
       <div className="max-w-xs ml-auto w-full mb-3">
-        <ModelSelector value={selectedGroups} onChange={setSelectedGroups} />
+        <ModelSelector
+          data={data}
+          value={selectedGroups}
+          onChange={setSelectedGroups}
+        />
       </div>
       <div className="card overflow-x-auto p-5">
         <table className="data-table">
@@ -145,7 +159,7 @@ export default function FixtureComparisonTable({
                 </td>
                 {allEfforts.map((e) => {
                   const results =
-                    data.fixtures[e.modelName]?.[benchName] || [];
+                    benchmarkData.results[e.modelName]?.[benchName] || [];
                   const fr = results.find((r) => r.fixture_id === fi.id);
                   if (!fr) {
                     return (

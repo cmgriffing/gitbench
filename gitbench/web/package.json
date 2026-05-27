@@ -7,6 +7,8 @@
   },
   "scripts": {
     "dev": "astro dev",
+    "dev:api": "vercel dev",
+    "test:api": "node --experimental-strip-types --experimental-transform-types --test test/report-store.test.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
@@ -30,5 +32,8 @@
     "recharts": "^3.8.1",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0"
+  },
+  "devDependencies": {
+    "vercel": "^54.5.0"
   }
 }

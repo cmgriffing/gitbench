@@ -61,6 +61,12 @@ export interface ModelRuntimeSummary {
   fixture_count: number;
 }
 
+export interface ModelTokenSummary {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
 export interface FixtureInfo {
   id: string;
   benchmark: string;
@@ -87,6 +93,7 @@ export interface GitBenchData {
   benchmarks: string[];
   model_summaries: Record<string, ModelSummary>;
   model_runtimes: Record<string, ModelRuntimeSummary>;
+  model_token_summaries: Record<string, ModelTokenSummary>;
   matrix: Record<string, Record<string, CellData>>;
   fixtures: Record<string, Record<string, FixtureResult[]>>;
   fixture_index: Record<string, FixtureInfo>;

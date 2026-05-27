@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { GitBenchData } from "@/lib/types";
-import { loadData } from "@/lib/load-data";
+import { loadHeatmapChart, type HeatmapChartData } from "@/lib/report-client";
 import { modelPath } from "@/lib/routes";
 import ModelSelector from "@/components/charts/ModelSelector";
 import { Badge } from "@/components/ui/badge";
@@ -21,22 +21,41 @@ function heatColor(ratio: number): string {
 }
 
 export default function BenchmarkHeatmap() {
-  const [data, setData] = useState<GitBenchData | null>(null);
+  const [data, setData] = useState<HeatmapChartData | null>(null);
+  const selectionData = useMemo<GitBenchData | null>(() => {
+    if (!data) return null;
+    return {
+      models: data.models,
+      benchmarks: data.benchmarks,
+      model_summaries: {},
+      model_runtimes: {},
+      model_token_summaries: {},
+      matrix: {},
+      fixtures: {},
+      fixture_index: {},
+      runs_meta: [],
+      base_model_groups: data.base_model_groups,
+    };
+  }, [data]);
   const { selectedGroups, setSelectedGroups, selectedModels } =
-    useSyncedModelSelection(data);
+    useSyncedModelSelection(selectionData);
 
   useEffect(() => {
-    loadData().then((d) => {
+    loadHeatmapChart().then((d) => {
       setData(d);
     });
   }, []);
 
-  if (!data) return <div>Loading...</div>;
+  if (!data || !selectionData) return <div>Loading...</div>;
 
   return (
     <div>
       <div className="max-w-xs ml-auto w-full mb-3">
-        <ModelSelector value={selectedGroups} onChange={setSelectedGroups} />
+        <ModelSelector
+          data={selectionData}
+          value={selectedGroups}
+          onChange={setSelectedGroups}
+        />
       </div>
       <div className="card overflow-x-auto p-5">
         <table className="data-table">
@@ -53,7 +72,7 @@ export default function BenchmarkHeatmap() {
             </tr>
           </thead>
           <tbody>
-            {data.benchmarks.map((bench) => (
+            {data.benchmarks.map((bench, benchIndex) => (
               <tr key={bench}>
                 <td className="font-mono text-xs text-(--color-text-mid)">
                   <a
@@ -64,7 +83,7 @@ export default function BenchmarkHeatmap() {
                   </a>
                 </td>
                 {selectedModels.map((m) => {
-                  const cell = data.matrix[m]?.[bench];
+                  const cell = data.matrix[m]?.[benchIndex];
                   if (!cell) {
                     return (
                       <td
@@ -77,32 +96,33 @@ export default function BenchmarkHeatmap() {
                       </td>
                     );
                   }
-                  const pct = Math.round(cell.pass_at_k * 1000) / 10;
+                  const [passAtK, passed, total] = cell;
+                  const pct = Math.round(passAtK * 1000) / 10;
                   const descriptor =
-                    cell.pass_at_k >= 0.8
+                    passAtK >= 0.8
                       ? "Strong"
-                      : cell.pass_at_k >= 0.5
+                      : passAtK >= 0.5
                         ? "Moderate"
                         : "Weak";
                   return (
                     <td
                       key={m}
-                      title={`${m} on ${bench}: ${pct}% (${cell.passed}/${cell.total} passed) — ${descriptor}`}
+                      title={`${m} on ${bench}: ${pct}% (${passed}/${total} passed) — ${descriptor}`}
                     >
                       <a href={`/benchmarks/${bench}`} className="no-underline">
                         <Badge
                           variant="outline"
                           className="font-mono text-xs"
                           style={{
-                            background: heatBg(cell.pass_at_k),
-                            color: heatColor(cell.pass_at_k),
-                            borderColor: `${heatColor(cell.pass_at_k)}33`,
+                            background: heatBg(passAtK),
+                            color: heatColor(passAtK),
+                            borderColor: `${heatColor(passAtK)}33`,
                           }}
                         >
                           {pct}%
                         </Badge>
                         <span className="font-mono text-[0.65rem] text-(--color-text-dim) ml-1">
-                          {cell.passed}/{cell.total}
+                          {passed}/{total}
                         </span>
                       </a>
                     </td>

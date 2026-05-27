@@ -1,10 +1,18 @@
 """Tests for GitBench render module."""
 
 import json
+import sqlite3
 
 import pytest
 
-from gitbench.render import aggregate_runs, load_runs_from_dir, load_runs_from_jsonl, render_json
+from gitbench.render import (
+    REPORT_SCHEMA_PATH,
+    aggregate_runs,
+    load_runs_from_dir,
+    load_runs_from_jsonl,
+    render_json,
+    write_sqlite_report_db,
+)
 
 from gitbench.version import BENCHMARK_SUITE_VERSION
 
@@ -433,3 +441,71 @@ class TestAggregateRunsFixtureIndex:
         assert fixture["input_tokens"] == 200
         assert fixture["output_tokens"] == 100
         assert fixture["total_tokens"] == 300
+
+
+class TestSqliteReportDb:
+    """Tests for generated SQLite report database."""
+
+    def test_schema_includes_expected_indexes(self):
+        """Test that common report access path indexes are checked in."""
+        schema = REPORT_SCHEMA_PATH.read_text()
+
+        for index_name in [
+            "idx_fixture_results_model_benchmark",
+            "idx_fixture_results_benchmark_fixture",
+            "idx_fixtures_benchmark",
+            "idx_fixture_tags_tag_fixture",
+            "idx_runs_model_timestamp",
+            "idx_models_grouping",
+            "idx_benchmark_summaries_model_benchmark",
+        ]:
+            assert index_name in schema
+
+    def test_writes_database_with_aggregate_counts(self, tmp_path):
+        """Test that aggregate JSON counts are preserved in SQLite tables."""
+        data = aggregate_runs([
+            _make_envelope(model="openai/gpt-5:medium", passed=10),
+            _make_envelope(model="anthropic/claude", passed=8),
+        ])
+        db_path = tmp_path / "gitbench.db"
+
+        write_sqlite_report_db(data, db_path)
+
+        with sqlite3.connect(db_path) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM models").fetchone()[0] == len(data["models"])
+            assert conn.execute("SELECT COUNT(*) FROM benchmarks").fetchone()[0] == len(data["benchmarks"])
+            assert conn.execute("SELECT COUNT(*) FROM fixture_results").fetchone()[0] == 24
+            assert (
+                conn.execute(
+                    """
+                    SELECT total_passed
+                    FROM model_summaries
+                    WHERE model_name = 'openai/gpt-5:medium'
+                    """
+                ).fetchone()[0]
+                == data["model_summaries"]["openai/gpt-5:medium"]["total_passed"]
+            )
+
+    def test_rebuild_replaces_stale_data(self, tmp_path):
+        """Test that an existing database is deleted and rebuilt."""
+        db_path = tmp_path / "gitbench.db"
+        first = aggregate_runs([_make_envelope(model="openai/gpt-5:medium")])
+        second = aggregate_runs([_make_envelope(model="anthropic/claude")])
+
+        write_sqlite_report_db(first, db_path)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("CREATE TABLE stale_marker (value TEXT)")
+
+        write_sqlite_report_db(second, db_path)
+
+        with sqlite3.connect(db_path) as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            models = {row[0] for row in conn.execute("SELECT name FROM models")}
+
+        assert "stale_marker" not in tables
+        assert models == {"anthropic/claude"}

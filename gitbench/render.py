@@ -2,6 +2,7 @@
 
 import json
 import logging
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,10 @@ from typing import Any
 from gitbench.harness.model import parse_model_name
 
 logger = logging.getLogger(__name__)
+
+WEB_DIR = Path(__file__).parent / "web"
+REPORT_DB_PATH = WEB_DIR / "data" / "gitbench.db"
+REPORT_SCHEMA_PATH = WEB_DIR / "data" / "schema.sql"
 
 
 def load_runs_from_dir(directory: str) -> list[dict]:
@@ -449,6 +454,216 @@ def render_json(data: dict[str, Any], output_path: str) -> None:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_json.dumps(data, indent=2, default=str))
+
+
+def write_sqlite_report_db(
+    data: dict[str, Any],
+    output_path: str | Path = REPORT_DB_PATH,
+    schema_path: str | Path = REPORT_SCHEMA_PATH,
+) -> None:
+    """Rebuild the generated SQLite report database from aggregate data."""
+    db_path = Path(output_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if db_path.exists():
+        db_path.unlink()
+
+    schema = Path(schema_path).read_text()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.executescript(schema)
+        _insert_report_data(conn, data)
+        conn.execute("ANALYZE")
+
+
+def _json_dumps(value: Any) -> str:
+    return json.dumps(value if value is not None else [], separators=(",", ":"))
+
+
+def _insert_report_data(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
+    models = data.get("models", [])
+    benchmarks = data.get("benchmarks", [])
+
+    conn.executemany(
+        """
+        INSERT INTO models (name, provider, base_model, reasoning_level)
+        VALUES (:name, :provider, :baseModel, :reasoningLevel)
+        """,
+        models,
+    )
+    conn.executemany(
+        "INSERT INTO benchmarks (name) VALUES (?)",
+        [(name,) for name in benchmarks],
+    )
+
+    conn.executemany(
+        """
+        INSERT INTO model_summaries (
+          model_name, total_runs, total_fixtures, total_passed, pass_at_k,
+          total_cost_usd, avg_cost_usd
+        )
+        VALUES (
+          :model_name, :total_runs, :total_fixtures, :total_passed, :pass_at_k,
+          :total_cost_usd, :avg_cost_usd
+        )
+        """,
+        [
+            {"model_name": model_name, **summary}
+            for model_name, summary in data.get("model_summaries", {}).items()
+        ],
+    )
+
+    conn.executemany(
+        """
+        INSERT INTO model_runtimes (
+          model_name, total_ms, avg_ms, min_ms, max_ms, fixture_count
+        )
+        VALUES (:model_name, :total_ms, :avg_ms, :min_ms, :max_ms, :fixture_count)
+        """,
+        [
+            {"model_name": model_name, **runtime}
+            for model_name, runtime in data.get("model_runtimes", {}).items()
+        ],
+    )
+
+    conn.executemany(
+        """
+        INSERT INTO benchmark_summaries (
+          model_name, benchmark_name, pass_at_k, total, passed, avg_similarity
+        )
+        VALUES (
+          :model_name, :benchmark_name, :pass_at_k, :total, :passed, :avg_similarity
+        )
+        """,
+        [
+            {"model_name": model_name, "benchmark_name": benchmark, **cell}
+            for model_name, by_benchmark in data.get("matrix", {}).items()
+            for benchmark, cell in by_benchmark.items()
+        ],
+    )
+
+    fixture_rows = []
+    tag_rows = []
+    for fixture in data.get("fixture_index", {}).values():
+        benchmark = fixture.get("benchmark", "")
+        fixture_id = fixture.get("id", "")
+        fixture_rows.append(
+            {
+                "benchmark_name": benchmark,
+                "fixture_id": fixture_id,
+                "prompt": fixture.get("prompt") or "",
+                "expected": fixture.get("expected") or "",
+                "description": fixture.get("description") or "",
+                "setup_json": _json_dumps(fixture.get("setup")),
+                "purpose": fixture.get("purpose") or "",
+                "difficulty": fixture.get("difficulty") or "",
+            }
+        )
+        for tag in fixture.get("tags") or []:
+            tag_rows.append((benchmark, fixture_id, tag))
+
+    conn.executemany(
+        """
+        INSERT INTO fixtures (
+          benchmark_name, fixture_id, prompt, expected, description, setup_json,
+          purpose, difficulty
+        )
+        VALUES (
+          :benchmark_name, :fixture_id, :prompt, :expected, :description,
+          :setup_json, :purpose, :difficulty
+        )
+        """,
+        fixture_rows,
+    )
+    conn.executemany(
+        """
+        INSERT INTO fixture_tags (benchmark_name, fixture_id, tag)
+        VALUES (?, ?, ?)
+        """,
+        tag_rows,
+    )
+
+    result_rows = []
+    for model_name, by_benchmark in data.get("fixtures", {}).items():
+        for benchmark, fixtures in by_benchmark.items():
+            for result in fixtures:
+                result_rows.append(
+                    {
+                        "model_name": model_name,
+                        "benchmark_name": benchmark,
+                        "fixture_id": result.get("fixture_id", ""),
+                        "passed": 1 if result.get("passed") else 0,
+                        "similarity": result.get("similarity") or 0,
+                        "error": result.get("error"),
+                        "model_output": result.get("model_output") or "",
+                        "reasoning_level": result.get("reasoning_level"),
+                        "input_tokens": result.get("input_tokens"),
+                        "output_tokens": result.get("output_tokens"),
+                        "total_tokens": result.get("total_tokens"),
+                        "cost_usd": result.get("cost_usd"),
+                        "duration_ms": result.get("duration_ms"),
+                        "purpose": result.get("purpose"),
+                        "difficulty": result.get("difficulty"),
+                        "tags_json": _json_dumps(result.get("tags")),
+                    }
+                )
+
+    conn.executemany(
+        """
+        INSERT INTO fixture_results (
+          model_name, benchmark_name, fixture_id, passed, similarity, error,
+          model_output, reasoning_level, input_tokens, output_tokens, total_tokens,
+          cost_usd, duration_ms, purpose, difficulty, tags_json
+        )
+        VALUES (
+          :model_name, :benchmark_name, :fixture_id, :passed, :similarity, :error,
+          :model_output, :reasoning_level, :input_tokens, :output_tokens,
+          :total_tokens, :cost_usd, :duration_ms, :purpose, :difficulty, :tags_json
+        )
+        """,
+        result_rows,
+    )
+
+    conn.executemany(
+        """
+        INSERT INTO runs (
+          timestamp, model_name, profile, git_sha, benchmark_suite_version,
+          reasoning_level
+        )
+        VALUES (
+          :timestamp, :model, :profile, :git_sha, :benchmark_suite_version,
+          :reasoning_level
+        )
+        """,
+        data.get("runs_meta", []),
+    )
+
+    for group in data.get("base_model_groups", []):
+        cursor = conn.execute(
+            """
+            INSERT INTO base_model_groups (provider, base_model)
+            VALUES (?, ?)
+            """,
+            (group.get("provider", ""), group.get("baseModel", "")),
+        )
+        group_id = cursor.lastrowid
+        conn.executemany(
+            """
+            INSERT INTO base_model_group_levels (
+              group_id, level, model_name, pass_at_k, total_cost_usd
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    group_id,
+                    level.get("level"),
+                    level.get("modelName", ""),
+                    level.get("pass_at_k", 0),
+                    level.get("total_cost_usd"),
+                )
+                for level in group.get("levels", [])
+            ],
+        )
 
 
 def _supplement_fixture_index_from_yaml(fixture_index: dict[str, dict]) -> None:

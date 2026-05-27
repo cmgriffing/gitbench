@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import type { GitBenchData } from "@/lib/types";
-import { loadData } from "@/lib/load-data";
+import { loadPassRateChart } from "@/lib/report-client";
 import { modelGroupPath } from "@/lib/routes";
 import { getProviderColor } from "@/lib/provider-colors";
 import ProviderIcon from "@/components/ProviderIcon";
@@ -39,8 +39,8 @@ export default function PassRateBarChart({ benchmarkName }: PassRateBarChartProp
   const { selectedGroups, setSelectedGroups } = useSyncedModelSelection(data);
 
   useEffect(() => {
-    loadData().then(setData);
-  }, []);
+    loadPassRateChart(benchmarkName).then(setData);
+  }, [benchmarkName]);
 
   const chartData = useMemo(() => {
     if (!data) return [];
@@ -63,9 +63,12 @@ export default function PassRateBarChart({ benchmarkName }: PassRateBarChartProp
 
   const fixtureCount = useMemo(() => {
     if (!data || !benchmarkName) return 204;
-    return Object.values(data.fixture_index).filter(
-      (fi) => fi.benchmark === benchmarkName,
-    ).length;
+    return Math.max(
+      0,
+      ...Object.values(data.matrix).map(
+        (byBenchmark) => byBenchmark[benchmarkName]?.total ?? 0,
+      ),
+    );
   }, [data, benchmarkName]);
 
   if (!data) return <div>Loading...</div>;
@@ -73,7 +76,11 @@ export default function PassRateBarChart({ benchmarkName }: PassRateBarChartProp
   return (
     <div>
       <div className="max-w-xs ml-auto w-full mb-3">
-        <ModelSelector value={selectedGroups} onChange={setSelectedGroups} />
+        <ModelSelector
+          data={data}
+          value={selectedGroups}
+          onChange={setSelectedGroups}
+        />
       </div>
       <div
         className="card"

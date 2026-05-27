@@ -82,6 +82,7 @@ export default function ComparePage() {
     <div>
       <div className="max-w-xs ml-auto w-full mb-6">
         <ModelSelector
+          data={data}
           initialSelected={selectedGroups}
           onChange={setSelectedGroups}
         />

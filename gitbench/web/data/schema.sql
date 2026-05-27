@@ -1,0 +1,127 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE models (
+  name TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  base_model TEXT NOT NULL,
+  reasoning_level TEXT
+);
+
+CREATE TABLE benchmarks (
+  name TEXT PRIMARY KEY
+);
+
+CREATE TABLE runs (
+  id INTEGER PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  model_name TEXT NOT NULL REFERENCES models(name) ON DELETE CASCADE,
+  profile TEXT NOT NULL,
+  git_sha TEXT NOT NULL,
+  benchmark_suite_version TEXT NOT NULL,
+  reasoning_level TEXT NOT NULL
+);
+
+CREATE TABLE model_summaries (
+  model_name TEXT PRIMARY KEY REFERENCES models(name) ON DELETE CASCADE,
+  total_runs INTEGER NOT NULL,
+  total_fixtures INTEGER NOT NULL,
+  total_passed INTEGER NOT NULL,
+  pass_at_k REAL NOT NULL,
+  total_cost_usd REAL,
+  avg_cost_usd REAL
+);
+
+CREATE TABLE model_runtimes (
+  model_name TEXT PRIMARY KEY REFERENCES models(name) ON DELETE CASCADE,
+  total_ms REAL NOT NULL,
+  avg_ms REAL NOT NULL,
+  min_ms REAL NOT NULL,
+  max_ms REAL NOT NULL,
+  fixture_count INTEGER NOT NULL
+);
+
+CREATE TABLE benchmark_summaries (
+  model_name TEXT NOT NULL REFERENCES models(name) ON DELETE CASCADE,
+  benchmark_name TEXT NOT NULL REFERENCES benchmarks(name) ON DELETE CASCADE,
+  pass_at_k REAL NOT NULL,
+  total INTEGER NOT NULL,
+  passed INTEGER NOT NULL,
+  avg_similarity REAL NOT NULL,
+  PRIMARY KEY (model_name, benchmark_name)
+);
+
+CREATE TABLE fixtures (
+  benchmark_name TEXT NOT NULL REFERENCES benchmarks(name) ON DELETE CASCADE,
+  fixture_id TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  expected TEXT NOT NULL,
+  description TEXT NOT NULL,
+  setup_json TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  difficulty TEXT NOT NULL,
+  PRIMARY KEY (benchmark_name, fixture_id)
+);
+
+CREATE TABLE fixture_tags (
+  benchmark_name TEXT NOT NULL,
+  fixture_id TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  PRIMARY KEY (benchmark_name, fixture_id, tag),
+  FOREIGN KEY (benchmark_name, fixture_id)
+    REFERENCES fixtures(benchmark_name, fixture_id) ON DELETE CASCADE
+);
+
+CREATE TABLE fixture_results (
+  id INTEGER PRIMARY KEY,
+  model_name TEXT NOT NULL REFERENCES models(name) ON DELETE CASCADE,
+  benchmark_name TEXT NOT NULL,
+  fixture_id TEXT NOT NULL,
+  passed INTEGER NOT NULL,
+  similarity REAL NOT NULL,
+  error TEXT,
+  model_output TEXT NOT NULL,
+  reasoning_level TEXT,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
+  cost_usd REAL,
+  duration_ms REAL,
+  purpose TEXT,
+  difficulty TEXT,
+  tags_json TEXT NOT NULL,
+  FOREIGN KEY (benchmark_name, fixture_id)
+    REFERENCES fixtures(benchmark_name, fixture_id) ON DELETE CASCADE
+);
+
+CREATE TABLE base_model_groups (
+  id INTEGER PRIMARY KEY,
+  provider TEXT NOT NULL,
+  base_model TEXT NOT NULL,
+  UNIQUE (provider, base_model)
+);
+
+CREATE TABLE base_model_group_levels (
+  group_id INTEGER NOT NULL REFERENCES base_model_groups(id) ON DELETE CASCADE,
+  level TEXT,
+  model_name TEXT NOT NULL REFERENCES models(name) ON DELETE CASCADE,
+  pass_at_k REAL NOT NULL,
+  total_cost_usd REAL,
+  PRIMARY KEY (group_id, model_name)
+);
+
+CREATE INDEX idx_fixture_results_model_benchmark
+  ON fixture_results(model_name, benchmark_name);
+CREATE INDEX idx_fixture_results_benchmark_fixture
+  ON fixture_results(benchmark_name, fixture_id);
+CREATE INDEX idx_fixtures_benchmark
+  ON fixtures(benchmark_name);
+CREATE INDEX idx_fixture_tags_tag_fixture
+  ON fixture_tags(tag, benchmark_name, fixture_id);
+CREATE INDEX idx_runs_model_timestamp
+  ON runs(model_name, timestamp);
+CREATE INDEX idx_models_grouping
+  ON models(provider, base_model, reasoning_level);
+CREATE INDEX idx_benchmark_summaries_model_benchmark
+  ON benchmark_summaries(model_name, benchmark_name);
+CREATE INDEX idx_benchmark_summaries_benchmark_model
+  ON benchmark_summaries(benchmark_name, model_name);

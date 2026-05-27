@@ -24,7 +24,7 @@ from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter
 from gitbench.harness.reasoning import validate_model_list
 from gitbench.harness.runner import BenchmarkRunner, RunProgress
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
-from gitbench.render import _run_sort_key, aggregate_runs
+from gitbench.render import _run_sort_key, aggregate_runs, write_sqlite_report_db
 from gitbench.result_doctoring import (
     RerunPlan,
     ZeroPassFixture,
@@ -1559,7 +1559,7 @@ def list_profiles():
 @click.option(
     "--no-build",
     is_flag=True,
-    help="Skip the Astro build step (only write results.json)",
+    help="Skip the Astro build step (only write report data artifacts)",
 )
 @click.option(
     "--open",
@@ -1576,13 +1576,13 @@ def report(input_dir: str | None, input_file: str | None, output_path: str | Non
     """Generate the Astro static report from benchmark results.
 
     Reads run results from gitbench-results/ (or --input-dir / --input),
-    aggregates them into web/public/results.json, builds the Astro site
+    aggregates them into web/public/results.json and web/data/gitbench.db, builds the Astro site
     to web/dist/, and optionally opens the report in a browser.
 
     \b
     Examples:
       gitbench report                            # aggregate + build from gitbench-results/
-      gitbench report --no-build                 # only generate results.json
+      gitbench report --no-build                 # only generate report data artifacts
       gitbench report --open                     # build and open
       gitbench report -d my-results/ -i extra.jsonl --open
     """
@@ -1595,6 +1595,7 @@ def report(input_dir: str | None, input_file: str | None, output_path: str | Non
         load_runs_from_dir,
         load_runs_from_jsonl,
         render_json,
+        write_sqlite_report_db,
     )
 
     # Determine input directory
@@ -1669,6 +1670,9 @@ def report(input_dir: str | None, input_file: str | None, output_path: str | Non
     data = aggregate_runs(runs)
     render_json(data, json_output)
     click.echo(f"JSON data written to: {json_output}", err=True)
+    db_output = web_dir / "data" / "gitbench.db"
+    write_sqlite_report_db(data, db_output)
+    click.echo(f"SQLite report database written to: {db_output}", err=True)
 
     if no_build:
         click.echo("Skipping Astro build (--no-build).", err=True)

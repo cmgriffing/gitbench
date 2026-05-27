@@ -20,13 +20,13 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
           <strong class="text-(--color-text)"
             >Every AI model claims it can code. Git is a different beast.</strong
           >
-          It's not about knowing the answer. It's about knowing the exact
-          command. GitBench puts that to the test.
+          It's not about knowing the answer. It's about knowing the exact command.
+          GitBench puts that to the test.
         </p>
         <p>
-          204 fixtures. Each one asks a model to write a git command. The
-          output gets fuzzy-matched against the correct answer. Every test runs
-          in an isolated repo. Deterministic. Reproducible. No luck, no vibes.
+          204 fixtures. Each one asks a model to write a git command. The output
+          gets fuzzy-matched against the correct answer. Every test runs in an
+          isolated repo. Deterministic. Reproducible. No luck, no vibes.
         </p>
         <p>
           Picking an AI coding assistant? Fine-tuning your own model? Just
@@ -50,18 +50,18 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
         <span>Quadrant Comparison</span>
       </div>
       <p class="info-blurb">
-        Pick two criteria. The shaded quadrant is the optimal direction.
-        For example, lower cost with higher pass rate.
+        Pick two criteria. The shaded quadrant is the optimal direction. For
+        example, lower cost with higher pass rate.
       </p>
     </div>
-    <QuadrantComparisonChart client:load />
+    <QuadrantComparisonChart client:visible />
   </section>
 
   <section class="mt-10">
     <div class="section-label">
       <span>Cost per Full Run</span>
     </div>
-    <CostValueChart client:load />
+    <CostValueChart client:visible />
   </section>
 
   <section class="mt-10">
@@ -74,14 +74,14 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
         limiting. Not a pure model speed benchmark.
       </p>
     </div>
-    <RuntimeBarChart client:load />
+    <RuntimeBarChart client:visible />
   </section>
 
   <section class="mt-10">
     <div class="section-label">
       <span>Token Usage</span>
     </div>
-    <TokenUsageChart client:load />
+    <TokenUsageChart client:visible />
   </section>
 
   <section class="mt-10">
@@ -95,6 +95,6 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
         models that crush basics but fall apart on rebase or bisect.
       </p>
     </div>
-    <BenchmarkHeatmap client:load />
+    <BenchmarkHeatmap client:visible />
   </section>
 </Layout>

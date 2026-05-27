@@ -1,43 +1,43 @@
-# Astro Starter Kit: Minimal
+# GitBench Web Report
 
-```sh
-npm create astro@latest -- --template minimal
-```
-
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
+The web report is a static Astro site with Vercel API functions for interactive
+report data. `gitbench report` generates both compatibility JSON and the SQLite
+database used by the API routes:
 
 ```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+public/results.json
+data/gitbench.db
+data/schema.sql
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+`public/results.json` remains a compatibility artifact for static build-time
+data. Hydrated React islands should use `/api/*` report endpoints through the
+browser report client instead of fetching the full JSON payload.
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+## SQLite Runtime
 
-Any static assets, like images, can be placed in the `public/` directory.
+API functions use Node's built-in `node:sqlite` module through the project
+runtime requirement of Node 22.12 or newer. This avoids adding a native npm
+SQLite dependency for Vercel/local development, keeps install friction low, and
+isolates runtime-specific access behind `ReportStore` so a future Cloudflare D1
+adapter can implement the same contract.
 
-## 🧞 Commands
+## Commands
 
-All commands are run from the root of the project, from a terminal:
+Run these from `gitbench/web` unless noted otherwise.
 
 | Command                   | Action                                           |
 | :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+| `pnpm install`            | Installs dependencies                            |
+| `pnpm dev`                | Starts Astro only at `localhost:4321`            |
+| `pnpm dev:api`            | Starts Astro and Vercel API routes together      |
+| `pnpm build`              | Build your production site to `./dist/`          |
+| `pnpm preview`            | Preview your build locally, before deploying     |
+| `pnpm astro ...`          | Run CLI commands like `astro add`, `astro check` |
 
-## 👀 Want to learn more?
+Before running `pnpm dev:api`, generate report artifacts from the repository
+root:
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+```sh
+gitbench report --no-build
+```

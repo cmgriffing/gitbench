@@ -12,7 +12,7 @@ import {
   ZAxis,
 } from "recharts";
 import type { GitBenchData } from "@/lib/types";
-import { loadData } from "@/lib/load-data";
+import { loadQuadrantChart } from "@/lib/report-client";
 import { modelGroupPath } from "@/lib/routes";
 import { getProviderColor } from "@/lib/provider-colors";
 import ProviderIcon from "@/components/ProviderIcon";
@@ -336,7 +336,7 @@ export default function QuadrantComparisonChart() {
   const { selectedGroups, setSelectedGroups } = useSyncedModelSelection(data);
 
   useEffect(() => {
-    loadData().then(setData);
+    loadQuadrantChart().then(setData);
   }, []);
 
   const xMetric = metricByKey[xMetricKey];
@@ -390,7 +390,11 @@ export default function QuadrantComparisonChart() {
           exclude={xMetricKey}
         />
         <div className="min-w-0">
-          <ModelSelector value={selectedGroups} onChange={setSelectedGroups} />
+          <ModelSelector
+            data={data}
+            value={selectedGroups}
+            onChange={setSelectedGroups}
+          />
         </div>
       </div>
 

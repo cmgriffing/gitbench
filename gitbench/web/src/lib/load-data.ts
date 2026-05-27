@@ -1,19 +1,27 @@
-import type { GitBenchData } from "@/types";
+import type { GitBenchData } from "@/lib/types";
+import { loadSummary } from "@/lib/report-client";
 
 let cachedData: GitBenchData | null = null;
+let pendingData: Promise<GitBenchData> | null = null;
 
 export async function loadData(): Promise<GitBenchData> {
   if (cachedData) {
     return cachedData;
   }
 
-  const response = await fetch("/results.json");
-  if (!response.ok) {
-    throw new Error(`Failed to load results.json: ${response.status}`);
+  if (!pendingData) {
+    pendingData = loadSummary()
+      .then((data) => {
+        cachedData = data;
+        return data;
+      })
+      .catch((error) => {
+        pendingData = null;
+        throw error;
+      });
   }
 
-  cachedData = await response.json();
-  return cachedData;
+  return pendingData;
 }
 
 export function getCachedData(): GitBenchData | null {

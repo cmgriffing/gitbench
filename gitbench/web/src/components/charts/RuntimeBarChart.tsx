@@ -10,7 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import type { GitBenchData } from "@/lib/types";
-import { loadData } from "@/lib/load-data";
+import { loadRuntimeChart } from "@/lib/report-client";
 import { modelGroupPath } from "@/lib/routes";
 import { getProviderColor } from "@/lib/provider-colors";
 import ProviderIcon from "@/components/ProviderIcon";
@@ -50,7 +50,7 @@ export default function RuntimeBarChart() {
   const { selectedGroups, setSelectedGroups } = useSyncedModelSelection(data);
 
   useEffect(() => {
-    loadData().then(setData);
+    loadRuntimeChart().then(setData);
   }, []);
 
   const chartData = useMemo(() => {
@@ -74,7 +74,11 @@ export default function RuntimeBarChart() {
   return (
     <div>
       <div className="max-w-xs ml-auto w-full mb-3">
-        <ModelSelector value={selectedGroups} onChange={setSelectedGroups} />
+        <ModelSelector
+          data={data}
+          value={selectedGroups}
+          onChange={setSelectedGroups}
+        />
       </div>
       {chartData.length === 0 ? (
         <div className="card p-8 text-center">
