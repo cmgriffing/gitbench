@@ -102,6 +102,7 @@
 
 html {
   scroll-behavior: smooth;
+  background: var(--bg);
 }
 
 body {
@@ -110,6 +111,12 @@ body {
   color: var(--text);
   min-height: 100vh;
   line-height: 1.5;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
   background-image: radial-gradient(
       ellipse 70% 40% at 68% -12%,
       rgba(121, 0, 201, 0.18),
@@ -119,19 +126,14 @@ body {
       ellipse 50% 60% at -10% 82%,
       rgba(1, 254, 224, 0.07),
       transparent
+    ),
+    radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.045) 1px,
+      transparent 1px
     );
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.045) 1px,
-    transparent 1px
-  );
-  background-size: 40px 40px;
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-size: auto, auto, 40px 40px;
   pointer-events: none;
   z-index: 0;
 }

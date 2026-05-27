@@ -2,9 +2,21 @@ import ProviderIcon from "@/components/ProviderIcon";
 import { getProviderColor } from "@/lib/provider-colors";
 import type { GroupedMetricRow } from "@/components/charts/model-groups";
 
+const HORIZONTAL_CHART_INNER_HEIGHT = 340;
+const HORIZONTAL_CHART_ROW_GAP = 3;
+
 export function truncateName(name: string, maxLen = 16): string {
   if (!name || name.length <= maxLen) return name || "";
   return `${name.slice(0, maxLen - 1)}…`;
+}
+
+export function horizontalChartBarSize(rowCount: number): number {
+  const rows = Math.max(1, rowCount);
+  const rowHeight = HORIZONTAL_CHART_INNER_HEIGHT / rows;
+  return Math.max(
+    3,
+    Math.min(28, Math.floor(rowHeight - HORIZONTAL_CHART_ROW_GAP)),
+  );
 }
 
 export function providerLegend(rows: GroupedMetricRow[]) {

@@ -24,6 +24,7 @@ import {
   HorizontalGroupTick,
   ProviderLegend,
   formatCompactDecimal,
+  horizontalChartBarSize,
   paddedDomain,
   rowMap,
   tooltipStyle,
@@ -87,6 +88,7 @@ export default function TokenUsageChart() {
               <BarChart
                 data={chartData}
                 layout="vertical"
+                barCategoryGap={3}
                 margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
               >
                 <CartesianGrid
@@ -119,10 +121,7 @@ export default function TokenUsageChart() {
                 <Bar
                   dataKey="range"
                   radius={[4, 4, 4, 4]}
-                  barSize={Math.max(
-                    12,
-                    Math.min(28, 300 / Math.max(1, chartData.length)),
-                  )}
+                  barSize={horizontalChartBarSize(chartData.length)}
                   cursor="pointer"
                   onClick={(entry: any) => {
                     if (entry?.provider && entry?.baseModel) {
