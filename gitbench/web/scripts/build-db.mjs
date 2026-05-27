@@ -1,0 +1,278 @@
+#!/usr/bin/env node
+
+import { readFileSync, renameSync, rmSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const webRoot = path.resolve(__dirname, "..");
+
+const options = parseArgs(process.argv.slice(2));
+const inputPath = path.resolve(webRoot, options.input ?? "public/results.json");
+const outputPath = path.resolve(webRoot, options.output ?? "data/gitbench.db");
+const schemaPath = path.resolve(webRoot, options.schema ?? "data/schema.sql");
+
+const data = normalizeData(JSON.parse(readFileSync(inputPath, "utf8")));
+const tempPath = `${outputPath}.tmp-${process.pid}`;
+
+rmSync(tempPath, { force: true });
+
+const db = new DatabaseSync(tempPath);
+try {
+  db.exec(`
+    PRAGMA foreign_keys = ON;
+    PRAGMA journal_mode = OFF;
+    PRAGMA synchronous = OFF;
+    PRAGMA temp_store = MEMORY;
+  `);
+  db.exec(readFileSync(schemaPath, "utf8"));
+  insertReportData(db, data);
+  db.exec("ANALYZE");
+  db.close();
+  renameSync(tempPath, outputPath);
+  console.error(`SQLite report database written to: ${outputPath}`);
+} catch (error) {
+  db.close();
+  rmSync(tempPath, { force: true });
+  throw error;
+}
+
+function parseArgs(args) {
+  const parsed = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--input" || arg === "-i") parsed.input = args[++index];
+    else if (arg === "--output" || arg === "-o") parsed.output = args[++index];
+    else if (arg === "--schema" || arg === "-s") parsed.schema = args[++index];
+    else if (arg === "--help" || arg === "-h") {
+      console.log(`Usage: pnpm build:db [--input public/results.json] [--output data/gitbench.db] [--schema data/schema.sql]`);
+      process.exit(0);
+    } else {
+      throw new Error(`Unknown argument: ${arg}`);
+    }
+  }
+  return parsed;
+}
+
+function normalizeData(data) {
+  data.models ??= [];
+  data.benchmarks ??= [];
+  data.model_summaries ??= {};
+  data.model_runtimes ??= {};
+  data.matrix ??= {};
+  data.fixtures ??= {};
+  data.fixture_index ??= {};
+  data.runs_meta ??= [];
+  data.base_model_groups ??= [];
+
+  const benchmarks = new Set(data.benchmarks);
+  for (const byBenchmark of Object.values(data.fixtures)) {
+    for (const benchmark of Object.keys(byBenchmark ?? {})) benchmarks.add(benchmark);
+  }
+  data.benchmarks = [...benchmarks].sort();
+
+  for (const byBenchmark of Object.values(data.fixtures)) {
+    for (const [benchmark, results] of Object.entries(byBenchmark ?? {})) {
+      for (const result of results ?? []) {
+        const fixtureId = result.fixture_id ?? "";
+        const key = `${benchmark}/${fixtureId}`;
+        if (!fixtureId || data.fixture_index[key]) continue;
+        data.fixture_index[key] = {
+          id: fixtureId,
+          benchmark,
+          prompt: "",
+          expected: "",
+          description: "",
+          setup: [],
+          purpose: result.purpose ?? "",
+          difficulty: result.difficulty ?? "",
+          tags: result.tags ?? [],
+        };
+      }
+    }
+  }
+
+  return data;
+}
+
+function insertReportData(db, data) {
+  db.exec("BEGIN");
+  try {
+    insertMany(
+      db,
+      `INSERT INTO models (name, provider, base_model, reasoning_level)
+       VALUES (:name, :provider, :baseModel, :reasoningLevel)`,
+      data.models,
+    );
+
+    insertMany(
+      db,
+      "INSERT INTO benchmarks (name) VALUES (?)",
+      data.benchmarks.map((name) => [name]),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO model_summaries (
+         model_name, total_runs, total_fixtures, total_passed, pass_at_k,
+         total_cost_usd, avg_cost_usd
+       )
+       VALUES (
+         :model_name, :total_runs, :total_fixtures, :total_passed, :pass_at_k,
+         :total_cost_usd, :avg_cost_usd
+       )`,
+      Object.entries(data.model_summaries).map(([modelName, summary]) => ({
+        model_name: modelName,
+        ...summary,
+      })),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO model_runtimes (
+         model_name, total_ms, avg_ms, min_ms, max_ms, fixture_count
+       )
+       VALUES (:model_name, :total_ms, :avg_ms, :min_ms, :max_ms, :fixture_count)`,
+      Object.entries(data.model_runtimes).map(([modelName, runtime]) => ({
+        model_name: modelName,
+        ...runtime,
+      })),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO benchmark_summaries (
+         model_name, benchmark_name, pass_at_k, total, passed, avg_similarity
+       )
+       VALUES (
+         :model_name, :benchmark_name, :pass_at_k, :total, :passed, :avg_similarity
+       )`,
+      Object.entries(data.matrix).flatMap(([modelName, byBenchmark]) =>
+        Object.entries(byBenchmark ?? {}).map(([benchmarkName, cell]) => ({
+          model_name: modelName,
+          benchmark_name: benchmarkName,
+          ...cell,
+        })),
+      ),
+    );
+
+    const fixtures = Object.values(data.fixture_index);
+    insertMany(
+      db,
+      `INSERT INTO fixtures (
+         benchmark_name, fixture_id, prompt, expected, description, setup_json,
+         purpose, difficulty
+       )
+       VALUES (
+         :benchmark_name, :fixture_id, :prompt, :expected, :description,
+         :setup_json, :purpose, :difficulty
+       )`,
+      fixtures.map((fixture) => ({
+        benchmark_name: fixture.benchmark ?? "",
+        fixture_id: fixture.id ?? "",
+        prompt: fixture.prompt ?? "",
+        expected: fixture.expected ?? "",
+        description: fixture.description ?? "",
+        setup_json: jsonArray(fixture.setup),
+        purpose: fixture.purpose ?? "",
+        difficulty: fixture.difficulty ?? "",
+      })),
+    );
+
+    insertMany(
+      db,
+      "INSERT INTO fixture_tags (benchmark_name, fixture_id, tag) VALUES (?, ?, ?)",
+      fixtures.flatMap((fixture) =>
+        (fixture.tags ?? []).map((tag) => [fixture.benchmark ?? "", fixture.id ?? "", tag]),
+      ),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO fixture_results (
+         model_name, benchmark_name, fixture_id, passed, similarity, error,
+         model_output, reasoning_level, input_tokens, output_tokens, total_tokens,
+         cost_usd, duration_ms, purpose, difficulty, tags_json
+       )
+       VALUES (
+         :model_name, :benchmark_name, :fixture_id, :passed, :similarity, :error,
+         :model_output, :reasoning_level, :input_tokens, :output_tokens,
+         :total_tokens, :cost_usd, :duration_ms, :purpose, :difficulty, :tags_json
+       )`,
+      Object.entries(data.fixtures).flatMap(([modelName, byBenchmark]) =>
+        Object.entries(byBenchmark ?? {}).flatMap(([benchmarkName, results]) =>
+          (results ?? []).map((result) => ({
+            model_name: modelName,
+            benchmark_name: benchmarkName,
+            fixture_id: result.fixture_id ?? "",
+            passed: result.passed ? 1 : 0,
+            similarity: result.similarity ?? 0,
+            error: result.error ?? null,
+            model_output: result.model_output ?? "",
+            reasoning_level: result.reasoning_level ?? null,
+            input_tokens: result.input_tokens ?? null,
+            output_tokens: result.output_tokens ?? null,
+            total_tokens: result.total_tokens ?? null,
+            cost_usd: result.cost_usd ?? null,
+            duration_ms: result.duration_ms ?? null,
+            purpose: result.purpose ?? null,
+            difficulty: result.difficulty ?? null,
+            tags_json: jsonArray(result.tags),
+          })),
+        ),
+      ),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO runs (
+         timestamp, model_name, profile, git_sha, benchmark_suite_version,
+         reasoning_level
+       )
+       VALUES (
+         :timestamp, :model, :profile, :git_sha, :benchmark_suite_version,
+         :reasoning_level
+       )`,
+      data.runs_meta,
+    );
+
+    const insertGroup = db.prepare(
+      "INSERT INTO base_model_groups (provider, base_model) VALUES (?, ?)",
+    );
+    const insertLevel = db.prepare(
+      `INSERT INTO base_model_group_levels (
+         group_id, level, model_name, pass_at_k, total_cost_usd
+       )
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    for (const group of data.base_model_groups) {
+      const { lastInsertRowid } = insertGroup.run(group.provider ?? "", group.baseModel ?? "");
+      for (const level of group.levels ?? []) {
+        insertLevel.run(
+          lastInsertRowid,
+          level.level ?? null,
+          level.modelName ?? "",
+          level.pass_at_k ?? 0,
+          level.total_cost_usd ?? null,
+        );
+      }
+    }
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function insertMany(db, sql, rows) {
+  const statement = db.prepare(sql);
+  for (const row of rows) {
+    Array.isArray(row) ? statement.run(...row) : statement.run(row);
+  }
+}
+
+function jsonArray(value) {
+  return JSON.stringify(Array.isArray(value) ? value : [], null, 0);
+}
