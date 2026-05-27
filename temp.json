@@ -149,6 +149,60 @@
     "baidu/cobuddy:free:low",
     "baidu/cobuddy:free:medium",
     "baidu/cobuddy:free:high",
-    "baidu/cobuddy:free:xhigh"
+    "baidu/cobuddy:free:xhigh",
+
+    "arcee-ai/trinity-mini:none",
+    "arcee-ai/trinity-mini:low",
+    "arcee-ai/trinity-mini:medium",
+    "arcee-ai/trinity-mini:high",
+    "arcee-ai/trinity-mini:xhigh",
+
+    "liquid/lfm-2-24b-a2b:none",
+    "liquid/lfm-2-24b-a2b:low",
+    "liquid/lfm-2-24b-a2b:medium",
+    "liquid/lfm-2-24b-a2b:high",
+    "liquid/lfm-2-24b-a2b:xhigh",
+
+    "openai/gpt-5.4-nano:none",
+    "openai/gpt-5.4-nano:low",
+    "openai/gpt-5.4-nano:medium",
+    "openai/gpt-5.4-nano:high",
+    "openai/gpt-5.4-nano:xhigh",
+
+    "google/gemma-4-26b-a4b-it:none",
+    "google/gemma-4-26b-a4b-it:low",
+    "google/gemma-4-26b-a4b-it:medium",
+    "google/gemma-4-26b-a4b-it:high",
+    "google/gemma-4-26b-a4b-it:xhigh",
+
+    "google/gemma-4-31b-it:none",
+    "google/gemma-4-31b-it:low",
+    "google/gemma-4-31b-it:medium",
+    "google/gemma-4-31b-it:high",
+    "google/gemma-4-31b-it:xhigh",
+
+    "ibm-granite/granite-4.1-8b:none",
+    "ibm-granite/granite-4.1-8b:low",
+    "ibm-granite/granite-4.1-8b:medium",
+    "ibm-granite/granite-4.1-8b:high",
+    "ibm-granite/granite-4.1-8b:xhigh",
+
+    "inclusionai/ling-2.6-flash:none",
+    "inclusionai/ling-2.6-flash:low",
+    "inclusionai/ling-2.6-flash:medium",
+    "inclusionai/ling-2.6-flash:high",
+    "inclusionai/ling-2.6-flash:xhigh",
+
+    "openai/gpt-oss-120b:none",
+    "openai/gpt-oss-120b:low",
+    "openai/gpt-oss-120b:medium",
+    "openai/gpt-oss-120b:high",
+    "openai/gpt-oss-120b:xhigh",
+
+    "openai/gpt-oss-20b:none",
+    "openai/gpt-oss-20b:low",
+    "openai/gpt-oss-20b:medium",
+    "openai/gpt-oss-20b:high",
+    "openai/gpt-oss-20b:xhigh"
   ]
 }
