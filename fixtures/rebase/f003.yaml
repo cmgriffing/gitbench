@@ -16,13 +16,13 @@ setup:
 - git add status.txt
 - git commit -m 'Update status'
 - git rebase fix
-prompt: 'Resolve the rebase conflict in status.txt. The base was ''Status: OK''. Branch
-  being rebased changed it to ''Status: Resolved''. Main branch changed it to ''Status:
-  Failed''. Provide ONLY the resolved file content.'
+prompt: 'Resolve the rebase conflict in status.txt. The base was ''Status: OK''. The
+  upstream fix branch changed it to ''Status: Resolved''. The current branch being
+  rebased (main) changed it to ''Status: Failed''. Keep the current branch value.
+  Provide ONLY the resolved file content.'
 expected: 'Status: Failed'
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
 purpose: Tests ability to resolve a status-message conflict during rebase. Evaluates
   choosing between contradictory values in rebase context.
 difficulty: easy

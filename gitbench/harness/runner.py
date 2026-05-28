@@ -233,6 +233,7 @@ class BenchmarkRunner:
             else:
                 model_output = str(response)
                 usage = None
+                response = {}  # type: ignore[assignment]
 
             score = benchmark.score(fixture, model_output, repo_path=repo_path)
             score.reasoning_level = getattr(
@@ -241,10 +242,17 @@ class BenchmarkRunner:
             score.prompt = fixture.prompt
             score.expected = fixture.expected
             score.description = fixture.description
+
+            # Wire transcript and api_duration_ms from response dict
+            if isinstance(response, dict):
+                score.transcript = response.get("transcript")
+                score.api_duration_ms = response.get("api_duration_ms")
+
             if usage and isinstance(usage, dict):
                 score.input_tokens = usage.get("input_tokens")
                 score.output_tokens = usage.get("output_tokens")
                 score.total_tokens = usage.get("total_tokens")
+                score.reasoning_tokens = usage.get("reasoning_tokens")
                 if usage.get("cost") is not None:
                     score.cost_usd = usage.get("cost")
             return fixture.id, score

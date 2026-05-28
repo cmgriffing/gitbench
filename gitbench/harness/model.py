@@ -3,6 +3,7 @@
 import json
 import logging
 import threading
+import time
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
@@ -182,10 +183,14 @@ class OpenAIAdapter(ModelInterface):
 
                 def call_api():
                     try:
+                        t_start = time.perf_counter()
                         response = self.client.chat.completions.create(
                             model=self.model,
                             messages=model_messages,
                             **kwargs,
+                        )
+                        api_duration_ms = round(
+                            (time.perf_counter() - t_start) * 1000, 2
                         )
                         text = _extract_openai_content(response)
                         usage = None
@@ -197,12 +202,46 @@ class OpenAIAdapter(ModelInterface):
                                     "output_tokens": getattr(raw_usage, "completion_tokens", None),
                                     "total_tokens": getattr(raw_usage, "total_tokens", None),
                                 }
+                                completion_details = getattr(
+                                    raw_usage, "completion_tokens_details", None
+                                )
+                                if completion_details is not None:
+                                    reasoning_tokens = getattr(
+                                        completion_details, "reasoning_tokens", None
+                                    )
+                                    if reasoning_tokens is not None:
+                                        usage["reasoning_tokens"] = reasoning_tokens
                                 cost = getattr(raw_usage, "cost", None)
                                 if cost is not None:
                                     usage["cost"] = cost
                         except Exception:
                             pass
-                        result.append({"text": text, "usage": usage})
+
+                        # Build transcript from input messages + assistant response
+                        transcript = list(model_messages)
+                        assistant_entry: dict[str, Any] = {
+                            "role": "assistant",
+                            "content": text,
+                        }
+                        choices = getattr(response, "choices", None)
+                        if choices and len(choices) > 0:
+                            message = getattr(choices[0], "message", None)
+                            if message is not None:
+                                reasoning_content = getattr(
+                                    message, "reasoning_content", None
+                                )
+                                if reasoning_content is not None:
+                                    assistant_entry["reasoning_content"] = (
+                                        reasoning_content
+                                    )
+                        transcript.append(assistant_entry)
+
+                        result.append({
+                            "text": text,
+                            "usage": usage,
+                            "api_duration_ms": api_duration_ms,
+                            "transcript": transcript,
+                        })
                     except Exception as e:
                         error.append(e)
 
@@ -336,7 +375,11 @@ class OllamaAdapter(ModelInterface):
                             headers={"Content-Type": "application/json"},
                             method="POST",
                         )
+                        t_start = time.perf_counter()
                         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                            api_duration_ms = round(
+                                (time.perf_counter() - t_start) * 1000, 2
+                            )
                             body = json.loads(resp.read().decode("utf-8"))
                             content = body.get("message", {}).get("content", "")
                             usage = None
@@ -367,7 +410,20 @@ class OllamaAdapter(ModelInterface):
                                     }
                             except Exception:
                                 pass
-                            result.append({"text": content, "usage": usage})
+
+                            # Build transcript from input messages + assistant response
+                            transcript = list(ollama_messages)
+                            transcript.append({
+                                "role": "assistant",
+                                "content": content,
+                            })
+
+                            result.append({
+                                "text": content,
+                                "usage": usage,
+                                "api_duration_ms": api_duration_ms,
+                                "transcript": transcript,
+                            })
                     except Exception as e:
                         error.append(e)
 
@@ -449,11 +505,33 @@ class MockModelClient(ModelInterface):
             **kwargs: Additional parameters (ignored).
 
         Returns:
-            A dict with ``text`` and ``usage`` keys (``usage`` is always ``None``).
+            A dict with ``text``, ``usage``, ``transcript``, and
+            ``api_duration_ms`` keys.
         """
         self.call_count += 1
         self.last_messages = messages
-        return {"text": self.response, "usage": None}
+
+        t_start = time.perf_counter()
+        time.sleep(0.01)
+        api_duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+
+        transcript = [msg.to_dict() for msg in messages]
+        transcript.append({"role": "assistant", "content": self.response})
+
+        usage = {
+            "input_tokens": 50,
+            "output_tokens": 30,
+            "total_tokens": 80,
+            "reasoning_tokens": 20,
+            "cost": 0.0,
+        }
+
+        return {
+            "text": self.response,
+            "usage": usage,
+            "transcript": transcript,
+            "api_duration_ms": api_duration_ms,
+        }
 
     def set_response(self, response: str) -> None:
         """Update the mock response.

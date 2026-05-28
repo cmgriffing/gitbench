@@ -36,9 +36,6 @@ class GitShowBenchmark(Benchmark):
         Returns:
             A Score object with passed/failed status and similarity value.
         """
-        if fixture.scoring.get("type") == "commit_hash_by_subject":
-            return self._score_commit_hash_by_subject(fixture, model_output, repo_path)
-
         return self._scorer.score(fixture, model_output, repo_path=repo_path)
 
     def _score_commit_hash_by_subject(

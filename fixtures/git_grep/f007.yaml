@@ -16,9 +16,13 @@ setup:
 prompt: Here is the output of a git grep -C 2 command showing 2 lines of context around
   matches for 'port'. How many total lines (including context) appear in the output?
   Output ONLY the number, nothing else.
-expected: '10'
+expected: '13'
 scoring:
-  type: exact_match
+  type: numeric_exact
+  allow_prose: true
+  self_check:
+    command: git grep -C 2 port -- . ':!.grep_command'
+    transform: count_nonempty_lines
 purpose: Tests ability to show context lines with git grep -C. Evaluates understanding
   of surrounding-line output.
 difficulty: medium

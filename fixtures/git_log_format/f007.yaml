@@ -21,9 +21,11 @@ setup:
 - git commit -m 'Add unit tests'
 prompt: Using git log --oneline, what is the short hash of the commit with message
   'Fix null pointer bug'? Output ONLY the short hash, nothing else.
-expected: Fix null pointer bug
+expected: ''
 scoring:
-  type: exact_match
+  type: commit_hash_by_subject
+  subject: Fix null pointer bug
+  hash_length: short
 purpose: Tests ability to identify a specific commit from oneline output. Evaluates
   parsing compact log formats.
 difficulty: easy

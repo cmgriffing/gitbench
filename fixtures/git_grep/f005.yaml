@@ -33,9 +33,13 @@ setup:
 prompt: Here is the output of a git grep -n -i command that searches case-insensitively
   with line numbers. How many lines contain 'python' in any capitalization? Output
   ONLY the number, nothing else.
-expected: '3'
+expected: '4'
 scoring:
-  type: exact_match
+  type: numeric_exact
+  allow_prose: true
+  self_check:
+    command: git grep -n -i python -- . ':!.grep_command'
+    transform: count_nonempty_lines
 purpose: Tests ability to combine flags (case-insensitive + line numbers) with git
   grep -in. Evaluates multi-flag composition.
 difficulty: easy

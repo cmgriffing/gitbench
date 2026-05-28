@@ -220,8 +220,8 @@ GitBench includes 17 benchmark categories:
 | `commit_squash`   | Squash multiple commits into a single coherent commit                  | 12       | commit_selection |
 | `git_bisect`      | Identify the commit that introduced a bug via automated bisect         | 12       | dynamic hash   |
 | `git_clean`       | Safely remove untracked files and directories                          | 12       | state_assertions |
-| `git_grep`        | Search repository content with git grep                                | 12       | exact_match/similarity |
-| `git_log_format`  | Format git log output for targeted history inspection                  | 12       | exact_match    |
+| `git_grep`        | Search repository content with git grep                                | 12       | exact_match/similarity/numeric_exact |
+| `git_log_format`  | Format git log output for targeted history inspection                  | 12       | exact_match/unordered_line_set/dynamic hash |
 | `git_show`        | Inspect commits, tags, and file state with git show                    | 12       | exact_match/dynamic hash |
 | `merge_conflicts` | Resolve merge conflicts producing the correct final tree               | 12       | similarity    |
 | `rebase`          | Clean up commit history before PR (squash, reorder, amend)             | 12       | similarity    |
@@ -239,11 +239,15 @@ Each benchmark has 12 fixtures — 204 total — for meaningful pass@1 scoring.
 | ---- | ----------- |
 | `similarity` | Text similarity via `difflib.SequenceMatcher`. Default threshold: 0.5 |
 | `exact_match` | Exact string comparison after stripping whitespace |
+| `unordered_line_set` | Compare newline-delimited answers as a set when order is not part of the task |
+| `numeric_exact` | Compare count/integer answers while tolerating whitespace and optional one-number prose |
+| `json_semantic_equal` | Compare parsed JSON values so whitespace and property order do not matter |
 | `command_equivalence` | Tokenized command comparison against fixture-declared accepted alternatives |
 | `state_assertions` | Execute model output as git commands, then verify repo state via assertions (file_exists, dir_exists, file_content, branch_exists, git_config, git_output) |
 | `structured` | Parse model output as key-value fields, score each independently (exact_match or similarity per field) |
 | `commit_selection` | Verify that the model selects specific expected commits (used by commit_squash) |
-| `dynamic_hash` | Match against a git hash that varies per run (used by git_bisect, git_show) |
+| `commit_hash_by_subject` | Derive the full or short commit hash from a stable commit subject in the fixture repo |
+| `dynamic_hash` | Match against a git hash that varies per run (used by git_bisect and legacy fixtures) |
 
 Use `command_equivalence` for read-only fixtures that ask for a Git command and
 where multiple command spellings are semantically equivalent:

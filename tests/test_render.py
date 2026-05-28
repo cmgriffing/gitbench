@@ -96,8 +96,14 @@ class TestLoadRunsFromDir:
 
     def test_sorted_by_version_then_timestamp(self, tmp_path):
         """Test that runs are sorted by suite version before timestamp."""
-        r1 = _make_envelope(timestamp="2026-04-25T15:00:00+00:00")
-        r2 = _make_envelope(timestamp="2026-04-25T13:00:00+00:00")
+        r1 = _make_envelope(
+            timestamp="2026-04-25T15:00:00+00:00",
+            suite_version="0.1.0",
+        )
+        r2 = _make_envelope(
+            timestamp="2026-04-25T13:00:00+00:00",
+            suite_version="0.1.0",
+        )
         r3 = _make_envelope(
             timestamp="2026-04-25T12:00:00+00:00",
             suite_version="0.2.0",

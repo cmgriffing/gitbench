@@ -273,9 +273,31 @@ Use the narrowest scorer that matches the fixture's intended answer.
 
 - `similarity` uses Python's `difflib.SequenceMatcher`. It is suitable for natural-language commit messages and file content where small wording differences are acceptable. Use higher thresholds, such as `0.9`, for conflict resolutions where incomplete output should fail.
 - `exact_match` compares stripped strings exactly. Use it for literal answers such as commit subjects, email addresses, tag names, and exact command output.
+- `unordered_line_set` compares non-empty output lines as a set. Use it when the prompt asks for all matching lines or commit messages and order is not part of the skill under test.
+- `numeric_exact` compares numeric/count answers after trimming whitespace. Set `allow_prose: true` only when a single number embedded in prose should be accepted.
+- `commit_hash_by_subject` derives the expected hash from repository state using `subject` and optional `hash_length: short`. Use it instead of storing static hashes or commit messages for hash-answer fixtures.
+- `json_semantic_equal` parses JSON and compares the resulting value. Use it for structured conflict outputs where property order and whitespace should not matter.
 - `command_equivalence` compares tokenized command lines against fixture-declared accepted alternatives. Use it for read-only prompts that ask the model to output a Git command.
 - `state_assertions` executes model commands in the fixture repo and validates the resulting state. Use it for commands that mutate the repository.
 - Benchmark-specific scorers, such as branch selection, commit selection, stash recovery, reflog recovery, and dynamic commit-hash scoring, should enforce the Git-specific correctness contract directly.
+
+### Fixture Self-Checks
+
+Run or extend `gitbench.fixture_self_check` when a fixture expectation can be checked
+without a model run. Current self-checks flag hash prompts with static non-hash
+expected values, multi-line `exact_match` fixtures that do not declare
+`order_matters: true`, and fixture-declared Git-derived expectations:
+
+```yaml
+scoring:
+  type: numeric_exact
+  self_check:
+    command: git log --merges --format=%H
+    transform: count_nonempty_lines
+```
+
+Use self-checks for counts, short hashes, and other values that can be derived from
+the generated repository state.
 
 ### Command Equivalence
 

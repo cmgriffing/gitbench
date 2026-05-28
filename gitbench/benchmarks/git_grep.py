@@ -67,7 +67,16 @@ class GitGrepBenchmark(Benchmark):
             text=True,
         )
 
-        output = result.stdout
+        output_lines = [
+            line for line in result.stdout.splitlines() if not line.startswith(".grep_command")
+        ]
+        while output_lines and output_lines[0] == "--":
+            output_lines.pop(0)
+        while output_lines and output_lines[-1] == "--":
+            output_lines.pop()
+        output = "\n".join(output_lines)
+        if output:
+            output += "\n"
         if result.stderr:
             logger.debug(f"Grep stderr: {result.stderr}")
 

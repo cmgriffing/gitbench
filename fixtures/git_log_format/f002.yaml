@@ -25,7 +25,7 @@ expected: 'Add authentication module
 
   Add authorization checks'
 scoring:
-  type: exact_match
+  type: unordered_line_set
 purpose: Tests ability to list commit messages matching a grep pattern. Evaluates
   log filtering with message output.
 difficulty: easy

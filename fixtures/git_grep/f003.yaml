@@ -6,10 +6,10 @@ setup:
 - git config user.name 'Test User'
 - mkdir -p src
 - 'echo ''def get_user(id): return db.find(id)'' > src/api.py'
-- 'echo ''def get_post(id): return posts.find(id)'' > src/api.py'
-- 'echo ''def get_comment(id): return comments.find(id)'' > src/api.py'
-- 'echo ''def list_users(): return db.all()'' > src/api.py'
-- 'echo ''def delete_post(id): posts.remove(id)'' > src/api.py'
+- 'echo ''def get_post(id): return posts.find(id)'' >> src/api.py'
+- 'echo ''def get_comment(id): return comments.find(id)'' >> src/api.py'
+- 'echo ''def list_users(): return db.all()'' >> src/api.py'
+- 'echo ''def delete_post(id): posts.remove(id)'' >> src/api.py'
 - git add .
 - git commit -m 'Add API functions'
 - echo 'git grep -E "def get_"' > .grep_command
@@ -20,7 +20,11 @@ prompt: Here is the output of a git grep -E command that searches for function d
   nothing else.
 expected: '3'
 scoring:
-  type: exact_match
+  type: numeric_exact
+  allow_prose: true
+  self_check:
+    command: git grep -E "def get_" -- . ':!.grep_command'
+    transform: count_nonempty_lines
 purpose: Tests ability to perform regex search with git grep -E. Evaluates extended
   regex pattern matching in git.
 difficulty: medium

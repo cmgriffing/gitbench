@@ -1,8 +1,10 @@
 """Scoring engine for GitBench benchmarks."""
 
 import difflib
+import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 from typing import Any
@@ -141,6 +143,25 @@ def _parse_structured_output(model_output: str) -> dict[str, str]:
             if key:
                 fields[key] = value
     return fields
+
+
+def _score_result(
+    fixture: Fixture,
+    model_output: str,
+    passed: bool,
+    similarity: float,
+    error: str | None = None,
+) -> Score:
+    return Score(
+        fixture_id=fixture.id,
+        passed=passed,
+        similarity=round(similarity, 4),
+        model_output=model_output,
+        error=error,
+        purpose=fixture.purpose or None,
+        difficulty=fixture.difficulty or None,
+        tags=fixture.tags or None,
+    )
 
 
 class StateAssertionScorer:
@@ -383,12 +404,183 @@ class CommandEquivalenceScorer:
         )
 
 
+class UnorderedLineSetScorer:
+    """Scores newline-delimited answers as an order-insensitive set."""
+
+    def score(self, fixture: Fixture, model_output: str) -> Score:
+        expected_lines = self._lines(fixture.expected)
+        actual_lines = self._lines(model_output)
+        allow_extra = fixture.scoring.get("allow_extra", False)
+
+        missing = sorted(expected_lines - actual_lines)
+        extra = sorted(actual_lines - expected_lines)
+        passed = not missing and (allow_extra or not extra)
+
+        if expected_lines:
+            similarity = len(expected_lines & actual_lines) / len(expected_lines)
+        else:
+            similarity = 1.0 if not actual_lines else 0.0
+
+        errors = []
+        if missing:
+            errors.append(f"Missing lines: {missing}")
+        if extra and not allow_extra:
+            errors.append(f"Extra lines: {extra}")
+
+        return _score_result(
+            fixture,
+            model_output,
+            passed,
+            similarity,
+            "; ".join(errors) if errors else None,
+        )
+
+    def _lines(self, value: str) -> set[str]:
+        return {line.strip() for line in value.splitlines() if line.strip()}
+
+
+class NumericExactScorer:
+    """Scores integer/count answers while tolerating optional formatting noise."""
+
+    _NUMBER_RE = re.compile(r"[-+]?\d+(?:\.\d+)?")
+
+    def score(self, fixture: Fixture, model_output: str) -> Score:
+        expected = fixture.expected.strip()
+        actual = self._normalize(model_output, fixture.scoring.get("allow_prose", False))
+        passed = actual == expected
+        return _score_result(
+            fixture,
+            model_output,
+            passed,
+            1.0 if passed else 0.0,
+            None if passed else f"Expected numeric answer {expected!r}, got {actual!r}",
+        )
+
+    def _normalize(self, value: str, allow_prose: bool) -> str:
+        stripped = value.strip()
+        if not allow_prose:
+            return stripped
+        numbers = self._NUMBER_RE.findall(stripped)
+        return numbers[0] if len(numbers) == 1 else stripped
+
+
+class CommitHashBySubjectScorer:
+    """Scores commit hash answers derived from a commit subject in the repo."""
+
+    _HASH_RE = re.compile(r"\b[0-9a-fA-F]{7,40}\b")
+
+    def score(self, fixture: Fixture, model_output: str, repo_path: str | None) -> Score:
+        if repo_path is None:
+            return _score_result(
+                fixture,
+                model_output,
+                False,
+                0.0,
+                "repo_path required for commit_hash_by_subject scoring",
+            )
+
+        subject = fixture.scoring.get("subject")
+        if not subject:
+            return _score_result(
+                fixture,
+                model_output,
+                False,
+                0.0,
+                "commit_hash_by_subject scoring requires subject",
+            )
+
+        result = subprocess.run(
+            ["git", "log", "--format=%H%x00%s"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return _score_result(
+                fixture,
+                model_output,
+                False,
+                0.0,
+                f"git log failed: {result.stderr.strip()}",
+            )
+
+        expected_hash = None
+        for line in result.stdout.splitlines():
+            commit_hash, _, commit_subject = line.partition("\0")
+            if commit_subject == subject:
+                expected_hash = commit_hash.lower()
+                break
+
+        if expected_hash is None:
+            return _score_result(
+                fixture,
+                model_output,
+                False,
+                0.0,
+                f"Could not find commit with subject: {subject}",
+            )
+
+        length = fixture.scoring.get("hash_length", "full")
+        expected = expected_hash[:7] if length == "short" else expected_hash
+        actual = model_output.strip().lower()
+        exact = actual == expected
+        embedded_hashes = {match.group(0).lower() for match in self._HASH_RE.finditer(actual)}
+        passed = exact or expected in embedded_hashes
+        return _score_result(
+            fixture,
+            model_output,
+            passed,
+            1.0 if passed else 0.0,
+            None if passed else f"Expected {length} hash {expected}, got {model_output.strip()}",
+        )
+
+
+class JsonSemanticEqualScorer:
+    """Scores JSON answers by parsed semantic value."""
+
+    def score(self, fixture: Fixture, model_output: str) -> Score:
+        try:
+            expected = json.loads(fixture.expected)
+        except json.JSONDecodeError as e:
+            return _score_result(
+                fixture,
+                model_output,
+                False,
+                0.0,
+                f"Invalid expected JSON: {e}",
+            )
+
+        try:
+            actual = json.loads(model_output)
+        except json.JSONDecodeError as e:
+            return _score_result(
+                fixture,
+                model_output,
+                False,
+                0.0,
+                f"Invalid model JSON: {e}",
+            )
+
+        passed = actual == expected
+        return _score_result(
+            fixture,
+            model_output,
+            passed,
+            1.0 if passed else 0.0,
+            None if passed else f"Expected JSON value {expected!r}, got {actual!r}",
+        )
+
+
 class Scorer:
     """Computes similarity scores for model outputs against expected values.
 
     Supports multiple scoring types:
     - similarity: difflib SequenceMatcher (default)
     - exact_match: exact string comparison
+    - unordered_line_set: order-insensitive newline-delimited set comparison
+    - numeric_exact: exact numeric comparison with optional one-number prose normalization
+    - commit_hash_by_subject: repo-derived commit hash comparison
+    - json_semantic_equal: parsed JSON value comparison
     - command_equivalence: tokenized command sequence comparison
     - state_assertions: repo state checking (needs repo_path)
     - structured: per-field scoring
@@ -399,6 +591,10 @@ class Scorer:
         self._state_scorer = StateAssertionScorer()
         self._structured_scorer = StructuredScorer()
         self._command_equivalence_scorer = CommandEquivalenceScorer()
+        self._unordered_line_set_scorer = UnorderedLineSetScorer()
+        self._numeric_exact_scorer = NumericExactScorer()
+        self._commit_hash_by_subject_scorer = CommitHashBySubjectScorer()
+        self._json_semantic_equal_scorer = JsonSemanticEqualScorer()
 
     def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
         """Score a model output against the expected value.
@@ -448,6 +644,20 @@ class Scorer:
                     difficulty=fixture.difficulty or None,
                     tags=fixture.tags or None,
                 )
+
+            elif scoring_type == "unordered_line_set":
+                return self._unordered_line_set_scorer.score(fixture, model_output)
+
+            elif scoring_type == "numeric_exact":
+                return self._numeric_exact_scorer.score(fixture, model_output)
+
+            elif scoring_type == "commit_hash_by_subject":
+                return self._commit_hash_by_subject_scorer.score(
+                    fixture, model_output, repo_path
+                )
+
+            elif scoring_type == "json_semantic_equal":
+                return self._json_semantic_equal_scorer.score(fixture, model_output)
 
             elif scoring_type == "state_assertions":
                 if repo_path is None:

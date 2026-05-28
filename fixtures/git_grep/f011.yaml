@@ -18,9 +18,13 @@ setup:
 prompt: Here is the output of a git grep -e command that searches for multiple patterns
   ('json' and 'requests'). How many total matching lines appear? Output ONLY the number,
   nothing else.
-expected: '7'
+expected: '6'
 scoring:
-  type: exact_match
+  type: numeric_exact
+  allow_prose: true
+  self_check:
+    command: git grep -e json -e requests -- . ':!.grep_command'
+    transform: count_nonempty_lines
 purpose: Tests ability to search for multiple patterns with git grep -e. Evaluates
   OR-pattern matching in search.
 difficulty: medium

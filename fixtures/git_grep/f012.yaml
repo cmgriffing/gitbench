@@ -24,12 +24,11 @@ setup:
 prompt: Here is the output of a git grep -c command that shows per-file counts of
   'login'. For which file(s) is the count greater than zero? Output ONLY the filenames,
   one per line, nothing else.
-expected: 'src/auth.py:2
+expected: 'src/auth.py
 
-  tests/test_auth.py:1'
+  tests/test_auth.py'
 scoring:
-  type: similarity
-  threshold: 0.8
+  type: unordered_line_set
 purpose: Tests ability to use count mode with git grep -c. Evaluates aggregation-style
   search output interpretation.
 difficulty: medium

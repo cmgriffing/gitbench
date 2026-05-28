@@ -12,19 +12,19 @@ setup:
 - git add a.txt
 - git commit -m 'Feature A'
 - git checkout master || git checkout main
-- git merge feature-a -m 'Merge feature-a'
+- git merge --no-ff feature-a -m 'Merge feature-a'
 - git checkout -b feature-b
 - echo 'b' > b.txt
 - git add b.txt
 - git commit -m 'Feature B'
 - git checkout master || git checkout main
-- git merge feature-b -m 'Merge feature-b'
+- git merge --no-ff feature-b -m 'Merge feature-b'
 - git checkout -b feature-c
 - echo 'c' > c.txt
 - git add c.txt
 - git commit -m 'Feature C'
 - git checkout master || git checkout main
-- git merge feature-c -m 'Merge feature-c'
+- git merge --no-ff feature-c -m 'Merge feature-c'
 - echo 'post' > post.txt
 - git add post.txt
 - git commit -m 'Post-merge commit'
@@ -32,7 +32,11 @@ prompt: How many merge commits exist in this repository? Use git log --merges to
   them. Output ONLY the number, nothing else.
 expected: '3'
 scoring:
-  type: exact_match
+  type: numeric_exact
+  allow_prose: true
+  self_check:
+    command: git log --merges --format=%H
+    transform: count_nonempty_lines
 purpose: Tests ability to count merge commits in history. Evaluates filtering for
   merge-specific entries.
 difficulty: medium

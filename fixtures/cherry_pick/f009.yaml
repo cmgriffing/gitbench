@@ -18,12 +18,11 @@ setup:
 - git cherry-pick $(git rev-parse fullname)
 prompt: 'Resolve the cherry-pick conflict in author.txt. The base was ''Author: John''.
   The incoming commit (fullname branch) changed it to ''Author: John Smith''. The
-  current branch (main) has ''Author: J. Doe''. Resolve the conflict. Provide ONLY
-  the resolved file content.'
+  current branch (main) has ''Author: J. Doe''. Keep the current branch value. Provide
+  ONLY the resolved file content.'
 expected: 'Author: J. Doe'
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
 purpose: Tests ability to resolve a three-way author-name conflict where base, incoming,
   and current all differ. Evaluates complex multi-value merge decisions.
 difficulty: medium

@@ -16,13 +16,13 @@ setup:
 - git add author.txt
 - git commit -m 'Use initials'
 - git rebase fullname
-prompt: 'Resolve the rebase conflict in author.txt. Base was ''Author: John''. Branch
-  being rebased set ''Author: John Smith''. Main branch set ''Author: J. Doe''. Resolve
-  the conflict. Provide ONLY the resolved file content.'
+prompt: 'Resolve the rebase conflict in author.txt. Base was ''Author: John''. The
+  upstream fullname branch set ''Author: John Smith''. The current branch being rebased
+  (main) set ''Author: J. Doe''. Keep the current branch value. Provide ONLY the resolved
+  file content.'
 expected: 'Author: J. Doe'
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
 purpose: Tests ability to resolve a three-way author-name conflict in rebase. Evaluates
   complex merge decisions with rebase polarity.
 difficulty: medium

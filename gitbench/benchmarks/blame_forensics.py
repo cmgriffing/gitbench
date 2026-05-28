@@ -61,6 +61,29 @@ class BlameForensicsBenchmark(Benchmark):
         )
         parts.append(f"Git log (oneline):\n{log_result.stdout}")
 
+        files_result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+        )
+        files = [line.strip() for line in files_result.stdout.splitlines() if line.strip()]
+        for file_path in files:
+            content_result = subprocess.run(
+                ["git", "show", f"HEAD:{file_path}"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+            )
+            blame_result = subprocess.run(
+                ["git", "blame", "--", file_path],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+            )
+            parts.append(f"Current {file_path}:\n{content_result.stdout}")
+            parts.append(f"Git blame for {file_path}:\n{blame_result.stdout}")
+
         return "\n".join(parts)
 
     def format_prompt(self, fixture: Fixture, diff: str) -> str:

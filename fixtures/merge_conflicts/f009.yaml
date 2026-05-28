@@ -21,12 +21,11 @@ setup:
 - git merge initials
 prompt: 'Resolve the merge conflict in author.txt. Three different authors were set:
   base ''Author: John'', branch A ''Author: John Smith'', branch B ''Author: J. Doe''.
-  Both branches were merged into main (fullname first, then initials). Resolve the
-  conflict. Provide ONLY the resolved file content.'
+  Both branches were merged into main (fullname first, then initials). Keep the value
+  from the second merge side. Provide ONLY the resolved file content.'
 expected: 'Author: J. Doe'
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
 purpose: Tests ability to resolve a three-way author-name conflict where all three
   values differ. Evaluates complex merge decisions.
 difficulty: medium

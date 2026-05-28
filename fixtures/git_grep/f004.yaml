@@ -16,7 +16,7 @@ setup:
 prompt: Here is the output of a git grep -n command showing line numbers. On which
   line numbers does 'import' appear in src/app.py? Output ONLY the line numbers separated
   by commas, nothing else.
-expected: 1, 2, 3
+expected: 1,2,3
 scoring:
   type: exact_match
 purpose: Tests ability to search with line numbers using git grep -n. Evaluates output-format

@@ -24,8 +24,8 @@ setup:
 - git commit -m 'Add complete data'
 prompt: This repository has a series of commits that incrementally build up a feature.
   Identify the WIP commits that should be marked as squash/fixup into a single clean
-  commit. Do not include the final completed-feature commit. Provide the commit messages
-  to squash.
+  commit. Do not include the final completed-feature commit. Output ONLY the selected
+  commits, one per line, with no explanation.
 expected: 'WIP: adding data, WIP: continue data'
 scoring:
   type: commit_selection

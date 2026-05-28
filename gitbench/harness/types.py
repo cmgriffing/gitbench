@@ -60,6 +60,9 @@ class Score:
     total_tokens: int | None = None
     cost_usd: float | None = None
     provider_cost_usd: float | None = None
+    reasoning_tokens: int | None = None
+    api_duration_ms: float | None = None
+    transcript: list[dict] | None = None
     purpose: str | None = None
     difficulty: str | None = None
     tags: list[str] | None = None
@@ -74,6 +77,7 @@ class Score:
         none_fields = (
             "reasoning_level", "input_tokens", "output_tokens",
             "total_tokens", "cost_usd", "provider_cost_usd",
+            "reasoning_tokens", "api_duration_ms", "transcript",
             "purpose", "difficulty", "tags",
             "prompt", "expected", "description",
             "duration_ms",

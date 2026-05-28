@@ -1,5 +1,7 @@
 """Tests for the scoring engine."""
 
+import subprocess
+
 import pytest
 
 from gitbench.harness.scorer import Scorer
@@ -305,3 +307,188 @@ class TestScorer:
 
         assert result.passed is False
         assert "Command did not match accepted alternatives" in result.error
+
+    def test_unordered_line_set_accepts_reordered_lines(self, scorer):
+        fixture = Fixture(
+            id="lines_001",
+            description="Line set fixture",
+            setup=[],
+            prompt="List messages",
+            expected="A\nB",
+            scoring={"type": "unordered_line_set"},
+        )
+
+        result = scorer.score(fixture, "B\nA")
+
+        assert result.passed is True
+        assert result.similarity == 1.0
+
+    def test_unordered_line_set_rejects_missing_line(self, scorer):
+        fixture = Fixture(
+            id="lines_002",
+            description="Line set fixture",
+            setup=[],
+            prompt="List messages",
+            expected="A\nB",
+            scoring={"type": "unordered_line_set"},
+        )
+
+        result = scorer.score(fixture, "A")
+
+        assert result.passed is False
+        assert "Missing lines" in result.error
+
+    def test_unordered_line_set_rejects_extra_line(self, scorer):
+        fixture = Fixture(
+            id="lines_003",
+            description="Line set fixture",
+            setup=[],
+            prompt="List messages",
+            expected="A\nB",
+            scoring={"type": "unordered_line_set"},
+        )
+
+        result = scorer.score(fixture, "A\nB\nC")
+
+        assert result.passed is False
+        assert "Extra lines" in result.error
+
+    def test_numeric_exact_accepts_whitespace(self, scorer):
+        fixture = Fixture(
+            id="num_001",
+            description="Numeric fixture",
+            setup=[],
+            prompt="Count",
+            expected="7",
+            scoring={"type": "numeric_exact"},
+        )
+
+        result = scorer.score(fixture, "  7  ")
+
+        assert result.passed is True
+
+    def test_numeric_exact_accepts_single_number_prose_when_enabled(self, scorer):
+        fixture = Fixture(
+            id="num_002",
+            description="Numeric fixture",
+            setup=[],
+            prompt="Count",
+            expected="7",
+            scoring={"type": "numeric_exact", "allow_prose": True},
+        )
+
+        result = scorer.score(fixture, "The answer is 7.")
+
+        assert result.passed is True
+
+    def test_numeric_exact_rejects_wrong_number(self, scorer):
+        fixture = Fixture(
+            id="num_003",
+            description="Numeric fixture",
+            setup=[],
+            prompt="Count",
+            expected="7",
+            scoring={"type": "numeric_exact"},
+        )
+
+        result = scorer.score(fixture, "6")
+
+        assert result.passed is False
+
+    def test_commit_hash_by_subject_accepts_short_hash(self, scorer, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        (repo / "app.py").write_text("v1\n", encoding="utf-8")
+        subprocess.run(["git", "add", "app.py"], cwd=repo, check=True, capture_output=True, text=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Fix null pointer bug"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        short_hash = subprocess.run(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        fixture = Fixture(
+            id="hash_001",
+            description="Hash fixture",
+            setup=[],
+            prompt="Hash?",
+            expected="",
+            scoring={
+                "type": "commit_hash_by_subject",
+                "subject": "Fix null pointer bug",
+                "hash_length": "short",
+            },
+        )
+
+        result = scorer.score(fixture, short_hash, repo_path=str(repo))
+        message_result = scorer.score(fixture, "Fix null pointer bug", repo_path=str(repo))
+        wrong_result = scorer.score(fixture, "deadbee", repo_path=str(repo))
+
+        assert result.passed is True
+        assert message_result.passed is False
+        assert wrong_result.passed is False
+
+    def test_json_semantic_equal_accepts_formatting_differences(self, scorer):
+        fixture = Fixture(
+            id="json_001",
+            description="JSON fixture",
+            setup=[],
+            prompt="JSON",
+            expected='{"name":"MyApp","version":"2.0.0"}',
+            scoring={"type": "json_semantic_equal"},
+        )
+
+        result = scorer.score(fixture, '{\n  "version": "2.0.0",\n  "name": "MyApp"\n}')
+
+        assert result.passed is True
+
+    def test_json_semantic_equal_rejects_invalid_json(self, scorer):
+        fixture = Fixture(
+            id="json_002",
+            description="JSON fixture",
+            setup=[],
+            prompt="JSON",
+            expected='{"version":"2.0.0"}',
+            scoring={"type": "json_semantic_equal"},
+        )
+
+        result = scorer.score(fixture, "version: 2.0.0")
+
+        assert result.passed is False
+        assert "Invalid model JSON" in result.error
+
+    def test_json_semantic_equal_rejects_wrong_value(self, scorer):
+        fixture = Fixture(
+            id="json_003",
+            description="JSON fixture",
+            setup=[],
+            prompt="JSON",
+            expected='{"version":"2.0.0"}',
+            scoring={"type": "json_semantic_equal"},
+        )
+
+        result = scorer.score(fixture, '{"version":"1.0.0"}')
+
+        assert result.passed is False

@@ -28,7 +28,7 @@ expected: 'Initial code by Alice
 
   Bugfix by Alice'
 scoring:
-  type: exact_match
+  type: unordered_line_set
 purpose: Tests ability to identify commits by a specific author. Evaluates author-filtering
   in git log.
 difficulty: easy
