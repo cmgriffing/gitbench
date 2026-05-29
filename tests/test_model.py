@@ -440,6 +440,18 @@ class TestParseModelName:
         assert base == "llama3.1:8b"
         assert level is None
 
+    def test_colon_effort(self):
+        """Known final colon effort parses base and level."""
+        base, level = parse_model_name("anthropic/claude-opus-4.7:max")
+        assert base == "anthropic/claude-opus-4.7"
+        assert level == "max"
+
+    def test_ollama_colon_tag_with_colon_effort(self):
+        """Ollama-style colon tags stay in the base model."""
+        base, level = parse_model_name("llama3.1:8b:high")
+        assert base == "llama3.1:8b"
+        assert level == "high"
+
     def test_colon_variant_with_reasoning_level(self):
         """OpenRouter :variant model IDs still use # for reasoning."""
         base, level = parse_model_name("baidu/cobuddy:free#high")
@@ -511,6 +523,30 @@ class TestOpenAIAdapterReasoning:
         assert "reasoning_effort" not in call_kwargs.kwargs
 
     @patch("openai.OpenAI")
+    def test_generate_forwards_openrouter_max_reasoning_object(self, mock_openai_class):
+        """OpenRouter receives max effort from colon syntax."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.error = None
+        mock_response.choices[0].message.content = "Output"
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_openai_class.return_value = mock_client
+
+        adapter = OpenAIAdapter(
+            model="anthropic/claude-opus-4.7:max",
+            api_key="test-key",
+            base_url="https://openrouter.ai/api/v1",
+        )
+        adapter._client = mock_client
+
+        adapter.generate([ModelMessage(role="user", content="Hi")])
+
+        call_kwargs = mock_client.chat.completions.create.call_args
+        assert call_kwargs.kwargs["model"] == "anthropic/claude-opus-4.7"
+        assert call_kwargs.kwargs["reasoning"] == {"effort": "max"}
+        assert "reasoning_effort" not in call_kwargs.kwargs
+
+    @patch("openai.OpenAI")
     def test_generate_forwards_openrouter_reasoning_none(self, mock_openai_class):
         """OpenRouter can explicitly disable reasoning."""
         mock_client = MagicMock()
@@ -572,6 +608,13 @@ class TestOllamaAdapterReasoning:
         assert adapter.reasoning_level is None
         assert adapter._full_model == "llama3.1:8b"
 
+    def test_parses_ollama_tag_with_colon_reasoning_level(self):
+        """Final known colon segment is effort; earlier colon tag stays in model."""
+        adapter = OllamaAdapter(model="llama3.1:8b:high")
+        assert adapter.model == "llama3.1:8b"
+        assert adapter.reasoning_level == "high"
+        assert adapter._full_model == "llama3.1:8b:high"
+
     @patch("urllib.request.urlopen")
     def test_generate_logs_debug_when_reasoning_present(self, mock_urlopen):
         """Reasoning level triggers a debug log and the request uses base model."""
@@ -605,6 +648,11 @@ class TestMockModelClientReasoning:
         client = MockModelClient()
         assert hasattr(client, "reasoning_level")
         assert client.reasoning_level is None
+
+    def test_parses_mock_colon_reasoning_level(self):
+        client = MockModelClient(model="mock:max")
+        assert client.model == "mock"
+        assert client.reasoning_level == "max"
 
     def test_generate_works_with_reasoning_level(self):
         """generate() works fine even with reasoning_level set."""

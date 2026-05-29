@@ -9,6 +9,8 @@ import urllib.request
 from abc import ABC, abstractmethod
 from typing import Any
 
+from gitbench.harness.reasoning import parse_model_reasoning
+
 from .types import ModelMessage
 
 logger = logging.getLogger(__name__)
@@ -17,8 +19,10 @@ logger = logging.getLogger(__name__)
 def parse_model_name(model: str) -> tuple[str, str | None]:
     """Split a model name into base name and optional reasoning level.
 
-    Syntax: ``base_model`` or ``base_model#level``.
-    If multiple ``#`` are present, only the last one delimits the level.
+    Syntax: ``base_model``, ``base_model#level``, or ``base_model:level``.
+    A final colon segment is only treated as effort when it exactly matches a
+    valid GitBench effort value. If multiple ``#`` are present, only the last
+    one delimits the level.
 
     Args:
         model: Full model name, optionally with ``#level`` suffix.
@@ -27,10 +31,7 @@ def parse_model_name(model: str) -> tuple[str, str | None]:
         A tuple of ``(base_model, reasoning_level)`` where
         ``reasoning_level`` is ``None`` when no ``#`` is present.
     """
-    if "#" in model:
-        idx = model.rfind("#")
-        return model[:idx], model[idx + 1:]
-    return model, None
+    return parse_model_reasoning(model)
 
 
 def _is_openrouter_base_url(base_url: str | None) -> bool:
@@ -483,7 +484,13 @@ class MockModelClient(ModelInterface):
 
     reasoning_level: str | None = None
 
-    def __init__(self, response: str = "Mock response", timeout: int = 30, retry_count: int = 3):
+    def __init__(
+        self,
+        response: str = "Mock response",
+        timeout: int = 30,
+        retry_count: int = 3,
+        model: str = "mock",
+    ):
         """Initialize with a fixed response.
 
         Args:
@@ -492,6 +499,8 @@ class MockModelClient(ModelInterface):
             retry_count: Retry count parameter (accepted but ignored for mock).
         """
         self.response = response
+        self._full_model = model
+        self.model, self.reasoning_level = parse_model_name(model)
         self.timeout = timeout
         self.retry_count = retry_count
         self.call_count = 0

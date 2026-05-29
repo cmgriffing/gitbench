@@ -20,6 +20,13 @@ from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedCo
 from gitbench.benchmarks import Benchmark
 from gitbench.config import find_profile_for_model, load_config, resolve_profile
 from gitbench.export import FORMAT_REGISTRY, get_available_formats
+from gitbench.harness.capacity import (
+    CapacityInfo,
+    RequestBudgetCoordinator,
+    derive_capacity_info,
+    describe_request_budgets,
+    global_request_limit,
+)
 from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter, parse_model_name
 from gitbench.harness.reasoning import validate_model_list
 from gitbench.harness.runner import BenchmarkRunner, RunProgress
@@ -237,8 +244,8 @@ def get_model_client(
     Returns:
         The appropriate model client instance.
     """
-    if model == "mock" or model.startswith("mock#"):
-        return MockModelClient()
+    if model == "mock" or model.startswith(("mock#", "mock:")):
+        return MockModelClient(model=model)
 
     # Determine provider: explicit param wins, then infer from base_url
     if provider is None:
@@ -1107,6 +1114,29 @@ def run(
         all_models_to_validate.extend(models_list)
     validate_model_list(all_models_to_validate)
 
+    capacity_by_target: dict[tuple[int, int], CapacityInfo] = {}
+    group_limits: dict[str, int | None] = {}
+    for run_index, (_profile_name, profile_conf, models_list) in enumerate(runs):
+        for model_index, model_name in enumerate(models_list):
+            info = derive_capacity_info(config, profile_conf, model_name)
+            capacity_by_target[(run_index, model_index)] = info
+            existing = group_limits.get(info.capacity_key)
+            if existing is None:
+                group_limits[info.capacity_key] = info.request_limit
+            elif info.request_limit is not None:
+                group_limits[info.capacity_key] = min(existing, info.request_limit)
+
+    request_budget = RequestBudgetCoordinator(
+        global_limit=global_request_limit(
+            config,
+            fallback=max(1, model_workers * fixture_workers),
+        ),
+        group_limits=group_limits,
+    )
+    logger.info(
+        describe_request_budgets(request_budget.global_limit, request_budget.group_limits)
+    )
+
     # Discover benchmarks once
     global _benchmark_registry
     if not _benchmark_registry:
@@ -1205,7 +1235,13 @@ def run(
                         api_key=p_api_key,
                         provider=p_provider,
                     )
-                    runner = BenchmarkRunner(_benchmark_registry, model_client)
+                    capacity_info = capacity_by_target[(run_index, 0)]
+                    runner = BenchmarkRunner(
+                        _benchmark_registry,
+                        model_client,
+                        request_budget=request_budget,
+                        capacity_key=capacity_info.capacity_key,
+                    )
                     future = executor.submit(
                         runner.run_all,
                         benchmarks_to_run,
@@ -1271,7 +1307,13 @@ def run(
                                 api_key=p_api_key,
                                 provider=p_provider,
                             )
-                            runner = BenchmarkRunner(_benchmark_registry, model_client)
+                            capacity_info = capacity_by_target[(run_index, index)]
+                            runner = BenchmarkRunner(
+                                _benchmark_registry,
+                                model_client,
+                                request_budget=request_budget,
+                                capacity_key=capacity_info.capacity_key,
+                            )
                             future = executor.submit(
                                 runner.run_all,
                                 benchmarks_to_run,
@@ -1300,7 +1342,13 @@ def run(
                             api_key=p_api_key,
                             provider=p_provider,
                         )
-                        runner = BenchmarkRunner(_benchmark_registry, model_client)
+                        capacity_info = capacity_by_target[(run_index, index)]
+                        runner = BenchmarkRunner(
+                            _benchmark_registry,
+                            model_client,
+                            request_budget=request_budget,
+                            capacity_key=capacity_info.capacity_key,
+                        )
                         model_result = runner.run_all(
                             benchmarks_to_run,
                             model_name=current_model,

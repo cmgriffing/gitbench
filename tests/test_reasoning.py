@@ -46,6 +46,16 @@ class TestParseModelReasoning:
         assert base == "llama3.1:8b"
         assert level is None
 
+    def test_colon_effort(self):
+        base, level = parse_model_reasoning("anthropic/claude-opus-4.7:max")
+        assert base == "anthropic/claude-opus-4.7"
+        assert level == "max"
+
+    def test_colon_model_tag_with_effort(self):
+        base, level = parse_model_reasoning("llama3.1:8b:high")
+        assert base == "llama3.1:8b"
+        assert level == "high"
+
     def test_provider_prefix_with_level(self):
         base, level = parse_model_reasoning("openai/gpt-4o#high")
         assert base == "openai/gpt-4o"
@@ -59,10 +69,10 @@ class TestParseModelReasoning:
 
 class TestValidReasoningLevels:
     def test_expected_levels(self):
-        assert VALID_REASONING_LEVELS == ["none", "minimal", "low", "medium", "high", "xhigh"]
+        assert VALID_REASONING_LEVELS == ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
     def test_level_count(self):
-        assert len(VALID_REASONING_LEVELS) == 6
+        assert len(VALID_REASONING_LEVELS) == 7
 
 
 class TestGetSupportedLevels:
@@ -107,6 +117,7 @@ class TestValidateModelList:
         validate_model_list(["o3-mini#medium"])
         validate_model_list(["gpt-4o#xhigh"])
         validate_model_list(["baidu/cobuddy:free#none"])
+        validate_model_list(["anthropic/claude-opus-4.7:max"])
 
     def test_model_without_level_passes(self):
         validate_model_list(["gpt-4o"])
@@ -140,6 +151,7 @@ class TestValidateModelList:
         validate_model_list(["gpt-4o#xhigh"])
         validate_model_list(["gpt-4.1#xhigh"])
         validate_model_list(["gpt-5#xhigh"])
+        validate_model_list(["openai/gpt-5:max"])
 
     def test_error_message_contains_model_and_level(self):
         with pytest.raises(click.ClickException) as exc:

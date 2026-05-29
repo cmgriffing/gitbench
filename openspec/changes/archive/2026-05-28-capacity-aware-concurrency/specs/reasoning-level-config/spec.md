@@ -1,8 +1,4 @@
-## Purpose
-
-Reasoning level config defines how GitBench parses model effort suffixes from configured model names and preserves base model identity for provider calls, display, validation, and capacity grouping.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Model name supports #level suffix
 Model names in profiles, CLI, and all configuration contexts SHALL support an optional GitBench effort suffix that specifies the effort level for that run target. The suffix MAY use `#<level>` or `:<level>`. A final colon segment SHALL be treated as effort only when it exactly matches a valid GitBench effort value. Valid effort values SHALL be `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`.

@@ -7,7 +7,7 @@ prevent wasted API calls on invalid configurations.
 
 import click
 
-VALID_REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh"]
+VALID_REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 _MODEL_MATRIX: dict[str, list[str]] = {
     "o3-mini": ["minimal", "low", "medium", "high"],
@@ -18,7 +18,7 @@ _MODEL_MATRIX: dict[str, list[str]] = {
     "gpt-4.1": ["minimal", "low", "medium", "high", "xhigh"],
     "gpt-4.1-mini": ["minimal", "low", "medium", "high"],
     "gpt-4.1-nano": ["minimal", "low", "medium", "high"],
-    "gpt-5": ["minimal", "low", "medium", "high", "xhigh"],
+    "gpt-5": ["minimal", "low", "medium", "high", "xhigh", "max"],
 }
 
 
@@ -46,8 +46,10 @@ def get_supported_levels(model: str) -> list[str] | None:
 def parse_model_reasoning(model_name: str) -> tuple[str, str | None]:
     """Split a model name into base name and optional reasoning level.
 
-    Syntax: ``base_model`` or ``base_model#level``.
-    If multiple ``#`` are present, only the last one delimits the level.
+    Syntax: ``base_model``, ``base_model#level``, or ``base_model:level``.
+    A final colon segment is only treated as effort when it exactly matches a
+    valid GitBench effort value. If multiple ``#`` are present, only the last
+    one delimits the level.
 
     Args:
         model_name: Full model name, optionally with ``#level`` suffix.
@@ -56,9 +58,17 @@ def parse_model_reasoning(model_name: str) -> tuple[str, str | None]:
         A tuple of ``(base_model, reasoning_level)`` where
         ``reasoning_level`` is ``None`` when no ``#`` is present.
     """
-    if "#" in model_name:
-        idx = model_name.rfind("#")
-        return model_name[:idx], model_name[idx + 1:]
+    hash_idx = model_name.rfind("#")
+    colon_idx = model_name.rfind(":")
+
+    if hash_idx > colon_idx:
+        return model_name[:hash_idx], model_name[hash_idx + 1:]
+
+    if colon_idx != -1:
+        suffix = model_name[colon_idx + 1:]
+        if suffix in VALID_REASONING_LEVELS:
+            return model_name[:colon_idx], suffix
+
     return model_name, None
 
 
@@ -80,7 +90,7 @@ def validate_model_list(models: list[str]) -> None:
         ``None`` when all models pass validation.
     """
     for full_model in models:
-        if full_model == "mock" or full_model.startswith("mock#"):
+        if full_model == "mock" or full_model.startswith(("mock#", "mock:")):
             continue
 
         base, level = parse_model_reasoning(full_model)

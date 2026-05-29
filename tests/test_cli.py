@@ -3,6 +3,7 @@
 import json
 import logging
 import sys
+import threading
 import time
 from io import StringIO
 from pathlib import Path
@@ -61,6 +62,14 @@ class TestGetModelClient:
         client = get_model_client("mock")
         from gitbench.harness.model import MockModelClient
         assert isinstance(client, MockModelClient)
+
+    def test_returns_mock_client_with_colon_effort(self):
+        """Mock accepts colon effort suffixes."""
+        client = get_model_client("mock:max")
+        from gitbench.harness.model import MockModelClient
+        assert isinstance(client, MockModelClient)
+        assert client.model == "mock"
+        assert client.reasoning_level == "max"
 
     def test_returns_openai_adapter(self):
         """Test that 'openai' model name returns an OpenAIAdapter."""
@@ -771,6 +780,88 @@ class TestRunCommand:
         assert json_start != -1
         data = json.loads(result.output[json_start:])
         assert data["summary"]["total_models"] == 2
+
+    def test_run_all_models_with_workers_respects_shared_group_budget(self, runner, tmp_path):
+        """Shared OpenRouter capacity groups serialize request-budget acquisition."""
+        active = 0
+        max_active = 0
+        lock = threading.Lock()
+
+        def fake_run_all(self, benchmark_names, *, model_name="", fixture_workers=1, progress=None, progress_model_name=None):
+            nonlocal active, max_active
+            with self._request_budget.acquire(self._capacity_key):
+                with lock:
+                    active += 1
+                    max_active = max(max_active, active)
+                try:
+                    time.sleep(0.05)
+                finally:
+                    with lock:
+                        active -= 1
+            results = [
+                {
+                    "benchmark": bench_name,
+                    "total": 1,
+                    "passed": 1,
+                    "pass_at_k": 1.0,
+                    "scores": [],
+                    "errors": 0,
+                }
+                for bench_name in benchmark_names
+            ]
+            return {
+                "model": model_name,
+                "summary": {
+                    "total_benchmarks": len(results),
+                    "total_fixtures": len(results),
+                    "total_passed": len(results),
+                    "overall_pass_at_k": 1.0,
+                },
+                "results": results,
+            }
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            config = {
+                "concurrency": {
+                    "groups": [
+                        {
+                            "key": "openrouter:anthropic/claude-opus",
+                            "match": ["anthropic/claude-opus-*"],
+                            "max_concurrent_requests": 1,
+                        }
+                    ]
+                },
+                "models": {
+                    "openrouter": {
+                        "models": [
+                            "anthropic/claude-opus-4.7:max",
+                            "anthropic/claude-opus-4.8:max",
+                        ],
+                        "provider": "openai",
+                        "base_url": "https://openrouter.ai/api/v1",
+                    }
+                },
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.cli._benchmark_registry", {"commit_messages": object()}), \
+                 patch("gitbench.harness.runner.BenchmarkRunner.run_all", side_effect=fake_run_all, autospec=True):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "-a",
+                        "--model-workers",
+                        "2",
+                        "--fixture-workers",
+                        "2",
+                    ],
+                )
+
+        assert result.exit_code == 0
+        assert max_active == 1
 
 
 def _doctor_payload() -> dict:

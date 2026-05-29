@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Protocol
 
 from gitbench.harness.benchmark import Benchmark
+from gitbench.harness.capacity import RequestBudgetCoordinator
 from gitbench.harness.model import ModelInterface
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
 from gitbench.version import BENCHMARK_SUITE_VERSION
@@ -34,6 +35,9 @@ class BenchmarkRunner:
         self,
         registry: dict[str, type[Benchmark]],
         model_client: ModelInterface,
+        *,
+        request_budget: RequestBudgetCoordinator | None = None,
+        capacity_key: str | None = None,
     ) -> None:
         """Initialise the runner.
 
@@ -43,6 +47,8 @@ class BenchmarkRunner:
         """
         self._registry = registry
         self._model_client = model_client
+        self._request_budget = request_budget
+        self._capacity_key = capacity_key
 
     def run_benchmark(
         self,
@@ -225,7 +231,11 @@ class BenchmarkRunner:
             prompt = benchmark.format_prompt(fixture, diff)
 
             messages = [ModelMessage(role="user", content=prompt)]
-            response = self._model_client.generate(messages)
+            if self._request_budget is not None and self._capacity_key is not None:
+                with self._request_budget.acquire(self._capacity_key):
+                    response = self._model_client.generate(messages)
+            else:
+                response = self._model_client.generate(messages)
 
             if isinstance(response, dict):
                 model_output = response.get("text", response.get("content", ""))

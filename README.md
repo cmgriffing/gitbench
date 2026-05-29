@@ -134,15 +134,56 @@ gitbench run --all --all-models --model-workers 2
 
 ### Model reasoning levels
 
-Models can be suffixed with `#level` to control reasoning effort:
+Models can be suffixed with `#level` or `:level` to control reasoning effort:
 
 ```bash
 gitbench run --all --model o3-mini#high
 gitbench run --all --model gpt-4o#minimal
+gitbench run --all --model anthropic/claude-opus-4.7:max
 ```
 
-Valid levels: `minimal`, `low`, `medium`, `high`, `xhigh` (model-dependent).
+Valid levels: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` (model-dependent).
 The harness validates the combination before any calls are made, failing fast on invalid pairings.
+A final colon segment is treated as effort only when it matches one of these values, so model IDs
+such as `llama3.1:8b` keep their tag as part of the base model name.
+
+### Request concurrency budgets
+
+`--model-workers` and `--fixture-workers` still control how much work GitBench schedules, but
+model API calls are gated by request budgets. Configure a global limit, profile-level limit, or
+explicit capacity groups in `gitbench.json`:
+
+```json
+{
+  "concurrency": {
+    "max_concurrent_requests": 4,
+    "groups": [
+      {
+        "key": "openrouter:anthropic/claude-opus",
+        "match": ["anthropic/claude-opus-*"],
+        "max_concurrent_requests": 1
+      }
+    ]
+  },
+  "models": {
+    "openrouter": {
+      "models": [
+        "anthropic/claude-opus-4.7:max",
+        "anthropic/claude-opus-4.8:max"
+      ],
+      "provider": "openai",
+      "base_url": "https://openrouter.ai/api/v1",
+      "max_concurrent_requests": 2
+    }
+  }
+}
+```
+
+OpenRouter profiles infer common upstream capacity groups after stripping effort suffixes:
+Anthropic Opus/Sonnet/Haiku families, OpenAI GPT-5 families, and Google Gemini 3 families.
+Unknown OpenRouter model IDs fall back to `openrouter:<base-model-id>`. Explicit group matches
+run against the base model ID, so `anthropic/claude-opus-4.7:max` matches
+`anthropic/claude-opus-*`.
 
 ## Result doctoring
 

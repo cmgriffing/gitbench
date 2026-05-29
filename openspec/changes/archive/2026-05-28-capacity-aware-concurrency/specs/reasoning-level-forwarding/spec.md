@@ -1,8 +1,4 @@
-## Purpose
-
-Reasoning level forwarding defines how model adapters translate GitBench reasoning effort into provider-specific request parameters or intentionally ignore unsupported effort values.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: OpenAIAdapter forwards reasoning level as reasoning_effort
 When an `OpenAIAdapter` was constructed with a reasoning level, calls to `generate()` SHALL forward it using the transport-appropriate request shape. For the first-party OpenAI API, the adapter SHALL forward the value as `reasoning_effort`. For OpenRouter-compatible base URLs, the adapter SHALL forward the value as `reasoning.effort`.
