@@ -1,0 +1,270 @@
+{
+  "models": {
+    "openrouter-google-expensive": {
+      "model": [
+        "google/gemini-3.1-pro-preview:none",
+        "google/gemini-3.1-pro-preview:low",
+        "google/gemini-3.1-pro-preview:medium",
+        "google/gemini-3.1-pro-preview:high",
+        "google/gemini-3.1-pro-preview:xhigh",
+
+        "google/gemini-3.5-flash:none",
+        "google/gemini-3.5-flash:low",
+        "google/gemini-3.5-flash:medium",
+        "google/gemini-3.5-flash:high",
+        "google/gemini-3.5-flash:xhigh"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+    "openrouter-google-cheap": {
+      "model": [
+        "google/gemini-3.1-flash-lite-preview:none",
+        "google/gemini-3.1-flash-lite-preview:low",
+        "google/gemini-3.1-flash-lite-preview:medium",
+        "google/gemini-3.1-flash-lite-preview:high",
+        "google/gemini-3.1-flash-lite-preview:xhigh",
+
+        "google/gemini-3-flash-preview:none",
+        "google/gemini-3-flash-preview:low",
+        "google/gemini-3-flash-preview:medium",
+        "google/gemini-3-flash-preview:high",
+        "google/gemini-3-flash-preview:xhigh",
+
+        "google/gemma-4-26b-a4b-it:none",
+        "google/gemma-4-26b-a4b-it:low",
+        "google/gemma-4-26b-a4b-it:medium",
+        "google/gemma-4-26b-a4b-it:high",
+        "google/gemma-4-26b-a4b-it:xhigh",
+
+        "google/gemma-4-31b-it:none",
+        "google/gemma-4-31b-it:low",
+        "google/gemma-4-31b-it:medium",
+        "google/gemma-4-31b-it:high",
+        "google/gemma-4-31b-it:xhigh"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+
+    "openrouter-openai-expensive": {
+      "model": [
+        "openai/gpt-5.5:none",
+        "openai/gpt-5.5:low",
+        "openai/gpt-5.5:medium",
+        "openai/gpt-5.5:high",
+        "openai/gpt-5.5:xhigh"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+
+    "openrouter-openai-cheap": {
+      "model": [
+        "openai/gpt-5.4:none",
+        "openai/gpt-5.4:low",
+        "openai/gpt-5.4:medium",
+        "openai/gpt-5.4:high",
+        "openai/gpt-5.4:xhigh",
+
+        "openai/gpt-5.4-mini:none",
+        "openai/gpt-5.4-mini:low",
+        "openai/gpt-5.4-mini:medium",
+        "openai/gpt-5.4-mini:high",
+        "openai/gpt-5.4-mini:xhigh",
+
+        "openai/gpt-5.4-nano:none",
+        "openai/gpt-5.4-nano:low",
+        "openai/gpt-5.4-nano:medium",
+        "openai/gpt-5.4-nano:high",
+        "openai/gpt-5.4-nano:xhigh",
+
+        "openai/gpt-oss-120b:none",
+        "openai/gpt-oss-120b:low",
+        "openai/gpt-oss-120b:medium",
+        "openai/gpt-oss-120b:high",
+        "openai/gpt-oss-120b:xhigh",
+
+        "openai/gpt-oss-20b:none",
+        "openai/gpt-oss-20b:low",
+        "openai/gpt-oss-20b:medium",
+        "openai/gpt-oss-20b:high",
+        "openai/gpt-oss-20b:xhigh"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+
+    "openrouter-anthropic-expensive": {
+      "model": [
+        "anthropic/claude-opus-4.6:none",
+        "anthropic/claude-opus-4.6:low",
+        "anthropic/claude-opus-4.6:medium",
+        "anthropic/claude-opus-4.6:high",
+        "anthropic/claude-opus-4.6:xhigh",
+        "anthropic/claude-opus-4.6:max",
+
+        "anthropic/claude-opus-4.7:none",
+        "anthropic/claude-opus-4.7:low",
+        "anthropic/claude-opus-4.7:medium",
+        "anthropic/claude-opus-4.7:high",
+        "anthropic/claude-opus-4.7:xhigh",
+        "anthropic/claude-opus-4.7:max",
+
+        "anthropic/claude-opus-4.8:none",
+        "anthropic/claude-opus-4.8:low",
+        "anthropic/claude-opus-4.8:medium",
+        "anthropic/claude-opus-4.8:high",
+        "anthropic/claude-opus-4.8:xhigh",
+        "anthropic/claude-opus-4.8:max",
+
+        "anthropic/claude-sonnet-4.6:none",
+        "anthropic/claude-sonnet-4.6:low",
+        "anthropic/claude-sonnet-4.6:medium",
+        "anthropic/claude-sonnet-4.6:high",
+        "anthropic/claude-sonnet-4.6:xhigh",
+        "anthropic/claude-sonnet-4.6:max"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+
+    "openrouter-anthropic-cheap": {
+      "model": [
+        "anthropic/claude-haiku-4.5:none",
+        "anthropic/claude-haiku-4.5:low",
+        "anthropic/claude-haiku-4.5:medium",
+        "anthropic/claude-haiku-4.5:high",
+        "anthropic/claude-haiku-4.5:xhigh",
+        "anthropic/claude-haiku-4.5:max"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+    "openrouter-other-expensive": {
+      "model": [
+        "qwen/qwen3.6-35b-a3b:none",
+        "qwen/qwen3.6-35b-a3b:low",
+        "qwen/qwen3.6-35b-a3b:medium",
+        "qwen/qwen3.6-35b-a3b:high",
+        "qwen/qwen3.6-35b-a3b:xhigh",
+
+        "qwen/qwen3.6-27b:none",
+        "qwen/qwen3.6-27b:low",
+        "qwen/qwen3.6-27b:medium",
+        "qwen/qwen3.6-27b:high",
+        "qwen/qwen3.6-27b:xhigh",
+
+        "qwen/qwen3.6-plus:none",
+        "qwen/qwen3.6-plus:low",
+        "qwen/qwen3.6-plus:medium",
+        "qwen/qwen3.6-plus:high",
+        "qwen/qwen3.6-plus:xhigh",
+
+        "mistralai/mistral-medium-3-5:none",
+        "mistralai/mistral-medium-3-5:low",
+        "mistralai/mistral-medium-3-5:medium",
+        "mistralai/mistral-medium-3-5:high",
+        "mistralai/mistral-medium-3-5:xhigh",
+
+        "deepseek/deepseek-v4-pro:none",
+        "deepseek/deepseek-v4-pro:low",
+        "deepseek/deepseek-v4-pro:medium",
+        "deepseek/deepseek-v4-pro:high",
+        "deepseek/deepseek-v4-pro:xhigh",
+
+        "z-ai/glm-5.1:none",
+        "z-ai/glm-5.1:low",
+        "z-ai/glm-5.1:medium",
+        "z-ai/glm-5.1:high",
+        "z-ai/glm-5.1:xhigh",
+
+        "moonshotai/kimi-k2.5:none",
+        "moonshotai/kimi-k2.5:low",
+        "moonshotai/kimi-k2.5:medium",
+        "moonshotai/kimi-k2.5:high",
+        "moonshotai/kimi-k2.5:xhigh",
+
+        "moonshotai/kimi-k2.6:none",
+        "moonshotai/kimi-k2.6:low",
+        "moonshotai/kimi-k2.6:medium",
+        "moonshotai/kimi-k2.6:high",
+        "moonshotai/kimi-k2.6:xhigh"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+    "openrouter-other-cheap": {
+      "model": [
+        "minimax/minimax-m2.5:none",
+        "minimax/minimax-m2.5:low",
+        "minimax/minimax-m2.5:medium",
+        "minimax/minimax-m2.5:high",
+        "minimax/minimax-m2.5:xhigh",
+
+        "minimax/minimax-m2.7:none",
+        "minimax/minimax-m2.7:low",
+        "minimax/minimax-m2.7:medium",
+        "minimax/minimax-m2.7:high",
+        "minimax/minimax-m2.7:xhigh",
+
+        "nvidia/nemotron-3-nano-30b-a3b:none",
+        "nvidia/nemotron-3-nano-30b-a3b:low",
+        "nvidia/nemotron-3-nano-30b-a3b:medium",
+        "nvidia/nemotron-3-nano-30b-a3b:high",
+        "nvidia/nemotron-3-nano-30b-a3b:xhigh",
+
+        "nvidia/nemotron-3-super-120b-a12b:none",
+        "nvidia/nemotron-3-super-120b-a12b:low",
+        "nvidia/nemotron-3-super-120b-a12b:medium",
+        "nvidia/nemotron-3-super-120b-a12b:high",
+        "nvidia/nemotron-3-super-120b-a12b:xhigh",
+
+        "mistralai/devstral-2512:none",
+        "mistralai/devstral-2512:low",
+        "mistralai/devstral-2512:medium",
+        "mistralai/devstral-2512:high",
+        "mistralai/devstral-2512:xhigh",
+
+        "deepseek/deepseek-v4-flash:none",
+        "deepseek/deepseek-v4-flash:low",
+        "deepseek/deepseek-v4-flash:medium",
+        "deepseek/deepseek-v4-flash:high",
+        "deepseek/deepseek-v4-flash:xhigh",
+
+        "baidu/cobuddy:free:none",
+        "baidu/cobuddy:free:low",
+        "baidu/cobuddy:free:medium",
+        "baidu/cobuddy:free:high",
+        "baidu/cobuddy:free:xhigh",
+
+        "arcee-ai/trinity-mini:none",
+        "arcee-ai/trinity-mini:low",
+        "arcee-ai/trinity-mini:medium",
+        "arcee-ai/trinity-mini:high",
+        "arcee-ai/trinity-mini:xhigh",
+
+        "liquid/lfm-2-24b-a2b:none",
+        "liquid/lfm-2-24b-a2b:low",
+        "liquid/lfm-2-24b-a2b:medium",
+        "liquid/lfm-2-24b-a2b:high",
+        "liquid/lfm-2-24b-a2b:xhigh",
+
+        "ibm-granite/granite-4.1-8b:none",
+        "ibm-granite/granite-4.1-8b:low",
+        "ibm-granite/granite-4.1-8b:medium",
+        "ibm-granite/granite-4.1-8b:high",
+        "ibm-granite/granite-4.1-8b:xhigh",
+
+        "inclusionai/ling-2.6-flash:none",
+        "inclusionai/ling-2.6-flash:low",
+        "inclusionai/ling-2.6-flash:medium",
+        "inclusionai/ling-2.6-flash:high",
+        "inclusionai/ling-2.6-flash:xhigh"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    }
+  },
+  "disabledModels": []
+}
