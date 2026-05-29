@@ -30,7 +30,7 @@ The `ModelSelector` React component SHALL render a multi-select interface listin
 - **THEN** the badge text SHALL remain clearly readable against the row's hover/selection background
 
 ### Requirement: PassRateBarChart renders horizontal bar chart
-The `PassRateBarChart` React component SHALL render a Recharts vertical bar chart (bars go up, X-axis = provider/base-model group, Y-axis = pass rate percentage). Each bar SHALL represent one selected provider/base-model group and SHALL visualize the range from the lowest effort pass rate to the highest effort pass rate in that group. The highest effort pass rate SHALL be the representative value used for sorting and bar prominence. Bars SHALL be color-coded by provider using the `getProviderColor()` palette. X-axis tick labels SHALL be rotated diagonally (-40°) with a custom tick renderer that displays a provider brand icon (via `ProviderIcon`) and the truncated base model name (max ~10 characters + ellipsis). The component SHALL accept a `data` prop containing the full dataset and a selected group list. Chart height SHALL be fixed at 350 pixels. A provider legend SHALL be rendered below the chart card showing colored dots for each unique provider present.
+The `PassRateBarChart` React component SHALL render a Recharts vertical bar chart (bars go up, X-axis = provider/base-model group, Y-axis = pass rate percentage). Each bar SHALL represent one selected provider/base-model group and SHALL visualize the range from the lowest effort pass rate to the highest effort pass rate in that group. The highest effort pass rate SHALL be the representative value used for sorting and bar prominence. Bars SHALL be color-coded by provider using the `getProviderColor()` palette. X-axis tick labels SHALL be rotated diagonally (-40°) with a custom tick renderer that displays a provider brand icon (via `ProviderIcon`) and the truncated base model name (max ~10 characters + ellipsis). The component SHALL accept optional `benchmarkName` and `selectedBenchmark` props. When `benchmarkName` is provided, pass rates SHALL be computed from `matrix[model][benchmarkName].pass_at_k` (per-benchmark), otherwise from `model_summaries[model].pass_at_k` (global). The tooltip footnote SHALL reflect the data source — showing the fixture count for the benchmark when filtered, or "204 fixtures" for global. Chart height SHALL be fixed at 350 pixels. A provider legend SHALL be rendered below the chart card showing colored dots for each unique provider present.
 
 #### Scenario: Bars render for selected model groups
 - **WHEN** `PassRateBarChart` receives selected groups `['anthropic/claude-opus-4.7', 'openai/gpt-oss-120b']`
@@ -71,6 +71,14 @@ The `PassRateBarChart` React component SHALL render a Recharts vertical bar char
 #### Scenario: Provider legend appears below the chart
 - **WHEN** the chart shows model groups from multiple providers
 - **THEN** a horizontal legend with colored dots and provider names appears below the chart card
+
+#### Scenario: Per-benchmark pass rates used when benchmarkName provided
+- **WHEN** `PassRateBarChart` receives `benchmarkName="blame_forensics"`
+- **THEN** bars reflect pass rates from `matrix[model]["blame_forensics"].pass_at_k` with the tooltip footnote showing the number of fixtures in that benchmark
+
+#### Scenario: Global pass rates used when benchmarkName absent
+- **WHEN** `PassRateBarChart` renders without a `benchmarkName` prop
+- **THEN** bars reflect pass rates from `model_summaries[model].pass_at_k` and the tooltip footnote reads "% of 204 fixtures passed"
 
 ### Requirement: Overview chart components share model selection
 Overview chart components in the shared chart-components capability SHALL update their rendered data when any Overview `ModelSelector` changes the selected provider/base-model group set. The selected group set SHALL be the complete array from the latest model selection change, and each chart SHALL use that set for all model-dependent bars, columns, legends, and labels. Components that still render effort-level data SHALL expand selected groups to their child model+effort names internally.
@@ -225,4 +233,3 @@ The BenchmarkHeatmap React component SHALL render `<td>` elements with `title` a
 #### Scenario: Heatmap cell title for missing data
 - **WHEN** a cell has no data for a model×benchmark combination
 - **THEN** the `title` attribute shows "No data available for [model] on [benchmark]"
-

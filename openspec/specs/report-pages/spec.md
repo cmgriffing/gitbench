@@ -36,19 +36,31 @@ When a base model has been run at multiple reasoning levels, the Model Detail pa
 - **THEN** no reasoning comparison section is displayed
 
 ### Requirement: Benchmark Detail page shows leaderboard and per-fixture comparison
-The Benchmark Detail page (`benchmarks/[name].astro`) SHALL render the benchmark description, a model leaderboard bar chart (React island), a per-fixture comparison table showing pass/fail and similarity for each selected model, and a tag breakdown chart.
+The Benchmark Detail page (`benchmarks/[name].astro`) SHALL render the benchmark description, a model leaderboard bar chart (React island) showing pass rates for this specific benchmark only, a per-fixture comparison table (`FixtureComparisonTable` React island) showing pass/fail and similarity for each selected model with its own synced `ModelSelector`, and a tag breakdown chart.
 
-#### Scenario: Leaderboard shows all selected models
+#### Scenario: Leaderboard shows per-benchmark pass rates for all selected models
 - **WHEN** navigating to `/benchmarks/commit_messages`
-- **THEN** a bar chart displays pass rate for each selected model on this benchmark
+- **THEN** the `PassRateBarChart` is rendered with `benchmarkName="commit_messages"` and displays pass rates computed only from the `commit_messages` fixture set, not the global 204-fixture average
 
-#### Scenario: Per-fixture table shows cross-model results
-- **WHEN** navigating to `/benchmarks/commit_messages`
-- **THEN** a table displays each fixture in the benchmark with columns for each selected model's pass/fail and similarity
+#### Scenario: Per-fixture table uses synced model selection
+- **WHEN** navigating to `/benchmarks/commit_messages` with model selection `["anthropic/claude-opus-4.7", "openai/gpt-4o"]`
+- **THEN** the fixture comparison table shows only those model groups' efforts as columns
+
+#### Scenario: Per-fixture table has its own ModelSelector
+- **WHEN** viewing the per-fixture comparison section
+- **THEN** a `ModelSelector` widget appears above the table; changing it updates the table columns and syncs across all other selectors on the site
 
 #### Scenario: Clicking a fixture row navigates
 - **WHEN** a user clicks a fixture row in the comparison table
-- **THEN** the browser navigates to `/fixtures/<fixture-id>`
+- **THEN** the browser navigates to `/fixtures/<benchmark>/<fixture-id>`
+
+#### Scenario: Fixture cells show similarity scores with pass/fail coloring
+- **WHEN** a model passed a fixture with 100% similarity
+- **THEN** the cell shows "100.0%" in a pass-colored badge
+
+#### Scenario: Missing fixture results show dash
+- **WHEN** a model has no result for a fixture
+- **THEN** the cell displays "—" in dim text
 
 ### Requirement: Fixture Detail page shows full prompt, expected, and all model outputs
 The Fixture Detail page (`fixtures/[fixture].astro`) SHALL render the fixture metadata (id, description, purpose, difficulty, tags), the full prompt text in a monospace block, the full expected text in a monospace block, and all model outputs as static `ModelOutputCard` components showing model name, pass/fail badge, similarity score, and full output text. Each block SHALL include a copy-to-clipboard button.
@@ -193,4 +205,3 @@ Any card displaying model cost data SHALL show `total_cost_usd` (total cost of t
 #### Scenario: Card handles missing cost data
 - **WHEN** a model has no cost data (`total_cost_usd=null`)
 - **THEN** no cost information is displayed on the card
-
