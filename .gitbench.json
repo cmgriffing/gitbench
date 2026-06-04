@@ -135,8 +135,7 @@
         "anthropic/claude-haiku-4.5:low",
         "anthropic/claude-haiku-4.5:medium",
         "anthropic/claude-haiku-4.5:high",
-        "anthropic/claude-haiku-4.5:xhigh",
-        "anthropic/claude-haiku-4.5:max"
+        "anthropic/claude-haiku-4.5:xhigh"
       ],
       "base_url": "https://openrouter.ai/api/v1",
       "api_key_env": "OPENROUTER_API_KEY"
@@ -189,13 +188,8 @@
         "moonshotai/kimi-k2.6:low",
         "moonshotai/kimi-k2.6:medium",
         "moonshotai/kimi-k2.6:high",
-        "moonshotai/kimi-k2.6:xhigh"
-      ],
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key_env": "OPENROUTER_API_KEY"
-    },
-    "openrouter-other-cheap": {
-      "model": [
+        "moonshotai/kimi-k2.6:xhigh",
+
         "minimax/minimax-m2.5:none",
         "minimax/minimax-m2.5:low",
         "minimax/minimax-m2.5:medium",
@@ -208,6 +202,17 @@
         "minimax/minimax-m2.7:high",
         "minimax/minimax-m2.7:xhigh",
 
+        "arcee-ai/trinity-mini:none",
+        "arcee-ai/trinity-mini:low",
+        "arcee-ai/trinity-mini:medium",
+        "arcee-ai/trinity-mini:high",
+        "arcee-ai/trinity-mini:xhigh"
+      ],
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    },
+    "openrouter-other-cheap": {
+      "model": [
         "nvidia/nemotron-3-nano-30b-a3b:none",
         "nvidia/nemotron-3-nano-30b-a3b:low",
         "nvidia/nemotron-3-nano-30b-a3b:medium",
@@ -231,18 +236,6 @@
         "deepseek/deepseek-v4-flash:medium",
         "deepseek/deepseek-v4-flash:high",
         "deepseek/deepseek-v4-flash:xhigh",
-
-        "baidu/cobuddy:free:none",
-        "baidu/cobuddy:free:low",
-        "baidu/cobuddy:free:medium",
-        "baidu/cobuddy:free:high",
-        "baidu/cobuddy:free:xhigh",
-
-        "arcee-ai/trinity-mini:none",
-        "arcee-ai/trinity-mini:low",
-        "arcee-ai/trinity-mini:medium",
-        "arcee-ai/trinity-mini:high",
-        "arcee-ai/trinity-mini:xhigh",
 
         "liquid/lfm-2-24b-a2b:none",
         "liquid/lfm-2-24b-a2b:low",
