@@ -3,46 +3,6 @@
 ## Purpose
 TBD - created by archiving change overview-chart-improvements. Update Purpose after archive.
 ## Requirements
-### Requirement: TokenUsageChart renders horizontal bar chart
-
-The `TokenUsageChart` React component SHALL render a Recharts horizontal bar chart (bars go right, Y-axis = provider/base-model group, X-axis = total tokens). Each bar SHALL represent one selected provider/base-model group and SHALL visualize the range from the lowest effort token total to the highest effort token total in that group. The lowest effort token total SHALL be the representative value used for sorting and bar prominence. Bars SHALL be color-coded by provider using the `getProviderColor()` palette. Y-axis tick labels SHALL display the provider brand icon (via `ProviderIcon`) and the truncated base model name (max ~10 characters + ellipsis). The component SHALL accept a `data` prop containing the full dataset. Chart height SHALL be fixed at 350 pixels. A provider legend SHALL be rendered below the chart card showing colored dots for each unique provider present.
-
-#### Scenario: Bars render for selected model groups
-- **WHEN** `TokenUsageChart` renders with 5 selected model groups
-- **THEN** 5 horizontal grouped bars are displayed representing token usage ranges for each selected base model
-
-#### Scenario: Bars sorted by token count
-- **WHEN** model groups have lowest effort token totals [5000, 12000, 8000, 3000, 15000]
-- **THEN** bars appear in ascending order: 3000, 5000, 8000, 12000, 15000
-
-#### Scenario: Effort range shown for tokens
-- **WHEN** `openai/gpt-5` has effort token totals 5,000, 8,000, and 12,000
-- **THEN** the `openai/gpt-5` bar visualizes the range 5,000-12,000 and uses 5,000 as the representative value
-
-#### Scenario: Colors reflect provider
-- **WHEN** a model group has provider `anthropic`
-- **THEN** its bar is rendered in the Anthropic palette color (#D97757)
-
-#### Scenario: Colors reflect provider for fallback providers
-- **WHEN** a model group has provider `unknown-provider`
-- **THEN** its bar is rendered in a deterministic `hsl(hue, 55%, 48%)` color
-
-#### Scenario: Y-axis labels show provider icon and truncated base model
-- **WHEN** a model group is `openai/gpt-oss-120b`
-- **THEN** its Y-axis tick shows the OpenAI icon and "gpt-oss-1…" (truncated)
-
-#### Scenario: Long model names are truncated
-- **WHEN** a base model name exceeds ~10 characters
-- **THEN** the displayed label is truncated with an ellipsis
-
-#### Scenario: Chart height is fixed at 350 pixels
-- **WHEN** 5, 12, or 30 model groups are present
-- **THEN** the chart height is always 350 pixels
-
-#### Scenario: Provider legend appears below the chart
-- **WHEN** the chart shows model groups from multiple providers
-- **THEN** a horizontal legend with colored dots and provider names appears below the chart card
-
 ### Requirement: TokenUsageChart computes total tokens from fixture data
 
 The `TokenUsageChart` component SHALL compute total tokens per model+effort by summing `total_tokens` across all fixture results for that full model name. Null `total_tokens` values SHALL be treated as 0 in the sum. The component SHALL then group those per-effort totals by provider/base model to compute the displayed range. Computed totals SHALL be displayed as formatted numbers (e.g., "12.5K" for 12,500, "1.2M" for 1,200,000).
@@ -93,7 +53,7 @@ The `TokenUsageChart` component SHALL be rendered on `/` (the Overview/Home page
 
 #### Scenario: Chart on overview page
 - **WHEN** navigating to `/`
-- **THEN** a "Token Usage" section with the grouped horizontal bar chart is visible below the Runtime section
+- **THEN** a "Token Usage" section with the grouped vertical range-whisker bar chart is visible below the Runtime section
 
 ### Requirement: TokenUsageChart includes ModelSelector filter
 
@@ -110,4 +70,48 @@ The `TokenUsageChart` component SHALL include a `ModelSelector` dropdown allowin
 #### Scenario: Selector remains available when selected groups have no token data
 - **WHEN** every model group in the selected group set has zero collected total tokens
 - **THEN** `TokenUsageChart` displays "No token data available" and still renders the ModelSelector
+
+### Requirement: TokenUsageChart renders vertical range-whisker bar chart
+
+The `TokenUsageChart` React component SHALL render a Recharts vertical bar chart (bars go up, X-axis = provider/base-model group, Y-axis = total tokens). Each solid bar SHALL represent one selected provider/base-model group's representative effort token total from zero. The representative token total SHALL be the median value from the group's sorted, deduped effort token totals. A neutral range whisker SHALL visualize the range from the lowest effort token total to the highest effort token total in that group. The representative token total SHALL be used for sorting and bar prominence. The Y-axis domain SHALL start at 0 and include the highest displayed effort token total. Bars SHALL be color-coded by provider using the `getProviderColor()` palette. X-axis tick labels SHALL display the provider brand icon (via `ProviderIcon`) and the truncated base model name (max ~10 characters + ellipsis), rotated `-40` degrees. The component SHALL accept a `data` prop containing the full dataset. Chart height SHALL be fixed at 350 pixels. A provider legend SHALL be rendered below the chart card showing colored dots for each unique provider present.
+
+#### Scenario: Bars render for selected model groups
+- **WHEN** `TokenUsageChart` renders with 5 selected model groups
+- **THEN** 5 vertical grouped bars are displayed representing each selected base model's representative token usage with range whiskers
+
+#### Scenario: Bars sorted by representative token count
+- **WHEN** model groups have representative effort token totals [5000, 12000, 8000, 3000, 15000]
+- **THEN** bars appear from left to right in ascending order: 3000, 5000, 8000, 12000, 15000
+
+#### Scenario: Effort range shown with whisker
+- **WHEN** `openai/gpt-5` has effort token totals 5,000, 8,000, and 12,000
+- **THEN** the `openai/gpt-5` solid bar extends from 0 to 8,000 and its range whisker spans 5,000-12,000
+
+#### Scenario: Duplicate effort token totals are deduped before selecting representative total
+- **WHEN** `openai/gpt-5` has effort token totals 5,000, 5,000, 5,000, 8,000, and 12,000
+- **THEN** the `openai/gpt-5` representative token total is 8,000 from deduped values [5,000, 8,000, 12,000]
+
+#### Scenario: Colors reflect provider
+- **WHEN** a model group has provider `anthropic`
+- **THEN** its bar is rendered in the Anthropic palette color (#D97757)
+
+#### Scenario: Colors reflect provider for fallback providers
+- **WHEN** a model group has provider `unknown-provider`
+- **THEN** its bar is rendered in a deterministic `hsl(hue, 55%, 48%)` color
+
+#### Scenario: Diagonal labels show provider icon and truncated base model
+- **WHEN** a model group is `openai/gpt-oss-120b`
+- **THEN** its X-axis tick shows the OpenAI icon and "gpt-oss-1..." (truncated), rotated `-40` degrees
+
+#### Scenario: Long model names are truncated
+- **WHEN** a base model name exceeds ~10 characters
+- **THEN** the displayed label is truncated with an ellipsis
+
+#### Scenario: Chart height is fixed at 350 pixels
+- **WHEN** 5, 12, or 30 model groups are present
+- **THEN** the chart height is always 350 pixels
+
+#### Scenario: Provider legend appears below the chart
+- **WHEN** the chart shows model groups from multiple providers
+- **THEN** a horizontal legend with colored dots and provider names appears below the chart card
 
