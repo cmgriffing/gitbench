@@ -41,14 +41,22 @@ export interface GroupedMetricRow {
   minValue: number;
   maxValue: number;
   representativeValue: number;
-  representativeEffort: MetricEffort;
-  range: [number, number];
+  rangeWhisker: [number, number];
 }
 
 export type MetricExtractor = (
   effort: ModelGroupEffort,
   data: GitBenchData
 ) => MetricEffort | null;
+
+type RepresentativeMetric = "min" | "max" | "median";
+
+function median(values: number[]): number {
+  const medianIndex = Math.floor(values.length / 2);
+  return values.length % 2 === 0
+    ? (values[medianIndex - 1] + values[medianIndex]) / 2
+    : values[medianIndex];
+}
 
 function compareReasoningEfforts(a: MetricEffort, b: MetricEffort): number {
   return compareReasoningLevels(
@@ -230,7 +238,7 @@ export function buildGroupedMetricRows(
   data: GitBenchData,
   selectedGroupIds: string[],
   extractor: MetricExtractor,
-  representative: "min" | "max"
+  representative: RepresentativeMetric
 ): GroupedMetricRow[] {
   const selected = new Set(
     sanitizeGroupSelection(selectedGroupIds, deriveModelGroups(data))
@@ -243,14 +251,19 @@ export function buildGroupedMetricRows(
         .filter((effort): effort is MetricEffort => effort !== null)
         .sort(compareReasoningEfforts);
       if (efforts.length === 0) return null;
-      const values = efforts.map((effort) => effort.value);
-      const minValue = Math.min(...values);
-      const maxValue = Math.max(...values);
+      const values = efforts
+        .map((effort) => effort.value)
+        .sort((a, b) => a - b);
+      const uniqueValues = Array.from(new Set(values));
+      const minValue = values[0];
+      const maxValue = values[values.length - 1];
+      const medianValue = median(uniqueValues);
       const representativeValue =
-        representative === "min" ? minValue : maxValue;
-      const representativeEffort =
-        efforts.find((effort) => effort.value === representativeValue) ??
-        efforts[0];
+        representative === "min"
+          ? minValue
+          : representative === "max"
+            ? maxValue
+            : medianValue;
       return {
         id: group.id,
         name: group.id,
@@ -260,10 +273,10 @@ export function buildGroupedMetricRows(
         minValue,
         maxValue,
         representativeValue,
-        representativeEffort,
-        range: (minValue === maxValue
-          ? [minValue - 0.4, maxValue + 0.4]
-          : [minValue, maxValue]) as [number, number],
+        rangeWhisker: [
+          representativeValue - minValue,
+          maxValue - representativeValue,
+        ] as [number, number],
       };
     })
     .filter((row): row is GroupedMetricRow => row !== null);

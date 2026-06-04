@@ -435,6 +435,7 @@ function fixtureResultFromRow(
     total_tokens: nullableNumber(row.total_tokens),
     cost_usd: nullableNumber(row.cost_usd),
     duration_ms: nullableNumber(row.duration_ms),
+    api_duration_ms: nullableNumber(row.api_duration_ms),
     purpose: row.purpose === null || row.purpose === undefined ? null : String(row.purpose),
     difficulty:
       row.difficulty === null || row.difficulty === undefined

@@ -193,12 +193,13 @@ function insertReportData(db, data) {
       `INSERT INTO fixture_results (
          model_name, benchmark_name, fixture_id, passed, similarity, error,
          model_output, reasoning_level, input_tokens, output_tokens, total_tokens,
-         cost_usd, duration_ms, purpose, difficulty, tags_json
+         cost_usd, duration_ms, api_duration_ms, purpose, difficulty, tags_json
        )
        VALUES (
          :model_name, :benchmark_name, :fixture_id, :passed, :similarity, :error,
          :model_output, :reasoning_level, :input_tokens, :output_tokens,
-         :total_tokens, :cost_usd, :duration_ms, :purpose, :difficulty, :tags_json
+         :total_tokens, :cost_usd, :duration_ms, :api_duration_ms, :purpose,
+         :difficulty, :tags_json
        )`,
       Object.entries(data.fixtures).flatMap(([modelName, byBenchmark]) =>
         Object.entries(byBenchmark ?? {}).flatMap(([benchmarkName, results]) =>
@@ -216,6 +217,7 @@ function insertReportData(db, data) {
             total_tokens: result.total_tokens ?? null,
             cost_usd: result.cost_usd ?? null,
             duration_ms: result.duration_ms ?? null,
+            api_duration_ms: result.api_duration_ms ?? null,
             purpose: result.purpose ?? null,
             difficulty: result.difficulty ?? null,
             tags_json: jsonArray(result.tags),

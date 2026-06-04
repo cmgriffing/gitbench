@@ -106,8 +106,8 @@ const METRICS: MetricDefinition[] = [
   },
   {
     key: "runtime",
-    label: "Runtime",
-    shortLabel: "Runtime",
+    label: "API Time",
+    shortLabel: "API Time",
     better: "lower",
     extractor: runtimeMetric,
     format: formatRuntime,

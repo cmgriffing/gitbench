@@ -48,6 +48,7 @@ export interface FixtureResult {
   total_tokens: number | null;
   cost_usd: number | null;
   duration_ms: number | null;
+  api_duration_ms: number | null;
   purpose: string | null;
   difficulty: string | null;
   tags: string[] | null;

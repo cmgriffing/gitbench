@@ -42,7 +42,7 @@ function seed(db) {
     INSERT INTO model_runtimes (
       model_name, total_ms, avg_ms, min_ms, max_ms, fixture_count
     )
-    VALUES ('openai/gpt-test:high', 25, 25, 25, 25, 1);
+    VALUES ('openai/gpt-test:high', 12.5, 12.5, 12.5, 12.5, 1);
     INSERT INTO benchmark_summaries (
       model_name, benchmark_name, pass_at_k, total, passed, avg_similarity
     )
@@ -60,11 +60,11 @@ function seed(db) {
     INSERT INTO fixture_results (
       model_name, benchmark_name, fixture_id, passed, similarity, error,
       model_output, reasoning_level, input_tokens, output_tokens, total_tokens,
-      cost_usd, duration_ms, purpose, difficulty, tags_json
+      cost_usd, duration_ms, api_duration_ms, purpose, difficulty, tags_json
     )
     VALUES (
       'openai/gpt-test:high', 'commit_messages', 'f001', 1, 0.95, NULL,
-      'full output', 'high', 10, 5, 15, 0.01, 25, 'purpose', 'easy',
+      'full output', 'high', 10, 5, 15, 0.01, 25, 12.5, 'purpose', 'easy',
       '["basic"]'
     );
     INSERT INTO base_model_groups (id, provider, base_model)
@@ -87,6 +87,7 @@ test("summary returns compact report data without full model output", () => {
       summary.model_token_summaries["openai/gpt-test:high"].total_tokens,
       15,
     );
+    assert.equal(summary.model_runtimes["openai/gpt-test:high"].total_ms, 12.5);
   });
 });
 
@@ -102,6 +103,7 @@ test("benchmark and model result queries return scoped rows", () => {
       tag: "basic",
     });
     assert.equal(model.results.commit_messages[0].model_output, "");
+    assert.equal(model.results.commit_messages[0].api_duration_ms, 12.5);
   });
 });
 
@@ -109,6 +111,7 @@ test("fixture detail returns full outputs and missing resources return null", ()
   withStore((store) => {
     const fixture = store.getFixture("commit_messages", "f001");
     assert.equal(fixture.outputs[0].model_output, "full output");
+    assert.equal(fixture.outputs[0].api_duration_ms, 12.5);
 
     assert.equal(store.getBenchmark("missing"), null);
     assert.equal(store.getModelResults("missing"), null);

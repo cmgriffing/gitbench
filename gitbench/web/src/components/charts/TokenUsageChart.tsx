@@ -1,18 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import type { GitBenchData } from "@/lib/types";
 import { loadTokenChart } from "@/lib/report-client";
-import { modelGroupPath } from "@/lib/routes";
-import { getProviderColor } from "@/lib/provider-colors";
 import ProviderIcon from "@/components/ProviderIcon";
 import ModelSelector from "@/components/charts/ModelSelector";
 import { useSyncedModelSelection } from "@/components/charts/useSyncedModelSelection";
@@ -21,13 +9,10 @@ import {
   tokenMetric,
 } from "@/components/charts/model-groups";
 import {
-  HorizontalGroupTick,
-  ProviderLegend,
+  VerticalGroupedMetricChart,
   formatCompactDecimal,
-  horizontalChartBarSize,
-  paddedDomain,
-  rowMap,
   tooltipStyle,
+  zeroAnchoredDomain,
 } from "@/components/charts/grouped-chart-ui";
 
 function formatTokens(value: number): string {
@@ -51,13 +36,12 @@ export default function TokenUsageChart() {
       data,
       selectedGroups,
       tokenMetric,
-      "min",
+      "median",
     ).sort((a, b) => a.representativeValue - b.representativeValue);
   }, [data, selectedGroups]);
 
-  const rowsById = useMemo(() => rowMap(chartData), [chartData]);
-  const xDomain = useMemo(
-    () => paddedDomain(chartData, [0, 1], { floor: 0 }),
+  const yDomain = useMemo(
+    () => zeroAnchoredDomain(chartData, [0, 1]),
     [chartData],
   );
   const allZero =
@@ -84,129 +68,59 @@ export default function TokenUsageChart() {
           </div>
         </div>
       ) : (
-        <>
-          <div
-            className="card"
-          >
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart
-                data={chartData}
-                layout="vertical"
-                barCategoryGap={3}
-                margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
+        <VerticalGroupedMetricChart
+          rows={chartData}
+          yDomain={yDomain}
+          yTickFormatter={formatTokens}
+          renderTooltip={(entry) => (
+            <div style={tooltipStyle}>
+              <div
+                style={{
+                  color: "var(--text)",
+                  marginBottom: 4,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
               >
-                <CartesianGrid
-                  horizontal={false}
-                  stroke="rgba(255,255,255,0.04)"
-                />
-                <XAxis
-                  type="number"
-                  domain={xDomain}
-                  tick={{
-                    fill: "var(--text-dim)",
-                    fontSize: 11,
-                    fontFamily: "var(--font-mono)",
-                  }}
-                  tickFormatter={formatTokens}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="id"
-                  tick={(props: any) => (
-                    <HorizontalGroupTick {...props} rowMap={rowsById} />
-                  )}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  width={112}
-                />
-                <Bar
-                  dataKey="range"
-                  radius={[4, 4, 4, 4]}
-                  barSize={horizontalChartBarSize(chartData.length)}
-                  cursor="pointer"
-                  onClick={(entry: any) => {
-                    if (entry?.provider && entry?.baseModel) {
-                      window.location.href = modelGroupPath(
-                        entry.provider,
-                        entry.baseModel,
-                      );
-                    }
-                  }}
+                <ProviderIcon provider={entry.provider} size={14} />
+                {entry.provider}/{entry.baseModel}
+              </div>
+              {entry.efforts.map((effort) => (
+                <div
+                  key={effort.modelName}
+                  style={{ color: "var(--text-dim)" }}
                 >
-                  {chartData.map((entry) => (
-                    <Cell
-                      key={entry.id}
-                      fill={getProviderColor(entry.provider)}
-                    />
-                  ))}
-                </Bar>
-                <Tooltip
-                  cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                  content={({ active, label }) => {
-                    if (!active || !label) return null;
-                    const entry = rowsById[String(label)];
-                    if (!entry) return null;
-                    return (
-                      <div style={tooltipStyle}>
-                        <div
-                          style={{
-                            color: "var(--text)",
-                            marginBottom: 4,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                          }}
-                        >
-                          <ProviderIcon provider={entry.provider} size={14} />
-                          {entry.provider}/{entry.baseModel}
-                        </div>
-                        {entry.efforts.map((effort) => (
-                          <div
-                            key={effort.modelName}
-                            style={{ color: "var(--text-dim)" }}
-                          >
-                            {effort.reasoningLevel ?? "default"}:{" "}
-                            {formatTokens(effort.value)}
-                            {effort.inputTokens || effort.outputTokens
-                              ? `, in ${formatTokens(
-                                  effort.inputTokens ?? 0,
-                                )} / out ${formatTokens(
-                                  effort.outputTokens ?? 0,
-                                )}`
-                              : ""}
-                            {effort.modelName ===
-                            entry.representativeEffort.modelName
-                              ? " (lowest tokens)"
-                              : ""}
-                          </div>
-                        ))}
-                        <div
-                          style={{
-                            borderTop: "1px solid rgba(255,255,255,0.06)",
-                            margin: "6px 0",
-                          }}
-                        />
-                        <div
-                          style={{
-                            color: "var(--text-dim)",
-                            fontSize: 10,
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          Tokens in + out. Fewer is more efficient.
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <ProviderLegend rows={chartData} />
-        </>
+                  {effort.reasoningLevel ?? "default"}:{" "}
+                  {formatTokens(effort.value)}
+                  {effort.inputTokens || effort.outputTokens
+                    ? `, in ${formatTokens(
+                        effort.inputTokens ?? 0,
+                      )} / out ${formatTokens(effort.outputTokens ?? 0)}`
+                    : ""}
+                  {effort.value === entry.representativeValue
+                    ? " (median)"
+                    : ""}
+                </div>
+              ))}
+              <div
+                style={{
+                  borderTop: "1px solid rgba(255,255,255,0.06)",
+                  margin: "6px 0",
+                }}
+              />
+              <div
+                style={{
+                  color: "var(--text-dim)",
+                  fontSize: 10,
+                  lineHeight: 1.4,
+                }}
+              >
+                Tokens in + out. Fewer is more efficient.
+              </div>
+            </div>
+          )}
+        />
       )}
     </div>
   );

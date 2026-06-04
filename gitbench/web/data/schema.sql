@@ -86,6 +86,7 @@ CREATE TABLE fixture_results (
   total_tokens INTEGER,
   cost_usd REAL,
   duration_ms REAL,
+  api_duration_ms REAL,
   purpose TEXT,
   difficulty TEXT,
   tags_json TEXT NOT NULL,

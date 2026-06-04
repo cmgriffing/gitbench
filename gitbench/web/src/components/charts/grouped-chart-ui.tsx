@@ -1,9 +1,23 @@
+import { useMemo, type ReactNode } from "react";
 import ProviderIcon from "@/components/ProviderIcon";
 import { getProviderColor } from "@/lib/provider-colors";
 import type { GroupedMetricRow } from "@/components/charts/model-groups";
+import { modelGroupPath } from "@/lib/routes";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ErrorBar,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const HORIZONTAL_CHART_INNER_HEIGHT = 340;
 const HORIZONTAL_CHART_ROW_GAP = 3;
+const VERTICAL_CHART_HEIGHT = 350;
 
 export function truncateName(name: string, maxLen = 16): string {
   if (!name || name.length <= maxLen) return name || "";
@@ -17,6 +31,10 @@ export function horizontalChartBarSize(rowCount: number): number {
     3,
     Math.min(28, Math.floor(rowHeight - HORIZONTAL_CHART_ROW_GAP)),
   );
+}
+
+export function verticalChartBarSize(rowCount: number): number {
+  return Math.max(12, Math.min(28, 400 / Math.max(1, rowCount)));
 }
 
 export function providerLegend(rows: GroupedMetricRow[]) {
@@ -111,7 +129,7 @@ export function VerticalGroupTick({ x, y, payload, rowMap }: TickProps) {
                 maxWidth: 118,
               }}
             >
-              {row?.baseModel ?? payload.value}
+              {truncateName(row?.baseModel ?? payload.value, 10)}
             </span>
           </div>
         </foreignObject>
@@ -161,6 +179,96 @@ export function rowMap(rows: GroupedMetricRow[]) {
   );
 }
 
+interface VerticalGroupedMetricChartProps {
+  rows: GroupedMetricRow[];
+  yDomain: [number, number];
+  yTickFormatter: (value: number) => string;
+  renderTooltip: (entry: GroupedMetricRow) => ReactNode;
+}
+
+export function VerticalGroupedMetricChart({
+  rows,
+  yDomain,
+  yTickFormatter,
+  renderTooltip,
+}: VerticalGroupedMetricChartProps) {
+  const rowsById = useMemo(() => rowMap(rows), [rows]);
+
+  return (
+    <>
+      <div className="card">
+        <ResponsiveContainer width="100%" height={VERTICAL_CHART_HEIGHT}>
+          <BarChart
+            data={rows}
+            layout="horizontal"
+            margin={{ top: 12, right: 20, left: 0, bottom: 58 }}
+          >
+            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+            <XAxis
+              type="category"
+              dataKey="id"
+              tick={(props: any) => (
+                <VerticalGroupTick {...props} rowMap={rowsById} />
+              )}
+              axisLine={false}
+              tickLine={false}
+              interval={0}
+              height={62}
+            />
+            <YAxis
+              type="number"
+              domain={yDomain}
+              tick={{
+                fill: "var(--text-dim)",
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+              }}
+              tickFormatter={yTickFormatter}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Bar
+              dataKey="representativeValue"
+              radius={[4, 4, 0, 0]}
+              barSize={verticalChartBarSize(rows.length)}
+              cursor="pointer"
+              onClick={(entry: any) => {
+                if (entry?.provider && entry?.baseModel) {
+                  window.location.href = modelGroupPath(
+                    entry.provider,
+                    entry.baseModel,
+                  );
+                }
+              }}
+            >
+              {rows.map((entry) => (
+                <Cell key={entry.id} fill={getProviderColor(entry.provider)} />
+              ))}
+              <ErrorBar
+                dataKey="rangeWhisker"
+                width={9}
+                stroke="rgba(229,232,238,0.76)"
+                strokeWidth={1.7}
+                isAnimationActive={false}
+              />
+            </Bar>
+            <Tooltip
+              cursor={{ fill: "rgba(255,255,255,0.04)" }}
+              content={({ active, label }: any) => {
+                if (!active || !label) return null;
+                const entry = rowsById[String(label)];
+                if (!entry) return null;
+                return renderTooltip(entry);
+              }}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <ProviderLegend rows={rows} />
+    </>
+  );
+}
+
 export function paddedDomain(
   rows: GroupedMetricRow[],
   fallback: [number, number],
@@ -177,6 +285,21 @@ export function paddedDomain(
     return [Math.max(options.floor ?? -Infinity, lower - 1), upper + 1];
   }
   return [lower, upper];
+}
+
+export function zeroAnchoredDomain(
+  rows: GroupedMetricRow[],
+  fallback: [number, number],
+  options: { ceiling?: number; paddingRatio?: number } = {},
+): [number, number] {
+  if (rows.length === 0) return fallback;
+  if (options.ceiling != null) return [0, options.ceiling];
+
+  const max = Math.max(0, ...rows.map((row) => row.maxValue));
+  if (max === 0) return [0, fallback[1]];
+
+  const padding = max * (options.paddingRatio ?? 0.12);
+  return [0, max + padding];
 }
 
 export function formatCompactDecimal(

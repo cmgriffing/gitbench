@@ -67,14 +67,14 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
   <section class="mt-10">
     <div class="info-tip">
       <div class="section-label">
-        <span>Runtime (Wall Clock)</span>
+        <span>API Time</span>
       </div>
       <p class="info-blurb">
-        Wall-clock time for all 204 fixtures. Includes API latency and rate
-        limiting. Not a pure model speed benchmark.
+        API call latency across successful fixture calls. It excludes fixture
+        setup, scoring, and cleanup.
       </p>
     </div>
-    <RuntimeBarChart client:visible />
+    <RuntimeBarChart client:load />
   </section>
 
   <section class="mt-10">
