@@ -40,13 +40,48 @@ export default function TokenUsageChart() {
 
   const chartData = useMemo(() => {
     if (!data) return [];
-    return buildGroupedMetricRows(
+    const rows = buildGroupedMetricRows(
       data,
       selectedGroups,
       tokenMetric,
       "median",
       outputMode
     ).sort((a, b) => a.sortValue - b.sortValue);
+
+    // Compute stacked segment totals for each row
+    for (const row of rows) {
+      const textMode = row.modes.text;
+      if (textMode) {
+        let textIn = 0, textOut = 0, textReason = 0;
+        for (const effort of textMode.efforts) {
+          textIn += effort.inputTokens ?? 0;
+          textOut += effort.outputTokens ?? 0;
+          textReason += effort.reasoningTokens ?? 0;
+        }
+        row.textInputTokens = textIn;
+        row.textOutputTokens = textOut;
+        row.textReasoningTokens = textReason;
+        row.hasReasoningData = textMode.efforts.some(
+          (e) => e.reasoningLevel && (e.reasoningTokens ?? 0) > 0
+        );
+      }
+      const jsonMode = row.modes.json_schema;
+      if (jsonMode) {
+        let jsonIn = 0, jsonOut = 0, jsonReason = 0;
+        for (const effort of jsonMode.efforts) {
+          jsonIn += effort.inputTokens ?? 0;
+          jsonOut += effort.outputTokens ?? 0;
+          jsonReason += effort.reasoningTokens ?? 0;
+        }
+        row.jsonInputTokens = jsonIn;
+        row.jsonOutputTokens = jsonOut;
+        row.jsonReasoningTokens = jsonReason;
+        row.hasReasoningData = row.hasReasoningData || jsonMode.efforts.some(
+          (e) => e.reasoningLevel && (e.reasoningTokens ?? 0) > 0
+        );
+      }
+    }
+    return rows;
   }, [data, selectedGroups, outputMode]);
 
   const yDomain = useMemo(
@@ -109,9 +144,9 @@ export default function TokenUsageChart() {
                     {effort.reasoningLevel ?? "default"}:{" "}
                     {formatTokens(effort.value)}
                     {effort.inputTokens || effort.outputTokens
-                      ? `, in ${formatTokens(
+                      ? ` (in ${formatTokens(
                           effort.inputTokens ?? 0
-                        )} / out ${formatTokens(effort.outputTokens ?? 0)}`
+                        )} / out ${formatTokens(effort.outputTokens ?? 0)}${effort.reasoningLevel && effort.reasoningTokens !== undefined ? ` / r ${formatTokens(effort.reasoningTokens ?? 0)}` : ""})`
                       : ""}
                   </span>
                 )}

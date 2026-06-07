@@ -271,6 +271,7 @@ export function VerticalGroupedMetricChart({
   const rowsById = useMemo(() => rowMap(rows), [rows]);
   const visibleModes = visibleOutputModes(outputMode);
   const seriesCount = visibleModes.length;
+  const anyReasoningData = rows.some((r) => r.hasReasoningData);
 
   return (
     <>
@@ -307,55 +308,125 @@ export function VerticalGroupedMetricChart({
               axisLine={false}
               tickLine={false}
             />
-            {visibleModes.map((mode) => {
-              const dataKey =
-                mode === "text"
-                  ? "textRepresentativeValue"
-                  : "jsonRepresentativeValue";
-              const whiskerKey =
-                mode === "text" ? "textRangeWhisker" : "jsonRangeWhisker";
-              return (
-                <Bar
-                  key={mode}
-                  dataKey={dataKey}
-                  name={outputModeLabel(mode)}
-                  barSize={verticalChartBarSize(rows.length, seriesCount)}
-                  cursor="pointer"
-                  isAnimationActive={false}
-                  onClick={(entry: any) => {
-                    if (entry?.provider && entry?.baseModel) {
-                      window.location.href = modelGroupPath(
-                        entry.provider,
-                        entry.baseModel
-                      );
-                    }
-                  }}
-                >
-                  {rows.map((entry) => {
-                    const style = getOutputModeBarStyle(
-                      getProviderColor(entry.provider),
-                      mode
-                    );
-                    return (
-                      <Cell
-                        key={`${entry.id}-${mode}`}
-                        fill={style.fill}
-                        fillOpacity={style.fillOpacity}
-                        stroke={style.stroke}
-                        strokeWidth={style.strokeWidth}
+            {anyReasoningData
+              ? visibleModes.flatMap((mode) => {
+                  const inKey =
+                    mode === "text" ? "textInputTokens" : "jsonInputTokens";
+                  const outKey =
+                    mode === "text" ? "textOutputTokens" : "jsonOutputTokens";
+                  const reasonKey =
+                    mode === "text"
+                      ? "textReasoningTokens"
+                      : "jsonReasoningTokens";
+                  const stackId = `tokens-${mode}`;
+                  const baseColor = getProviderColor(
+                    rows[0]?.provider ?? ""
+                  );
+                  return [
+                    <Bar
+                      key={`${mode}-in`}
+                      dataKey={inKey}
+                      name={`${outputModeLabel(mode)} In`}
+                      stackId={stackId}
+                      barSize={verticalChartBarSize(rows.length, 1)}
+                      isAnimationActive={false}
+                    >
+                      {rows.map((entry) => (
+                        <Cell
+                          key={`${entry.id}-${mode}-in`}
+                          fill={getProviderColor(entry.provider)}
+                          fillOpacity={0.92}
+                        />
+                      ))}
+                    </Bar>,
+                    <Bar
+                      key={`${mode}-out`}
+                      dataKey={outKey}
+                      name={`${outputModeLabel(mode)} Out`}
+                      stackId={stackId}
+                      barSize={verticalChartBarSize(rows.length, 1)}
+                      isAnimationActive={false}
+                    >
+                      {rows.map((entry) => (
+                        <Cell
+                          key={`${entry.id}-${mode}-out`}
+                          fill={getProviderColor(entry.provider)}
+                          fillOpacity={0.55}
+                        />
+                      ))}
+                    </Bar>,
+                    <Bar
+                      key={`${mode}-reason`}
+                      dataKey={reasonKey}
+                      name={`${outputModeLabel(mode)} Reason`}
+                      stackId={stackId}
+                      barSize={verticalChartBarSize(rows.length, 1)}
+                      isAnimationActive={false}
+                    >
+                      {rows.map((entry) => (
+                        <Cell
+                          key={`${entry.id}-${mode}-reason`}
+                          fill={getProviderColor(entry.provider)}
+                          fillOpacity={0.28}
+                          stroke={getProviderColor(entry.provider)}
+                          strokeWidth={0.5}
+                        />
+                      ))}
+                    </Bar>,
+                  ];
+                })
+              : visibleModes.map((mode) => {
+                  const dataKey =
+                    mode === "text"
+                      ? "textRepresentativeValue"
+                      : "jsonRepresentativeValue";
+                  const whiskerKey =
+                    mode === "text" ? "textRangeWhisker" : "jsonRangeWhisker";
+                  return (
+                    <Bar
+                      key={mode}
+                      dataKey={dataKey}
+                      name={outputModeLabel(mode)}
+                      barSize={verticalChartBarSize(
+                        rows.length,
+                        seriesCount
+                      )}
+                      cursor="pointer"
+                      isAnimationActive={false}
+                      onClick={(entry: any) => {
+                        if (entry?.provider && entry?.baseModel) {
+                          window.location.href = modelGroupPath(
+                            entry.provider,
+                            entry.baseModel
+                          );
+                        }
+                      }}
+                    >
+                      {rows.map((entry) => {
+                        const style = getOutputModeBarStyle(
+                          getProviderColor(entry.provider),
+                          mode
+                        );
+                        return (
+                          <Cell
+                            key={`${entry.id}-${mode}`}
+                            fill={style.fill}
+                            fillOpacity={style.fillOpacity}
+                            stroke={style.stroke}
+                            strokeWidth={style.strokeWidth}
+                          />
+                        );
+                      })}
+                      <ErrorBar
+                        dataKey={whiskerKey}
+                        width={seriesCount === 1 ? 9 : 7}
+                        stroke="rgba(229,232,238,0.76)"
+                        strokeWidth={1.7}
+                        isAnimationActive={false}
                       />
-                    );
-                  })}
-                  <ErrorBar
-                    dataKey={whiskerKey}
-                    width={seriesCount === 1 ? 9 : 7}
-                    stroke="rgba(229,232,238,0.76)"
-                    strokeWidth={1.7}
-                    isAnimationActive={false}
-                  />
-                </Bar>
-              );
-            })}
+                    </Bar>
+                  );
+                })}
             <Tooltip
               shared
               cursor={{ fill: "rgba(255,255,255,0.04)" }}
