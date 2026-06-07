@@ -56,6 +56,8 @@ for (const m of data.models) {
       error: fr.error,
       inputTokens: fr.input_tokens,
       outputTokens: fr.output_tokens,
+      reasoningTokens: fr.reasoning_tokens,
+      reasoningLevel: fr.reasoning_level,
       parsedPayload: typeof (fr as any).parsed_payload === "string"
         ? (fr as any).parsed_payload
         : null,
@@ -169,6 +171,8 @@ modelOutputs.sort((a, b) => b.similarity - a.similarity);
             error={mo.error}
             inputTokens={mo.inputTokens}
             outputTokens={mo.outputTokens}
+            reasoningTokens={mo.reasoningTokens}
+            reasoningLevel={mo.reasoningLevel}
             parsedPayload={mo.parsedPayload}
             rawStructuredOutput={mo.rawStructuredOutput}
             structuredError={mo.structuredError}

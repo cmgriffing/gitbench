@@ -13,6 +13,8 @@ interface Props {
   error: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  reasoningTokens?: number | null;
+  reasoningLevel?: string | null;
   parsedPayload?: string | null;
   rawStructuredOutput?: string | null;
   structuredError?: string | null;
@@ -27,6 +29,8 @@ const {
   error,
   inputTokens,
   outputTokens,
+  reasoningTokens,
+  reasoningLevel,
   parsedPayload,
   rawStructuredOutput,
   structuredError,
@@ -68,7 +72,11 @@ const displayPayload = parsedPayload
       {
         inputTokens != null && outputTokens != null && (
           <span class="font-mono text-[0.6rem] px-1.5 py-0.5 bg-(--color-surface) border border-border rounded text-(--color-text-dim)">
-            {inputTokens}→{outputTokens}
+            {inputTokens}→{outputTokens}{
+              reasoningLevel
+                ? `(+${reasoningTokens != null ? reasoningTokens : "N/A"}r)`
+                : ""
+            }
           </span>
         )
       }
