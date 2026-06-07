@@ -1,27 +1,4 @@
-# token-usage-chart Specification
-
-## Purpose
-TBD - created by archiving change overview-chart-improvements. Update Purpose after archive.
-## Requirements
-### Requirement: TokenUsageChart computes total tokens from fixture data
-
-The `TokenUsageChart` component SHALL compute total tokens per model+effort by summing `total_tokens` across all fixture results for that full model name. Null `total_tokens` values SHALL be treated as 0 in the sum. The component SHALL then group those per-effort totals by provider/base model to compute the displayed range. Computed totals SHALL be displayed as formatted numbers (e.g., "12.5K" for 12,500, "1.2M" for 1,200,000).
-
-#### Scenario: Tokens summed across fixtures
-- **WHEN** a model effort has 3 fixtures with total_tokens [100, 200, null]
-- **THEN** that effort's token total is 300 before group range calculation
-
-#### Scenario: Group range computed from effort totals
-- **WHEN** a model group has effort token totals [300, 500, 900]
-- **THEN** the grouped bar visualizes the range 300-900
-
-#### Scenario: Model with all null token data
-- **WHEN** every fixture for a model effort has `total_tokens: null`
-- **THEN** that effort contributes 0 tokens to its model group's range
-
-#### Scenario: Large token counts are formatted compactly
-- **WHEN** an effort has 1,250,000 total tokens
-- **THEN** the tooltip and axis display "1.25M"
+## MODIFIED Requirements
 
 ### Requirement: TokenUsageChart shows tooltips on hover
 Hovering or keyboard-focusing a token bar SHALL display one category-level tooltip with the provider/base-model group name. The tooltip SHALL separate available efforts into `Text` and `JSON` sections according to the selected output mode. Each section SHALL show its own representative median total token count, each effort's compactly formatted total, and available input/output token breakdowns. When `Both` is selected and a mode has no token data for the group, that mode's section SHALL show `No data`.
@@ -41,38 +18,6 @@ Hovering or keyboard-focusing a token bar SHALL display one category-level toolt
 #### Scenario: Tooltip shows unavailable mode
 - **WHEN** `Both` is selected and the group has text token data but no JSON token data
 - **THEN** the tooltip's JSON section reads `No data`
-
-### Requirement: TokenUsageChart handles empty token data
-
-If ALL selected model groups have no token data (every child effort has `total_tokens` null or zero), the component SHALL display a message: "No token data available."
-
-#### Scenario: All selected groups lack token data
-- **WHEN** every fixture across all selected model groups has `total_tokens: null`
-- **THEN** the chart area displays "No token data available"
-
-### Requirement: TokenUsageChart is placed on Models overview page
-
-The `TokenUsageChart` component SHALL be rendered on `/` (the Overview/Home page) after the Cost per Full Run section, inside a section labeled "Token Usage". It SHALL be loaded with `client:load`.
-
-#### Scenario: Chart on overview page
-- **WHEN** navigating to `/`
-- **THEN** a "Token Usage" section with the grouped vertical range-whisker bar chart is visible below the Runtime section
-
-### Requirement: TokenUsageChart includes ModelSelector filter
-
-The `TokenUsageChart` component SHALL include a `ModelSelector` dropdown allowing users to filter which provider/base-model groups appear in the chart. The selector SHALL use the shared Overview model group selection state. When any other Overview chart selector changes the selected group set, `TokenUsageChart` SHALL update its rendered bars and provider legend from that same selected group set.
-
-#### Scenario: Filter removes model group from chart
-- **WHEN** a user deselects a model group in the ModelSelector
-- **THEN** that model group's bar is removed from the chart
-
-#### Scenario: External selection updates token chart
-- **WHEN** a user changes the selected model groups in another Overview chart's ModelSelector
-- **THEN** `TokenUsageChart` updates its bars to match the new selected group set
-
-#### Scenario: Selector remains available when selected groups have no token data
-- **WHEN** every model group in the selected group set has zero collected total tokens
-- **THEN** `TokenUsageChart` displays "No token data available" and still renders the ModelSelector
 
 ### Requirement: TokenUsageChart renders vertical range-whisker bar chart
 The `TokenUsageChart` React component SHALL render a Recharts vertical bar chart (bars go up, X-axis = provider/base-model group, Y-axis = total tokens). For a single output-mode selection, each category SHALL show that mode's median sorted, deduped effort token total from zero with a neutral range whisker from the lowest to highest effort total in that mode. When `Both` is selected, each category SHALL show adjacent text and JSON bars with independently calculated medians and range whiskers. The Y-axis domain SHALL start at 0 and include the highest displayed effort token total. Bars SHALL be color-coded by provider using the `getProviderColor()` palette and SHALL use the shared output-mode visual treatments. X-axis tick labels SHALL display one provider brand icon and truncated base model name (max ~10 characters + ellipsis) per category, rotated `-40` degrees. Chart height SHALL be fixed at 350 pixels. Provider and output-mode legends SHALL be rendered below the chart as applicable. Categories SHALL be sorted lowest-token-first by the selected mode representative, or by the mean of available text and JSON representatives in `Both` mode.
@@ -108,4 +53,3 @@ The `TokenUsageChart` React component SHALL render a Recharts vertical bar chart
 #### Scenario: Chart height is fixed at 350 pixels
 - **WHEN** 5, 12, or 30 model groups are present
 - **THEN** the chart height is always 350 pixels
-

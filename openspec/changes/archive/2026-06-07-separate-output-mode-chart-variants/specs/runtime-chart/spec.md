@@ -1,17 +1,4 @@
-## Purpose
-
-The RuntimeBarChart provides a bar chart ranking models by total API call latency, fastest first.
-## Requirements
-### Requirement: RuntimeBarChart reads from model_runtimes in aggregated data
-The `RuntimeBarChart` component SHALL read API-time data from `data.model_runtimes[modelName].total_ms`. It SHALL convert milliseconds to seconds for display (dividing by 1000). The Y-axis SHALL be labeled in seconds (e.g., "120s", "45.3s"). The values SHALL represent API call latency aggregates, not full fixture wall-clock duration.
-
-#### Scenario: Total API time converted to seconds
-- **WHEN** a model has `total_ms=45300`
-- **THEN** the bar represents 45.3 seconds and the Y-axis tick shows "45.3s"
-
-#### Scenario: Zero millisecond total handled
-- **WHEN** a model has `total_ms=0`
-- **THEN** the bar represents 0 seconds and the Y-axis tick shows "0s"
+## MODIFIED Requirements
 
 ### Requirement: RuntimeBarChart shows tooltips on hover
 Hovering or keyboard-focusing a runtime bar SHALL display one category-level tooltip with the provider/base-model group name. The tooltip SHALL separate available efforts into `Text` and `JSON` sections according to the selected output mode. Each section SHALL show its own representative median API time and each effort's total API time and average per-fixture API time. When `Both` is selected and a mode has no API-time data for the group, that mode's section SHALL show `No data`.
@@ -31,43 +18,6 @@ Hovering or keyboard-focusing a runtime bar SHALL display one category-level too
 #### Scenario: Tooltip shows unavailable mode
 - **WHEN** `Both` is selected and the group has text API-time data but no JSON API-time data
 - **THEN** the tooltip's JSON section reads `No data`
-
-### Requirement: RuntimeBarChart handles models without API-time data
-If a selected model group has child efforts with no entry in `model_runtimes`, those child efforts SHALL be excluded from that group's API-time range and tooltip. If a selected model group has no child efforts with API-time data, the group SHALL be excluded from the chart. If NO selected model group has API-time data, the component SHALL display a message: "No API time data available."
-
-#### Scenario: Effort without API-time data excluded
-- **WHEN** one effort in a selected model group has no `model_runtimes` entry
-- **THEN** that effort does not contribute to the group's API-time range
-
-#### Scenario: Group without API-time data excluded
-- **WHEN** a selected model group has no child efforts with `model_runtimes` entries
-- **THEN** that model group does not appear as a bar
-
-#### Scenario: All selected groups lack API-time data
-- **WHEN** every selected model group lacks API-time data
-- **THEN** the chart area displays "No API time data available"
-
-### Requirement: RuntimeBarChart includes ModelSelector filter
-The `RuntimeBarChart` component SHALL include a `ModelSelector` dropdown allowing users to filter which provider/base-model groups appear in the chart. The selector SHALL use the shared Overview model group selection state. When any other Overview chart selector changes the selected group set, `RuntimeBarChart` SHALL update its rendered bars and provider legend from that same selected group set. Groups without API-time data SHALL remain excluded from the rendered bars even when selected.
-
-#### Scenario: Filter removes model group from chart
-- **WHEN** a user deselects a model group in the ModelSelector
-- **THEN** that model group's bar is removed from the chart
-
-#### Scenario: External selection updates runtime chart
-- **WHEN** a user changes the selected model groups in another Overview chart's ModelSelector
-- **THEN** `RuntimeBarChart` updates its bars to match the new selected group set, excluding selected groups without API-time data
-
-#### Scenario: Selector remains available when no selected groups have API-time data
-- **WHEN** the selected group set contains no model groups with entries in `model_runtimes`
-- **THEN** `RuntimeBarChart` displays "No API time data available" and still renders the ModelSelector
-
-### Requirement: RuntimeBarChart is placed on Models overview page
-The `RuntimeBarChart` component SHALL be rendered on `/` (the Overview/Home page) after the Cost per Full Run section, in its own section labeled "API Time". It SHALL be loaded with `client:load`.
-
-#### Scenario: Chart on overview page
-- **WHEN** navigating to `/`
-- **THEN** an "API Time" section with the grouped vertical range-whisker bar chart is visible
 
 ### Requirement: RuntimeBarChart renders vertical range-whisker bar chart ranking models by speed
 The `RuntimeBarChart` React component SHALL render a Recharts vertical bar chart (bars go up, X-axis = provider/base-model group, Y-axis = total API time in seconds). For a single output-mode selection, each category SHALL show that mode's median sorted, deduped effort API time from zero with a neutral range whisker from the fastest to slowest effort in that mode. When `Both` is selected, each category SHALL show adjacent text and JSON bars with independently calculated medians and range whiskers. The Y-axis domain SHALL start at 0 and include the slowest displayed effort API time. Bars SHALL be color-coded by provider using the `getProviderColor()` palette and SHALL use the shared output-mode visual treatments. X-axis tick labels SHALL display one provider brand icon and truncated base model name (max ~10 characters + ellipsis) per category, rotated `-40` degrees. Chart height SHALL be fixed at 350 pixels. Provider and output-mode legends SHALL be rendered below the chart as applicable. Categories SHALL be sorted fastest-first by the selected mode representative, or by the mean of available text and JSON representatives in `Both` mode.
@@ -103,4 +53,3 @@ The `RuntimeBarChart` React component SHALL render a Recharts vertical bar chart
 #### Scenario: Chart height is fixed at 350 pixels
 - **WHEN** 5, 12, or 30 model groups are present
 - **THEN** the chart height is always 350 pixels
-
