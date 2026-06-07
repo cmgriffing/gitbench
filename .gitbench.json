@@ -225,11 +225,7 @@
         "nvidia/nemotron-3-super-120b-a12b:high",
         "nvidia/nemotron-3-super-120b-a12b:xhigh",
 
-        "mistralai/devstral-2512:none",
-        "mistralai/devstral-2512:low",
-        "mistralai/devstral-2512:medium",
-        "mistralai/devstral-2512:high",
-        "mistralai/devstral-2512:xhigh",
+        "mistralai/devstral-2512",
 
         "deepseek/deepseek-v4-flash:none",
         "deepseek/deepseek-v4-flash:low",
@@ -237,23 +233,11 @@
         "deepseek/deepseek-v4-flash:high",
         "deepseek/deepseek-v4-flash:xhigh",
 
-        "liquid/lfm-2-24b-a2b:none",
-        "liquid/lfm-2-24b-a2b:low",
-        "liquid/lfm-2-24b-a2b:medium",
-        "liquid/lfm-2-24b-a2b:high",
-        "liquid/lfm-2-24b-a2b:xhigh",
+        "liquid/lfm-2-24b-a2b",
 
-        "ibm-granite/granite-4.1-8b:none",
-        "ibm-granite/granite-4.1-8b:low",
-        "ibm-granite/granite-4.1-8b:medium",
-        "ibm-granite/granite-4.1-8b:high",
-        "ibm-granite/granite-4.1-8b:xhigh",
+        "ibm-granite/granite-4.1-8b",
 
-        "inclusionai/ling-2.6-flash:none",
-        "inclusionai/ling-2.6-flash:low",
-        "inclusionai/ling-2.6-flash:medium",
-        "inclusionai/ling-2.6-flash:high",
-        "inclusionai/ling-2.6-flash:xhigh"
+        "inclusionai/ling-2.6-flash"
       ],
       "base_url": "https://openrouter.ai/api/v1",
       "api_key_env": "OPENROUTER_API_KEY"
@@ -261,17 +245,21 @@
 
     "openrouter-demo": {
       "model": [
-        "ibm-granite/granite-4.1-8b:none",
-        "ibm-granite/granite-4.1-8b:low",
-        "ibm-granite/granite-4.1-8b:medium",
-        "ibm-granite/granite-4.1-8b:high",
-        "ibm-granite/granite-4.1-8b:xhigh",
+        "ibm-granite/granite-4.1-8b",
 
-        "inclusionai/ling-2.6-flash:none",
-        "inclusionai/ling-2.6-flash:low",
-        "inclusionai/ling-2.6-flash:medium",
-        "inclusionai/ling-2.6-flash:high",
-        "inclusionai/ling-2.6-flash:xhigh"
+        "inclusionai/ling-2.6-flash",
+
+        "openai/gpt-oss-120b:none",
+        "openai/gpt-oss-120b:low",
+        "openai/gpt-oss-120b:medium",
+        "openai/gpt-oss-120b:high",
+        "openai/gpt-oss-120b:xhigh",
+
+        "openai/gpt-oss-20b:none",
+        "openai/gpt-oss-20b:low",
+        "openai/gpt-oss-20b:medium",
+        "openai/gpt-oss-20b:high",
+        "openai/gpt-oss-20b:xhigh"
       ],
       "base_url": "https://openrouter.ai/api/v1",
       "api_key_env": "OPENROUTER_API_KEY"

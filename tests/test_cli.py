@@ -997,7 +997,22 @@ class TestRunCommand:
 
             with patch("gitbench.cli.check_git_availability", return_value=True), \
                  patch("gitbench.cli._benchmark_registry", {"commit_messages": object()}), \
-                 patch("gitbench.harness.runner.BenchmarkRunner.run_all", side_effect=fake_run_all, autospec=True):
+                 patch("gitbench.harness.runner.BenchmarkRunner.run_all", side_effect=fake_run_all, autospec=True), \
+                 patch("gitbench.harness.capabilities.resolve_capabilities", return_value={
+                     "reasoning_models": {
+                         "minimax/minimax-m2.5",
+                         "nvidia/nemotron-3-nano-30b-a3b",
+                         "mistralai/mistral-small-3.2",
+                         "deepseek/deepseek-v4-flash",
+                     },
+                     "effort_matrix": {
+                         "minimax-m2.5": ["none", "minimal", "low", "medium", "high", "xhigh"],
+                         "nemotron-3-nano-30b-a3b": ["none", "minimal", "low", "medium", "high", "xhigh"],
+                         "mistral-small-3.2": ["none", "minimal", "low", "medium", "high", "xhigh"],
+                         "deepseek-v4-flash": ["none", "minimal", "low", "medium", "high", "xhigh"],
+                     },
+                     "fetched_at": "2026-01-01T00:00:00Z",
+                 }):
                 result = runner.invoke(
                     cli,
                     [
@@ -2882,3 +2897,139 @@ class TestRunnerSelectedFixtures:
 
         with pytest.raises(ValueError, match="f999"):
             runner.run_benchmark("fake", selected_fixture_ids=["f999"])
+
+
+class TestValidationGate:
+    """Integration tests for the new strict validation gate in run command."""
+
+    def test_run_with_valid_model_passes_validation(self, runner):
+        """Valid model-effort combo with mocked capabilities passes gate."""
+        caps = {
+            "reasoning_models": {"openai/gpt-4o"},
+            "effort_matrix": {
+                "gpt-4o": ["minimal", "low", "medium", "high", "xhigh"],
+            },
+            "fetched_at": "2026-01-01T00:00:00Z",
+        }
+
+        with runner.isolated_filesystem():
+            with open("gitbench.json", "w") as f:
+                json.dump({"models": {"test": {"models": ["mock"], "provider": "openai"}}}, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.harness.capabilities.resolve_capabilities", return_value=caps):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "openai/gpt-4o#high"],
+                )
+            assert result.exit_code == 0
+
+    def test_run_with_invalid_model_fails_gate(self, runner):
+        """Invalid model-effort combo aborts before API calls."""
+        caps = {
+            "reasoning_models": {"openai/gpt-4o-mini"},
+            "effort_matrix": {
+                "gpt-4o-mini": ["minimal", "low", "medium", "high"],
+            },
+            "fetched_at": "2026-01-01T00:00:00Z",
+        }
+
+        with runner.isolated_filesystem():
+            with open("gitbench.json", "w") as f:
+                json.dump({"models": {"test": {"models": ["mock"], "provider": "openai"}}}, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.harness.capabilities.resolve_capabilities", return_value=caps):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "gpt-4o-mini#xhigh"],
+                )
+            assert result.exit_code == 1
+            assert "does not support" in result.output.lower()
+
+    def test_run_with_invalid_level_name_fails_gate(self, runner):
+        """Invalid level name (not in VALID_REASONING_LEVELS) fails gate."""
+        caps = {
+            "reasoning_models": {"openai/gpt-4o"},
+            "effort_matrix": {"gpt-4o": ["high"]},
+            "fetched_at": "2026-01-01T00:00:00Z",
+        }
+
+        with runner.isolated_filesystem():
+            with open("gitbench.json", "w") as f:
+                json.dump({"models": {"test": {"models": ["mock"], "provider": "openai"}}}, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.harness.capabilities.resolve_capabilities", return_value=caps):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "gpt-4o#ultra"],
+                )
+            assert result.exit_code == 1
+            assert "invalid reasoning level" in result.output.lower()
+
+    def test_run_all_models_with_invalid_model_fails_gate(self, runner):
+        """--all-models with invalid config aborts before benchmark execution."""
+        caps = {
+            "reasoning_models": {"openai/gpt-4o-mini"},
+            "effort_matrix": {
+                "gpt-4o-mini": ["minimal", "low", "medium", "high"],
+            },
+            "fetched_at": "2026-01-01T00:00:00Z",
+        }
+
+        with runner.isolated_filesystem():
+            config = {
+                "models": {
+                    "bad": {
+                        "models": ["gpt-4o-mini#xhigh"],
+                        "provider": "openai",
+                    }
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.harness.capabilities.resolve_capabilities", return_value=caps):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--all-models"],
+                )
+            assert result.exit_code == 1
+            assert "does not support" in result.output.lower() or "xhigh" in result.output.lower()
+
+    def test_ollama_model_effort_warns_but_passes(self, runner):
+        """Ollama models with effort suffix warn but pass validation."""
+        caps = {
+            "reasoning_models": set(),
+            "effort_matrix": {},
+            "fetched_at": "2026-01-01T00:00:00Z",
+        }
+
+        with runner.isolated_filesystem():
+            config = {
+                "models": {
+                    "local": {
+                        "models": ["llama3.1:8b#high"],
+                        "provider": "ollama",
+                        "base_url": "http://localhost:11434",
+                    }
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True), \
+                 patch("gitbench.harness.capabilities.resolve_capabilities", return_value=caps):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--profile", "local"],
+                )
+            # Should pass through (warning logged but not fatal)
+            assert result.exit_code == 0

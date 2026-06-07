@@ -29,7 +29,8 @@ from gitbench.harness.capacity import (
     resolve_group_limits,
 )
 from gitbench.harness.model import MockModelClient, OllamaAdapter, OpenAIAdapter, parse_model_name
-from gitbench.harness.reasoning import validate_model_list
+from gitbench.harness.capabilities import validate_models
+from gitbench.harness.reasoning import parse_model_reasoning
 from gitbench.harness.runner import BenchmarkRunner, RunProgress
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
 from gitbench.render import _run_sort_key, aggregate_runs, write_sqlite_report_db
@@ -1146,9 +1147,20 @@ def run(
 
     # Validate all model-reasoning combinations before any benchmarks execute
     all_models_to_validate: list[str] = []
-    for _profile_name, _profile_conf, models_list in runs:
-        all_models_to_validate.extend(models_list)
-    validate_model_list(all_models_to_validate)
+    all_profile_configs: list[dict] = []
+    for _profile_name, profile_conf, models_list in runs:
+        for m in models_list:
+            all_models_to_validate.append(m)
+            all_profile_configs.append(profile_conf)
+
+    validation_errors = validate_models(all_models_to_validate, all_profile_configs)
+    if validation_errors:
+        click.echo(
+            f"\n  Validation failed: {len(validation_errors)} model-effort combination(s) are invalid:\n\n"
+            f"  " + "\n\n  ".join(validation_errors) + "\n\n  Aborting run.\n",
+            err=True,
+        )
+        sys.exit(1)
 
     capacity_by_target: dict[tuple[int, int], CapacityInfo] = {}
     for run_index, (_profile_name, profile_conf, models_list) in enumerate(runs):
