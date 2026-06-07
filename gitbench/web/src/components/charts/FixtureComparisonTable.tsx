@@ -177,6 +177,16 @@ export default function FixtureComparisonTable({
                       </td>
                     );
                   }
+                  if (fr.error) {
+                    return (
+                      <td
+                        key={e.modelName}
+                        className="text-(--color-text-dim) opacity-40 font-mono text-xs"
+                      >
+                        —
+                      </td>
+                    );
+                  }
                   const sim = Math.round(fr.similarity * 1000) / 10;
                   const color = fr.passed
                     ? "bg-pass-bg text-pass border-pass-border"
