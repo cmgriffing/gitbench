@@ -97,6 +97,7 @@ CREATE TABLE fixture_results (
   input_tokens INTEGER,
   output_tokens INTEGER,
   total_tokens INTEGER,
+  reasoning_tokens INTEGER,
   cost_usd REAL,
   duration_ms REAL,
   api_duration_ms REAL,
