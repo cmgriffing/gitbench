@@ -268,6 +268,8 @@ class OpenAIAdapter(ModelInterface):
                             if message is not None:
                                 reasoning_content = getattr(
                                     message, "reasoning_content", None
+                                ) or getattr(
+                                    message, "reasoning", None
                                 )
                                 if reasoning_content is not None:
                                     assistant_entry["reasoning_content"] = (

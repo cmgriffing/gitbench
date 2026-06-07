@@ -392,6 +392,7 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
                     "input_tokens": score.get("input_tokens"),
                     "output_tokens": score.get("output_tokens"),
                     "total_tokens": score.get("total_tokens"),
+                    "reasoning_tokens": score.get("reasoning_tokens"),
                     "cost_usd": score.get("cost_usd"),
                     "purpose": score.get("purpose"),
                     "difficulty": score.get("difficulty"),
@@ -797,6 +798,7 @@ def _insert_report_data(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
                         "input_tokens": result.get("input_tokens"),
                         "output_tokens": result.get("output_tokens"),
                         "total_tokens": result.get("total_tokens"),
+                        "reasoning_tokens": result.get("reasoning_tokens"),
                         "cost_usd": result.get("cost_usd"),
                         "duration_ms": result.get("duration_ms"),
                         "api_duration_ms": result.get("api_duration_ms"),
@@ -814,13 +816,13 @@ def _insert_report_data(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
         INSERT INTO fixture_results (
           model_name, output_mode, benchmark_name, fixture_id, passed, similarity, error,
           model_output, reasoning_level, input_tokens, output_tokens, total_tokens,
-          cost_usd, duration_ms, api_duration_ms, purpose, difficulty, tags_json,
+          reasoning_tokens, cost_usd, duration_ms, api_duration_ms, purpose, difficulty, tags_json,
           parsed_payload, raw_structured_output, structured_error
         )
         VALUES (
           :model_name, :output_mode, :benchmark_name, :fixture_id, :passed, :similarity, :error,
           :model_output, :reasoning_level, :input_tokens, :output_tokens,
-          :total_tokens, :cost_usd, :duration_ms, :api_duration_ms, :purpose,
+          :total_tokens, :reasoning_tokens, :cost_usd, :duration_ms, :api_duration_ms, :purpose,
           :difficulty, :tags_json, :parsed_payload, :raw_structured_output, :structured_error
         )
         """,
