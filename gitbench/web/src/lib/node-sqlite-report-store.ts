@@ -118,7 +118,8 @@ export class NodeSqliteReportStore implements ReportStore {
           SELECT model_name, output_mode,
                  COALESCE(SUM(input_tokens), 0) AS input_tokens,
                  COALESCE(SUM(output_tokens), 0) AS output_tokens,
-                 COALESCE(SUM(total_tokens), 0) AS total_tokens
+                 COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                 COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens
           FROM fixture_results
           GROUP BY model_name, output_mode
           `,
@@ -133,6 +134,7 @@ export class NodeSqliteReportStore implements ReportStore {
               input_tokens: Number(r.input_tokens),
               output_tokens: Number(r.output_tokens),
               total_tokens: Number(r.total_tokens),
+              reasoning_tokens: Number(r.reasoning_tokens),
             },
           ];
         }),
@@ -474,6 +476,7 @@ function fixtureResultFromRow(
     input_tokens: nullableNumber(row.input_tokens),
     output_tokens: nullableNumber(row.output_tokens),
     total_tokens: nullableNumber(row.total_tokens),
+    reasoning_tokens: nullableNumber(row.reasoning_tokens),
     cost_usd: nullableNumber(row.cost_usd),
     duration_ms: nullableNumber(row.duration_ms),
     api_duration_ms: nullableNumber(row.api_duration_ms),
