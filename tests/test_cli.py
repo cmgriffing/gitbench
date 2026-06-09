@@ -3706,3 +3706,168 @@ class TestValidationGate:
                 )
             # Should pass through (warning logged but not fatal)
             assert result.exit_code == 0
+
+
+class TestJudgeCliFlags:
+    """Tests for --judge and --judge-profile CLI flags."""
+
+    def test_judge_flag_without_profile_errors(self, runner):
+        """--judge flag without a config judge section or --judge-profile exits with error."""
+        with runner.isolated_filesystem():
+            config = {
+                "models": {
+                    "test": {
+                        "models": ["mock"],
+                        "provider": "openai",
+                    }
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "mock", "--judge"],
+                )
+            # Should error because no judge profile is available
+            assert result.exit_code != 0
+            assert "judge" in result.output.lower()
+
+    def test_judge_flag_with_config_judge_section(self, runner):
+        """--judge flag works when config has a judge section."""
+        with runner.isolated_filesystem():
+            config = {
+                "models": {
+                    "test": {
+                        "models": ["mock"],
+                        "provider": "openai",
+                    },
+                    "judge-profile": {
+                        "models": ["mock"],
+                        "provider": "openai",
+                    },
+                },
+                "judge": {
+                    "profile": "judge-profile",
+                },
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "mock", "--judge"],
+                )
+            assert result.exit_code == 0
+
+    def test_commit_messages_errors_without_judge_config(self, runner):
+        """Running commit_messages without a judge section exits with error."""
+        with runner.isolated_filesystem():
+            config = {
+                "models": {
+                    "test": {
+                        "models": ["claude-sonnet"],
+                        "provider": "openai",
+                        "base_url": "https://api.anthropic.com/v1",
+                    },
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--profile", "test"],
+                )
+            assert result.exit_code != 0
+            assert "require" in result.output.lower()
+            assert "judge" in result.output.lower()
+
+    def test_commit_messages_mock_skips_judge_requirement(self, runner):
+        """Running commit_messages with mock model skips the judge requirement."""
+        with runner.isolated_filesystem():
+            config = {}
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    ["run", "--benchmark", "commit_messages", "--model", "mock"],
+                )
+            assert result.exit_code == 0
+
+    def test_judge_profile_flag_accepted(self, runner):
+        """--judge-profile flag is accepted by the run command."""
+        with runner.isolated_filesystem():
+            config = {
+                "models": {
+                    "test": {
+                        "models": ["mock"],
+                        "provider": "openai",
+                    },
+                    "openrouter-llms-as-judges": {
+                        "models": ["mock"],
+                        "provider": "openai",
+                        "base_url": "https://openrouter.ai/api/v1",
+                        "api_key_env": "OR_KEY",
+                    },
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "--benchmark",
+                        "commit_messages",
+                        "--model",
+                        "mock",
+                        "--judge",
+                        "--judge-profile",
+                        "openrouter-llms-as-judges",
+                    ],
+                )
+            assert result.exit_code == 0
+
+    def test_judge_profile_must_exist(self, runner):
+        """--judge-profile referencing nonexistent profile exits with error."""
+        with runner.isolated_filesystem():
+            config = {
+                "models": {
+                    "test": {
+                        "models": ["mock"],
+                        "provider": "openai",
+                    }
+                }
+            }
+            with open("gitbench.json", "w") as f:
+                json.dump(config, f)
+
+            from unittest.mock import patch
+            with patch("gitbench.cli.check_git_availability", return_value=True):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "run",
+                        "--benchmark",
+                        "commit_messages",
+                        "--model",
+                        "mock",
+                        "--judge-profile",
+                        "nonexistent-judge-profile",
+                    ],
+                )
+            assert result.exit_code != 0
+            assert "not found" in result.output.lower()

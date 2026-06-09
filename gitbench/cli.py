@@ -22,7 +22,7 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
 
 from gitbench.benchmarks import Benchmark
-from gitbench.config import find_profile_for_model, load_config, load_project_env, resolve_profile
+from gitbench.config import find_profile_for_model, load_config, load_judge_config, load_project_env, resolve_profile
 from gitbench.export import FORMAT_REGISTRY, get_available_formats
 from gitbench.harness.capabilities import validate_models, load_effort_matrix, save_effort_mapping
 from gitbench.harness.capacity import (
@@ -1529,6 +1529,22 @@ def doctor(
         "'text' is free-form mode. 'json_schema' enforces fixture-specific JSON Schema structured output."
     ),
 )
+@click.option(
+    "--judge",
+    is_flag=True,
+    help=(
+        "Enable LLM judge scoring for configured benchmarks "
+        "(overrides the judge config benchmarks list)."
+    ),
+)
+@click.option(
+    "--judge-profile",
+    default=None,
+    help=(
+        "Override the judge model profile from config "
+        "(e.g. 'openrouter-llms-as-judges')."
+    ),
+)
 def run(
     run_all: bool,
     all_benchmarks_flag: bool,
@@ -1551,6 +1567,8 @@ def run(
     model_workers: int,
     fixture_workers: int,
     output_mode: str,
+    judge: bool,
+    judge_profile: str | None,
 ):
     """Run one or all benchmarks against the specified model."""
     run_log_path = configure_run_logging()
@@ -1738,6 +1756,65 @@ def run(
         )
         _run_effort_preflights(effort_targets)
 
+    # Resolve judge configuration
+    resolved_judge_config = None
+    if judge or judge_profile:
+        # CLI override: --judge or --judge-profile
+        raw_judge = load_judge_config(config)
+        if judge_profile:
+            if raw_judge is None:
+                raw_judge = {"profile": judge_profile}
+            else:
+                raw_judge = dict(raw_judge)
+                raw_judge["profile"] = judge_profile
+        if judge and raw_judge is None:
+            raise click.ClickException(
+                "--judge requires a judge profile. "
+                "Add a 'judge' section to gitbench.json or use --judge-profile.\n"
+                "Example: --judge --judge-profile my-judge-models"
+            )
+        if raw_judge is not None:
+            # Validate profile exists
+            if raw_judge["profile"]:
+                try:
+                    resolve_profile(config, raw_judge["profile"])
+                except SystemExit as e:
+                    raise click.ClickException(str(e))
+            resolved_judge_config = dict(raw_judge)
+            resolved_judge_config["_config"] = config
+    else:
+        # Use config-based judge if available
+        raw_judge = load_judge_config(config)
+        if raw_judge is not None:
+            resolved_judge_config = dict(raw_judge)
+            resolved_judge_config["_config"] = config
+
+    if resolved_judge_config is not None:
+        logger.info(
+            "Judge enabled: profile=%s",
+            resolved_judge_config.get("profile"),
+        )
+
+    # Validate that judge-required benchmarks have a judge configured.
+    # Skip the requirement when all models are mock (testing mode).
+    from gitbench.config import JUDGE_REQUIRED_BENCHMARKS
+
+    all_models_mock = all(
+        m == "mock" or m.startswith(("mock#", "mock:"))
+        for _, _, models in runs
+        for m in models
+    )
+    judge_required_requested = [
+        b for b in benchmarks_to_run if b in JUDGE_REQUIRED_BENCHMARKS
+    ]
+    if judge_required_requested and resolved_judge_config is None and not all_models_mock:
+        raise click.ClickException(
+            f"Benchmark(s) {', '.join(judge_required_requested)} require an LLM judge. "
+            "Add a 'judge' section to gitbench.json with a model profile "
+            "for the judge models. Example:\n"
+            '  "judge": {"profile": "my-judge-models"}'
+        )
+
     # Collect all run envelopes for combined aggregation when running "both"
     all_mode_envelopes: list[dict] = []
 
@@ -1847,6 +1924,7 @@ def run(
                             model_generate_kwargs=_profile_model_generate_kwargs(
                                 profile_conf
                             ),
+                            judge_config=resolved_judge_config,
                         )
                         future = executor.submit(
                             runner.run_all,
@@ -1957,6 +2035,7 @@ def run(
                                     model_generate_kwargs=_profile_model_generate_kwargs(
                                         profile_conf
                                     ),
+                                    judge_config=resolved_judge_config,
                                 )
                                 future = executor.submit(
                                     runner.run_all,
@@ -2020,6 +2099,7 @@ def run(
                                 model_generate_kwargs=_profile_model_generate_kwargs(
                                     profile_conf
                                 ),
+                                judge_config=resolved_judge_config,
                             )
                             model_result = runner.run_all(
                                 benchmarks_to_run,

@@ -586,8 +586,12 @@ class Scorer:
     - structured: per-field scoring
     """
 
-    def __init__(self):
-        """Initialize the scorer with sub-scorers."""
+    def __init__(self, judge_client=None):
+        """Initialize the scorer with sub-scorers.
+
+        Args:
+            judge_client: Optional JudgeClient for LLM-based scoring.
+        """
         self._state_scorer = StateAssertionScorer()
         self._structured_scorer = StructuredScorer()
         self._command_equivalence_scorer = CommandEquivalenceScorer()
@@ -595,8 +599,9 @@ class Scorer:
         self._numeric_exact_scorer = NumericExactScorer()
         self._commit_hash_by_subject_scorer = CommitHashBySubjectScorer()
         self._json_semantic_equal_scorer = JsonSemanticEqualScorer()
+        self._judge_client = judge_client
 
-    def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None) -> Score:
+    def score(self, fixture: Fixture, model_output: str, repo_path: str | None = None, diff: str | None = None) -> Score:
         """Score a model output against the expected value.
 
         Args:
@@ -616,6 +621,44 @@ class Scorer:
 
         try:
             if scoring_type == "similarity":
+                if self._judge_client is not None and diff is not None:
+                    try:
+                        similarity = self._judge_client.evaluate_commit_message(
+                            diff, model_output
+                        )
+                        passed = similarity >= threshold
+                        return Score(
+                            fixture_id=fixture.id,
+                            passed=passed,
+                            similarity=round(similarity, 4),
+                            model_output=model_output,
+                            error=None,
+                            purpose=fixture.purpose or None,
+                            difficulty=fixture.difficulty or None,
+                            tags=fixture.tags or None,
+                        )
+                    except ValueError as e:
+                        logger.warning(
+                            "Judge failed for fixture %s, falling back to "
+                            "SequenceMatcher: %s",
+                            fixture.id,
+                            e,
+                        )
+                        similarity = difflib.SequenceMatcher(
+                            None, model_output, fixture.expected
+                        ).ratio()
+                        passed = similarity >= threshold
+                        return Score(
+                            fixture_id=fixture.id,
+                            passed=passed,
+                            similarity=round(similarity, 4),
+                            model_output=model_output,
+                            error=f"judge_failed: {e}",
+                            purpose=fixture.purpose or None,
+                            difficulty=fixture.difficulty or None,
+                            tags=fixture.tags or None,
+                        )
+
                 similarity = difflib.SequenceMatcher(
                     None, model_output, fixture.expected
                 ).ratio()

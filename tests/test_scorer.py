@@ -492,3 +492,115 @@ class TestScorer:
         result = scorer.score(fixture, '{"version":"1.0.0"}')
 
         assert result.passed is False
+
+
+class TestScorerJudgeIntegration:
+    """Tests for Scorer with JudgeClient integration."""
+
+    @pytest.fixture
+    def mock_judge_client(self):
+        """Create a mock JudgeClient."""
+        from unittest.mock import MagicMock
+        mock = MagicMock()
+        mock.evaluate_commit_message.return_value = 0.85
+        return mock
+
+    @pytest.fixture
+    def similarity_fixture(self):
+        """Create a similarity-type fixture."""
+        return Fixture(
+            id="judge_001",
+            description="Judge-enabled fixture",
+            setup=["git init"],
+            prompt="Generate commit message",
+            expected="fix: correct spelling error in file.txt",
+            scoring={"type": "similarity", "threshold": 0.7},
+        )
+
+    def test_scorer_uses_judge_when_diff_provided(
+        self, mock_judge_client, similarity_fixture
+    ):
+        """Scorer uses judge when judge_client and diff are provided."""
+        scorer = Scorer(judge_client=mock_judge_client)
+
+        result = scorer.score(
+            similarity_fixture,
+            "fix: correct spelling error",
+            diff="diff --git a/file.txt b/file.txt",
+        )
+
+        assert result.passed is True
+        assert result.similarity == 0.85
+        mock_judge_client.evaluate_commit_message.assert_called_once_with(
+            "diff --git a/file.txt b/file.txt",
+            "fix: correct spelling error",
+        )
+
+    def test_scorer_falls_back_when_no_diff(
+        self, mock_judge_client, similarity_fixture
+    ):
+        """Scorer uses SequenceMatcher when judge_client exists but no diff."""
+        scorer = Scorer(judge_client=mock_judge_client)
+
+        result = scorer.score(
+            similarity_fixture,
+            similarity_fixture.expected,
+        )
+
+        # No diff, so should use SequenceMatcher (exact match = 1.0)
+        assert result.passed is True
+        assert result.similarity == 1.0
+        mock_judge_client.evaluate_commit_message.assert_not_called()
+
+    def test_scorer_falls_back_when_no_judge(self, similarity_fixture):
+        """Scorer uses SequenceMatcher when no judge_client configured."""
+        scorer = Scorer()
+
+        result = scorer.score(
+            similarity_fixture,
+            similarity_fixture.expected,
+            diff="diff content",
+        )
+
+        # No judge, so should use SequenceMatcher (exact match = 1.0)
+        assert result.passed is True
+        assert result.similarity == 1.0
+
+    def test_scorer_falls_back_on_judge_error(
+        self, mock_judge_client, similarity_fixture
+    ):
+        """Scorer falls back to SequenceMatcher and sets error on judge failure."""
+        mock_judge_client.evaluate_commit_message.side_effect = ValueError(
+            "Judge call failed after retry: connection error"
+        )
+        scorer = Scorer(judge_client=mock_judge_client)
+
+        result = scorer.score(
+            similarity_fixture,
+            "fix: correct spelling error",
+            diff="diff content",
+        )
+
+        assert result.error is not None
+        assert "judge_failed" in result.error
+        # Should have fallen back to SequenceMatcher
+        assert 0.0 <= result.similarity <= 1.0
+
+    def test_scorer_ignores_judge_for_non_similarity_type(
+        self, mock_judge_client
+    ):
+        """Scorer does not use judge for non-similarity scoring types."""
+        fixture = Fixture(
+            id="exact_001",
+            description="Exact match fixture",
+            setup=[],
+            prompt="Give answer",
+            expected="hello",
+            scoring={"type": "exact_match"},
+        )
+        scorer = Scorer(judge_client=mock_judge_client)
+
+        result = scorer.score(fixture, "hello", diff="some diff")
+
+        assert result.passed is True
+        mock_judge_client.evaluate_commit_message.assert_not_called()

@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 CONFIG_FILENAMES = ["gitbench.json", ".gitbench.json"]
 USER_CONFIG = Path.home() / ".gitbench.json"
 
+# Benchmarks that require an LLM judge for semantic scoring.
+# Running these without a judge section in config will error.
+JUDGE_REQUIRED_BENCHMARKS: set[str] = {"commit_messages"}
+
 
 def load_project_env(config_path: Path | None = None) -> bool:
     """Load a project .env file without overriding existing environment values."""
@@ -128,6 +132,38 @@ def resolve_profile(config: dict[str, Any], profile_name: str) -> dict[str, Any]
             profile["provider"] = "openai"
 
     return profile
+
+
+def load_judge_config(config: dict[str, Any]) -> dict[str, Any] | None:
+    """Parse the ``judge`` section from config.
+
+    Args:
+        config: Full config dict.
+
+    Returns:
+        Dict with key ``profile`` (str), or None if no judge section is present.
+
+    Raises:
+        SystemExit: If the judge profile is not found.
+    """
+    judge = config.get("judge")
+    if not judge or not isinstance(judge, dict):
+        return None
+
+    profile_name = judge.get("profile")
+    if not profile_name:
+        return None
+
+    # Validate that the profile exists
+    try:
+        resolve_profile(config, profile_name)
+    except SystemExit:
+        raise SystemExit(
+            f"Judge profile '{profile_name}' not found in config. "
+            f"Available profiles: {list(config.get('models', {}).keys())}"
+        )
+
+    return {"profile": profile_name}
 
 
 def find_profile_for_model(config: dict[str, Any], model: str) -> dict[str, Any]:

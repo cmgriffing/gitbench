@@ -243,27 +243,18 @@
       "api_key_env": "OPENROUTER_API_KEY"
     },
 
-    "openrouter-demo": {
+    "openrouter-llms-as-judges": {
       "model": [
         "ibm-granite/granite-4.1-8b",
-
         "inclusionai/ling-2.6-flash",
-
-        "openai/gpt-oss-120b:none",
-        "openai/gpt-oss-120b:low",
-        "openai/gpt-oss-120b:medium",
-        "openai/gpt-oss-120b:high",
-        "openai/gpt-oss-120b:xhigh",
-
-        "openai/gpt-oss-20b:none",
-        "openai/gpt-oss-20b:low",
-        "openai/gpt-oss-20b:medium",
-        "openai/gpt-oss-20b:high",
-        "openai/gpt-oss-20b:xhigh"
+        "openai/gpt-oss-120b:xhigh"
       ],
       "base_url": "https://openrouter.ai/api/v1",
       "api_key_env": "OPENROUTER_API_KEY"
     }
+  },
+  "judge": {
+    "profile": "openrouter-llms-as-judges"
   },
   "disabledModels": []
 }

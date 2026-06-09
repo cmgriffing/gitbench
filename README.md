@@ -114,6 +114,8 @@ Key options:
 | `--retry-count`, `-r` | Retry attempts on failure (default: 3) |
 | `--model-workers` | Number of models to run concurrently (default: 1) |
 | `--fixture-workers` | Number of fixtures to run concurrently within a benchmark (default: 1) |
+| `--judge` | Enable LLM judge scoring (overrides config benchmarks list) |
+| `--judge-profile` | Override the judge model profile from config |
 
 ### Output options
 
@@ -158,6 +160,74 @@ Valid levels: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` (model-
 The harness validates the combination before any calls are made, failing fast on invalid pairings.
 A final colon segment is treated as effort only when it matches one of these values, so model IDs
 such as `llama3.1:8b` keep their tag as part of the base model name.
+
+### LLM Judge Scoring
+
+GitBench uses a secondary LLM ("judge") to evaluate free-text outputs semantically
+rather than relying on character-level similarity. The `commit_messages` benchmark
+**requires** a judge — it will not run without one.
+
+**Judge model group** — create a dedicated model profile for your judge models
+in `gitbench.json`. These should be cheap, fast models:
+
+```json
+{
+  "models": {
+    "my-judge-models": {
+      "models": ["granite-4.1-8b", "ling-2.6-flash"],
+      "provider": "openai",
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY"
+    }
+  }
+}
+```
+
+**Configuration** — add a `judge` section referencing the judge model group:
+
+```json
+{
+  "judge": {
+    "profile": "my-judge-models"
+  }
+}
+```
+
+- `profile` (required): Name of a model profile to use as the judge model group.
+  The first model in the profile is used for all judge calls. The judge
+  automatically applies to all judge-required benchmarks (`commit_messages`).
+
+**CLI usage**:
+
+```bash
+# Judge auto-enabled for commit_messages when config has a judge section
+gitbench run --benchmark commit_messages --model gpt-4o
+
+# Explicitly enable/override
+gitbench run --benchmark commit_messages --model gpt-4o --judge
+
+# Override the judge profile
+gitbench run --benchmark commit_messages --model gpt-4o --judge --judge-profile my-other-judge
+
+# Mock model skips the judge requirement (for testing)
+gitbench run --benchmark commit_messages --model mock
+```
+
+**How it works**:
+
+1. The judge model receives the git diff and the model's generated commit message.
+2. It returns a score between 0.0 and 1.0 rating the message quality.
+3. This score replaces the `SequenceMatcher` similarity score.
+4. On runtime failure (after one retry), the system falls back to `SequenceMatcher`
+   and marks the result with a "judge_failed" error.
+5. Running `commit_messages` without a `judge` section exits with an error
+   (except with `--model mock` for testing).
+
+**Judge prompt criteria**:
+- Accuracy: Does the message describe the diff changes?
+- Conciseness: Is the message well-structured?
+- Convention: Does it follow conventional commit format?
+- Intent: Does it capture the change's purpose and scope?
 
 ### Request concurrency budgets
 

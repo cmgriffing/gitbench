@@ -7,7 +7,9 @@ from typing import Protocol
 
 from gitbench.harness.benchmark import Benchmark
 from gitbench.harness.capacity import RequestBudgetCoordinator
+from gitbench.harness.judge import JudgeClient
 from gitbench.harness.model import ModelInterface, ReasoningDisableError
+from gitbench.harness.scorer import Scorer
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
 from gitbench.structured_output import (
     canonicalize,
@@ -46,6 +48,7 @@ class BenchmarkRunner:
         capacity_key: str | None = None,
         output_mode: str = DEFAULT_OUTPUT_MODE,
         model_generate_kwargs: dict | None = None,
+        judge_config: dict | None = None,
     ) -> None:
         """Initialise the runner.
 
@@ -53,6 +56,9 @@ class BenchmarkRunner:
             registry: A mapping of benchmark name → class.
             model_client: The model adapter to call for generation.
             output_mode: ``text``, ``json_schema``, or ``both`` (default).
+            judge_config: Optional judge config dict with a ``profile`` key.
+                When provided, a JudgeClient is created and wired into
+                the Scorer for all judge-required benchmarks.
         """
         self._registry = registry
         self._model_client = model_client
@@ -60,6 +66,30 @@ class BenchmarkRunner:
         self._capacity_key = capacity_key
         self._output_mode = output_mode
         self._model_generate_kwargs = dict(model_generate_kwargs or {})
+        self._judge_config = judge_config
+        self._judge_client: JudgeClient | None = None
+        self._judge_benchmarks: set[str] = set()
+
+        if judge_config is not None:
+            from gitbench.config import JUDGE_REQUIRED_BENCHMARKS, resolve_profile
+
+            judge_profile = resolve_profile(judge_config["_config"], judge_config["profile"])
+            judge_model_client = self._create_judge_model_client(judge_profile)
+            self._judge_client = JudgeClient(judge_model_client)
+            self._judge_benchmarks = JUDGE_REQUIRED_BENCHMARKS
+
+    def _create_judge_model_client(self, profile: dict):
+        """Create a model client for the judge from a resolved profile."""
+        from gitbench.cli import get_model_client
+
+        models = profile.get("models", [])
+        model = models[0] if models else ""
+        return get_model_client(
+            model,
+            base_url=profile.get("base_url"),
+            api_key=profile.get("api_key"),
+            provider=profile.get("provider"),
+        )
 
     def run_benchmark(
         self,
@@ -94,6 +124,11 @@ class BenchmarkRunner:
 
         benchmark_class = self._registry[benchmark_name]
         benchmark = benchmark_class()
+
+        # Inject judge client if this benchmark is judge-enabled
+        if self._judge_client is not None and benchmark_name in self._judge_benchmarks:
+            benchmark._scorer = Scorer(judge_client=self._judge_client)
+
         model_name = progress_model_name or benchmark_name
 
         logger.debug("Loading fixtures for %s ...", benchmark_name)
@@ -310,7 +345,7 @@ class BenchmarkRunner:
                 score._output_mode = output_mode
                 return fixture.id, score
 
-            score = benchmark.score(fixture, model_output, repo_path=repo_path)
+            score = benchmark.score(fixture, model_output, repo_path=repo_path, diff=diff)
             score.reasoning_level = getattr(
                 self._model_client, "reasoning_level", None
             )

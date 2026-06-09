@@ -438,3 +438,130 @@ class TestEndToEndPipeline:
             cwd=Path(__file__).parent.parent,
         )
         assert result.returncode != 0, "CLI should exit with non-zero code for unknown benchmark"
+
+
+class TestJudgeEndToEnd:
+    """End-to-end tests for LLM judge scoring."""
+
+    def test_judge_scorer_integration_with_mock(self):
+        """End-to-end: judge scoring via CLI with mock models for both judge and test model."""
+        import json
+        import sys
+        from pathlib import Path
+
+        with open(Path(__file__).parent / "gitbench_judge_test.json", "w") as f:
+            json.dump({
+                "models": {
+                    "test": {
+                        "models": ["mock"],
+                        "provider": "openai",
+                    },
+                    "judge-profile": {
+                        "models": ["mock"],
+                        "provider": "openai",
+                    },
+                },
+                "judge": {
+                    "profile": "judge-profile",
+                },
+            }, f)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "gitbench.cli",
+                "run",
+                "--benchmark",
+                "commit_messages",
+                "--model",
+                "mock",
+                "--output-mode",
+                "text",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent,
+            env={**__import__("os").environ, "GITBENCH_CONFIG": str(Path(__file__).parent / "gitbench_judge_test.json")},
+        )
+
+        # Clean up
+        (Path(__file__).parent / "gitbench_judge_test.json").unlink(missing_ok=True)
+
+        assert result.returncode == 0, f"CLI failed: {result.stderr}"
+
+        stdout = result.stdout
+        json_start = stdout.find("{")
+        assert json_start != -1, f"No JSON in output:\n{stdout}"
+        data = json.loads(stdout[json_start:])
+        assert data["benchmark"] == "commit_messages"
+        assert data["total"] > 0
+
+    def test_judge_client_creates_valid_scores(self):
+        """JudgeClient integration: scores from judge flow through to Score objects."""
+        from unittest.mock import MagicMock
+
+        from gitbench.benchmarks.commit_messages import CommitMessagesBenchmark
+        from gitbench.harness.judge import JudgeClient
+        from gitbench.harness.scorer import Scorer
+        from gitbench.harness.types import Fixture
+
+        mock_model = MagicMock()
+        mock_model.generate.return_value = {"text": "0.9", "content": "0.9"}
+        judge_client = JudgeClient(mock_model)
+
+        scorer = Scorer(judge_client=judge_client)
+        fixture = Fixture(
+            id="e2e_001",
+            description="E2E judge test",
+            setup=["git init"],
+            prompt="Generate commit message",
+            expected="feat: add user authentication",
+            scoring={"type": "similarity", "threshold": 0.7},
+        )
+
+        result = scorer.score(
+            fixture,
+            "feat: add login system",
+            diff="diff --git a/auth.py b/auth.py\n+def login(): pass",
+        )
+
+        assert result.passed is True
+        assert result.similarity == 0.9
+        assert result.error is None
+
+    def test_judge_fallback_produces_error_on_score(self):
+        """When judge fails and falls back, the Score has an error field."""
+        from unittest.mock import MagicMock
+
+        from gitbench.harness.judge import JudgeClient
+        from gitbench.harness.scorer import Scorer
+        from gitbench.harness.types import Fixture
+
+        mock_model = MagicMock()
+        mock_model.generate.side_effect = [
+            RuntimeError("Connection refused"),
+            RuntimeError("Connection refused"),
+        ]
+        judge_client = JudgeClient(mock_model)
+
+        scorer = Scorer(judge_client=judge_client)
+        fixture = Fixture(
+            id="e2e_002",
+            description="E2E fallback test",
+            setup=["git init"],
+            prompt="Generate commit message",
+            expected="feat: add user auth",
+            scoring={"type": "similarity", "threshold": 0.7},
+        )
+
+        result = scorer.score(
+            fixture,
+            "feat: add user auth",
+            diff="some diff",
+        )
+
+        assert result.error is not None
+        assert "judge_failed" in result.error
+        # Fallback to SequenceMatcher should compute similarity
+        assert 0.0 <= result.similarity <= 1.0
