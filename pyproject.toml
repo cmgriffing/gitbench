@@ -8,10 +8,8 @@ version = "0.1.0"
 description = "A benchmark harness for evaluating LLM-generated git commit messages"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
-authors = [
-    {name = "GitBench Team"}
-]
+license = { text = "MIT" }
+authors = [{ name = "GitBench Team" }]
 keywords = ["git", "benchmark", "llm", "commit-messages"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -38,6 +36,7 @@ dev = [
     "pytest-timeout>=2.1.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+    "pre-commit>=4.6.0",
 ]
 all = [
     "pytest>=7.0.0",
@@ -45,6 +44,7 @@ all = [
     "pytest-timeout>=2.1.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+    "pre-commit>=4.6.0",
 ]
 
 [project.scripts]
