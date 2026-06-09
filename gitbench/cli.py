@@ -1159,6 +1159,9 @@ def _doctor_one_file(
         mark_scores_retried(payload, target)
         write_result_payload(final_output_path, payload)
 
+        # Rate-limit: 1s pause between targets to avoid upstream global rate limits
+        time.sleep(1.0)
+
         # Track consecutive failures for bailout
         if result.passed == 0 and result.total > 0:
             consecutive_failures[model_key] = consecutive_failures.get(model_key, 0) + 1
