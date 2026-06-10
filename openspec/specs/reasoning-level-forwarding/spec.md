@@ -34,7 +34,7 @@ When an `OpenAIAdapter` was constructed with a reasoning level, calls to `genera
 ## ADDED Requirements
 
 ### Requirement: None responses contain verifiable zero reasoning
-Every response produced by a model configured with reasoning level `none` SHALL explicitly report zero reasoning tokens and SHALL contain no non-empty reasoning content. A violation or missing reasoning telemetry SHALL raise a fatal reasoning-disable error rather than being converted into an ordinary failed fixture score.
+Every response produced by a model configured with reasoning level `none` SHALL explicitly report zero reasoning tokens and SHALL contain no non-empty reasoning content. The adapter SHALL raise a dedicated reasoning-disable error for violations. During preflight this error SHALL abort the run before benchmark fixtures start; during fixture execution it SHALL be recorded as an ordinary failed fixture score.
 
 #### Scenario: None response reports zero reasoning
 - **WHEN** a `none` response reports `reasoning_tokens: 0` and has no reasoning content
@@ -42,19 +42,19 @@ Every response produced by a model configured with reasoning level `none` SHALL 
 
 #### Scenario: None response reports reasoning tokens
 - **WHEN** a `none` response reports `reasoning_tokens` greater than zero
-- **THEN** the adapter SHALL raise a fatal reasoning-disable error identifying the model and observed token count
+- **THEN** the adapter SHALL raise a reasoning-disable error identifying the model and observed token count
 
 #### Scenario: None response contains reasoning content
 - **WHEN** a `none` response contains non-empty `reasoning`, `reasoning_content`, or equivalent normalized reasoning text
-- **THEN** the adapter SHALL raise a fatal reasoning-disable error
+- **THEN** the adapter SHALL raise a reasoning-disable error
 
 #### Scenario: None response omits reasoning telemetry
 - **WHEN** a `none` response has no explicit reasoning-token count
-- **THEN** the adapter SHALL raise a fatal reasoning-disable error stating that the no-reasoning invariant could not be verified
+- **THEN** the adapter SHALL raise a reasoning-disable error stating that the no-reasoning invariant could not be verified
 
-#### Scenario: Runtime violation aborts target
+#### Scenario: Runtime violation fails fixture
 - **WHEN** a benchmark fixture response violates the `none` invariant after preflight succeeded
-- **THEN** GitBench SHALL stop scheduling work for the target, cancel pending work best-effort, omit the violating response from normal scores, and exit the run non-zero
+- **THEN** GitBench SHALL record the fixture as failed with the violation diagnostic and continue the benchmark run
 
 ### Requirement: OllamaAdapter ignores reasoning level
 When an `OllamaAdapter` was constructed with a reasoning level, calls to `generate()` SHALL log a debug message and NOT include the level in the request.
