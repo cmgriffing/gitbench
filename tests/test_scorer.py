@@ -1,11 +1,15 @@
 """Tests for the scoring engine."""
 
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from gitbench.harness.scorer import Scorer
+from gitbench.harness.loader import FixtureLoader
+from gitbench.harness.scorer import Scorer, _strip_wrapping_fence
 from gitbench.harness.types import Fixture, Score
+
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 class TestScorer:
@@ -492,6 +496,115 @@ class TestScorer:
         result = scorer.score(fixture, '{"version":"1.0.0"}')
 
         assert result.passed is False
+
+
+class TestStripWrappingFence:
+    """Tests for the _strip_wrapping_fence helper."""
+
+    def test_bare_fence_stripped(self):
+        assert _strip_wrapping_fence("```\nHello, Planet!!!\n```") == "Hello, Planet!!!"
+
+    def test_fence_with_language_tag_stripped(self):
+        assert _strip_wrapping_fence("```python\nx = 1\ny = 2\n```") == "x = 1\ny = 2"
+
+    def test_no_fence_unchanged(self):
+        assert _strip_wrapping_fence("Hello, Planet!!!") == "Hello, Planet!!!"
+
+    def test_unterminated_fence_unchanged(self):
+        text = "```\nHello, Planet!!!"
+        assert _strip_wrapping_fence(text) == text
+
+    def test_internal_backticks_preserved(self):
+        text = "```\nuse `git log` here\n```"
+        assert _strip_wrapping_fence(text) == "use `git log` here"
+
+    def test_surrounding_whitespace_tolerated(self):
+        assert _strip_wrapping_fence("  \n```\ncontent\n```\n  ") == "content"
+
+    def test_non_language_opening_line_unchanged(self):
+        text = "```not a language tag\ncontent\n```"
+        assert _strip_wrapping_fence(text) == text
+
+
+class TestExactMatchStripFences:
+    """Tests for exact_match scoring with the strip_fences option."""
+
+    @pytest.fixture
+    def scorer(self):
+        return Scorer()
+
+    def fixture_with(self, scoring):
+        return Fixture(
+            id="fence_001",
+            description="Conflict resolution fixture",
+            setup=[],
+            prompt="Provide ONLY the resolved file content",
+            expected="Hello, Planet!!!",
+            scoring=scoring,
+        )
+
+    def test_fenced_correct_output_passes(self, scorer):
+        fixture = self.fixture_with({"type": "exact_match", "strip_fences": True})
+
+        result = scorer.score(fixture, "```\nHello, Planet!!!\n```")
+
+        assert result.passed is True
+        assert result.similarity == 1.0
+
+    def test_unfenced_wrong_output_fails(self, scorer):
+        fixture = self.fixture_with({"type": "exact_match", "strip_fences": True})
+
+        result = scorer.score(fixture, "Hello, World!!!")
+
+        assert result.passed is False
+        assert result.similarity == 0.0
+
+    def test_fenced_output_fails_without_flag(self, scorer):
+        fixture = self.fixture_with({"type": "exact_match"})
+
+        result = scorer.score(fixture, "```\nHello, Planet!!!\n```")
+
+        assert result.passed is False
+
+    def test_original_false_positive_now_fails(self, scorer):
+        """Regression: 'Hello, Planet!' scored 0.933 similarity against
+        'Hello, Planet!!!' and passed the 0.9 threshold before migration."""
+        fixture = self.fixture_with({"type": "exact_match", "strip_fences": True})
+
+        result = scorer.score(fixture, "Hello, Planet!")
+
+        assert result.passed is False
+        assert result.similarity == 0.0
+
+
+class TestMigratedGitGrepFixture:
+    """Tests for git_grep/f001 under unordered_line_set scoring."""
+
+    @pytest.fixture
+    def fixture(self):
+        loader = FixtureLoader()
+        fixtures = loader.load_file(str(FIXTURES_DIR / "git_grep" / "f001.yaml"))
+        return fixtures[0]
+
+    def test_migrated_scoring_type(self, fixture):
+        assert fixture.scoring == {"type": "unordered_line_set"}
+
+    def test_expected_answer_passes(self, fixture):
+        result = Scorer().score(fixture, fixture.expected)
+
+        assert result.passed is True
+
+    def test_reordered_lines_pass(self, fixture):
+        reordered = "\n".join(reversed(fixture.expected.splitlines()))
+        result = Scorer().score(fixture, reordered)
+
+        assert result.passed is True
+
+    def test_extra_filename_fails(self, fixture):
+        result = Scorer().score(fixture, fixture.expected + "\nsrc/db.py")
+
+        assert result.passed is False
+        assert "Extra lines" in result.error
 
 
 class TestScorerJudgeIntegration:

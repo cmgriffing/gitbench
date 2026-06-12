@@ -34,3 +34,4 @@ gitbench-logs/
 .codex
 .claude
 gitbench.egg-info/
+gitbench-results-dirty

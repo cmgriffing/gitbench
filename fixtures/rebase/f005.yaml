@@ -23,8 +23,9 @@ prompt: Resolve the rebase conflict in greet.py. The base was a simple greet wit
   file content.
 expected: "def greet(name):\n    print(\"Hi there\")\n    return False\n"
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
+  strip_fences: true
+  order_matters: true
 purpose: Tests ability to resolve a function-body conflict during rebase. Evaluates
   semantic merging of code with rebase direction awareness.
 difficulty: medium

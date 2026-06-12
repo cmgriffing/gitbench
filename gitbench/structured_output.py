@@ -327,7 +327,9 @@ SCORING_TYPE_TEMPLATES: dict[str, tuple[callable, str, str]] = {
 # Benchmarks/situations where the default mapping should be overridden.
 # Keyed by benchmark name.
 BENCHMARK_TEMPLATE_OVERRIDES: dict[str, tuple[callable, str, str]] = {
+    "cherry_pick": (resolved_content_template, "resolved_content", "file_block"),
     "merge_conflicts": (resolved_content_template, "resolved_content", "file_block"),
+    "rebase": (resolved_content_template, "resolved_content", "file_block"),
     "branch_cleanup": (branch_list_template, "branches_to_delete", "lines"),
     "commit_messages": (commit_message_template, "commit", "string"),
 }
@@ -392,7 +394,7 @@ def contract_for_benchmark_fixture(
 
     Precedence:
     1. Fixture's explicit ``structured_output`` field (always wins).
-    2. Benchmark-level override (branch_cleanup, merge_conflicts, commit_messages).
+    2. Benchmark-level override (branch_cleanup, cherry_pick, merge_conflicts, rebase, commit_messages).
     3. Scoring-type-specific template (for special cases within state-assertion benchmarks).
     4. State-assertion benchmark fallback (command_list).
     """

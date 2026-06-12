@@ -40,8 +40,9 @@ expected: 'Name: John Doe
 
   '
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
+  strip_fences: true
+  order_matters: true
 purpose: Tests ability to resolve a multi-line address block conflict during rebase.
   Evaluates combining partial updates with correct polarity.
 difficulty: medium

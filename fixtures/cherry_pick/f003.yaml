@@ -21,8 +21,8 @@ prompt: 'Resolve the cherry-pick conflict in status.txt. The base was ''Status: 
   Failed''. Provide ONLY the resolved file content.'
 expected: 'Status: Resolved'
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
+  strip_fences: true
 purpose: Tests ability to resolve a status-message conflict. Evaluates choosing between
   conflicting status values from different branches.
 difficulty: easy

@@ -120,6 +120,28 @@ def _check_assertion(assertion: dict[str, Any], repo_path: str, model_output: st
         return False
 
 
+def _strip_wrapping_fence(text: str) -> str:
+    """Remove a single wrapping triple-backtick fence from text.
+
+    Handles an optional language tag on the opening fence line. Returns the
+    input unchanged when no complete wrapping fence is present (including
+    unterminated fences).
+    """
+    stripped = text.strip()
+    lines = stripped.splitlines()
+    if len(lines) < 2:
+        return text
+    opening = lines[0].strip()
+    closing = lines[-1].strip()
+    if not opening.startswith("```") or closing != "```":
+        return text
+    # Opening line must be the fence plus an optional language tag only
+    tag = opening[3:].strip()
+    if tag and not re.fullmatch(r"[\w+.-]+", tag):
+        return text
+    return "\n".join(lines[1:-1]).strip()
+
+
 def _parse_structured_output(model_output: str) -> dict[str, str]:
     """Parse structured key-value output from model.
 
@@ -676,7 +698,10 @@ class Scorer:
                 )
 
             elif scoring_type == "exact_match":
-                match = model_output.strip() == fixture.expected.strip()
+                compared_output = model_output
+                if scoring.get("strip_fences"):
+                    compared_output = _strip_wrapping_fence(compared_output)
+                match = compared_output.strip() == fixture.expected.strip()
                 return Score(
                     fixture_id=fixture.id,
                     passed=match,

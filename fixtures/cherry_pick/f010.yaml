@@ -35,8 +35,9 @@ prompt: 'Resolve the cherry-pick conflicts in main.py and utils.py. For main.py:
 expected: "main.py:\ndef main():\n    print(\"Running enterprise\")\n\nutils.py:\n\
   DEBUG = True\nPORT = 9000\n"
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
+  strip_fences: true
+  order_matters: true
 purpose: Tests ability to resolve simultaneous conflicts in two files with different
   resolution strategies per file. Evaluates multi-file conflict juggling.
 difficulty: hard

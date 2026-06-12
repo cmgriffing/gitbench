@@ -179,7 +179,7 @@ class TestMergeConflictsBenchmark:
         result = benchmark.score(fixture, incomplete_output)
 
         assert result.passed is False
-        assert result.similarity < fixture.scoring["threshold"]
+        assert result.similarity == 0.0
 
 
 class TestCommitSquashBenchmark:

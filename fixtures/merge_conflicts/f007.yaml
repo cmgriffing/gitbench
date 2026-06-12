@@ -36,8 +36,9 @@ expected: 'PORT=8443
 
   '
 scoring:
-  type: similarity
-  threshold: 0.9
+  type: exact_match
+  strip_fences: true
+  order_matters: true
 purpose: Tests ability to resolve a three-way merge conflict with port and protocol
   settings. Evaluates multi-dimensional conflict resolution with explicit preferences.
 difficulty: hard
