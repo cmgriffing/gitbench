@@ -6,9 +6,9 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from typing import Protocol
 
 from gitbench.harness.benchmark import Benchmark
-from gitbench.harness.capacity import RequestBudgetCoordinator
+from gitbench.harness.capacity import RequestAttemptGate, RequestBudgetCoordinator
 from gitbench.harness.judge import JudgeClient
-from gitbench.harness.model import ModelInterface, ReasoningDisableError
+from gitbench.harness.model import DEFAULT_MODEL_TIMEOUT, ModelInterface, ReasoningDisableError, RetriesExhaustedError
 from gitbench.harness.scorer import Scorer
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
 from gitbench.structured_output import (
@@ -49,6 +49,8 @@ class BenchmarkRunner:
         output_mode: str = DEFAULT_OUTPUT_MODE,
         model_generate_kwargs: dict | None = None,
         judge_config: dict | None = None,
+        model_timeout: int = DEFAULT_MODEL_TIMEOUT,
+        attempt_gate: RequestAttemptGate | None = None,
     ) -> None:
         """Initialise the runner.
 
@@ -60,6 +62,10 @@ class BenchmarkRunner:
                 When provided, a JudgeClient is created and a single
                 judge-aware Scorer is used for all benchmarks;
                 scoring-type dispatch alone decides whether the judge is called.
+            model_timeout: Timeout in seconds for judge model clients
+                (default: 240).
+            attempt_gate: Optional request-attempt gate passed to judge
+                model clients for capacity coordination.
         """
         self._registry = registry
         self._model_client = model_client
@@ -69,6 +75,8 @@ class BenchmarkRunner:
         self._model_generate_kwargs = dict(model_generate_kwargs or {})
         self._judge_config = judge_config
         self._judge_client: JudgeClient | None = None
+        self._model_timeout = model_timeout
+        self._attempt_gate = attempt_gate
 
         if judge_config is not None:
             from gitbench.config import resolve_profile
@@ -85,7 +93,9 @@ class BenchmarkRunner:
         """Create model clients for every model in the judge profile.
 
         Each client is configured with ``retry_count=5`` for robust
-        judge retries. The JudgeClient will try them in order.
+        judge retries, the runner's resolved model timeout, and the
+        attempt gate for capacity coordination.
+        The JudgeClient will try them in order.
         """
         from gitbench.cli import get_model_client
 
@@ -97,10 +107,12 @@ class BenchmarkRunner:
         for model in models:
             client = get_model_client(
                 model,
+                timeout=self._model_timeout,
                 retry_count=5,
                 base_url=profile.get("base_url"),
                 api_key=profile.get("api_key"),
                 provider=profile.get("provider"),
+                attempt_gate=self._attempt_gate,
             )
             clients.append(client)
         return clients
@@ -308,23 +320,21 @@ class BenchmarkRunner:
                         f"scoring type {fixture.scoring.get('type')})"
                     )
 
-            if self._request_budget is not None and self._capacity_key is not None:
-                with self._request_budget.acquire(self._capacity_key):
-                    response = self._model_client.generate(messages, **generate_kwargs)
-            else:
-                response = self._model_client.generate(messages, **generate_kwargs)
+            response = self._model_client.generate(messages, **generate_kwargs)
 
             if isinstance(response, dict):
                 model_output = response.get("text", response.get("content", ""))
                 usage = response.get("usage")
                 parsed_payload = response.get("parsed_payload")
                 structured_error = response.get("structured_error")
+                request_telemetry = response.get("request_telemetry")
             else:
                 model_output = str(response)
                 usage = None
                 response = {}
                 parsed_payload = None
                 structured_error = None
+                request_telemetry = None
 
             # Canonicalize structured output before scoring
             if output_mode == "json_schema" and parsed_payload is not None and structured_output_contract is not None:
@@ -363,10 +373,12 @@ class BenchmarkRunner:
             score.expected = fixture.expected
             score.description = fixture.description
 
-            # Wire transcript and api_duration_ms from response dict
+            # Wire transcript, api_duration_ms, and request_telemetry from response dict
             if isinstance(response, dict):
                 score.transcript = response.get("transcript")
                 score.api_duration_ms = response.get("api_duration_ms")
+                if request_telemetry is not None:
+                    score.request_telemetry = request_telemetry
 
             if usage and isinstance(usage, dict):
                 score.input_tokens = usage.get("input_tokens")
@@ -382,6 +394,28 @@ class BenchmarkRunner:
             score._raw_structured_output = response.get("raw_structured_output")
             score._structured_error = structured_error
 
+            return fixture.id, score
+        except RetriesExhaustedError as exc:
+            logger.error(
+                "All retries exhausted for fixture %s: %s",
+                fixture.id,
+                exc.last_error,
+            )
+            score = Score(
+                fixture_id=fixture.id,
+                passed=False,
+                similarity=0.0,
+                model_output="",
+                error=str(exc.last_error),
+                reasoning_level=getattr(
+                    self._model_client, "reasoning_level", None
+                ),
+                prompt=fixture.prompt,
+                expected=fixture.expected,
+                description=fixture.description,
+            )
+            if exc.telemetry is not None:
+                score.request_telemetry = exc.telemetry.to_dict()
             return fixture.id, score
         except ReasoningDisableError as exc:
             logger.error(

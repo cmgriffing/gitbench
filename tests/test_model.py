@@ -7,12 +7,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from gitbench.harness.model import (
+    DEFAULT_MODEL_TIMEOUT,
     MockModelClient,
     ModelInterface,
     ModelResponseError,
     OllamaAdapter,
     OpenAIAdapter,
     ReasoningDisableError,
+    RequestTelemetry,
+    RetriesExhaustedError,
     _extract_retry_after,
     parse_model_name,
 )
@@ -133,7 +136,7 @@ class TestOllamaAdapter:
     def test_default_timeout_and_retry(self):
         """Test default timeout and retry values."""
         adapter = OllamaAdapter(model="llama3.1:8b")
-        assert adapter.timeout == 120
+        assert adapter.timeout == DEFAULT_MODEL_TIMEOUT
         assert adapter.retry_count == 3
 
     def test_custom_timeout_and_retry(self):
@@ -212,7 +215,7 @@ class TestOllamaAdapter:
 
     @patch("urllib.request.urlopen")
     def test_timeout_raises_timeout_error(self, mock_urlopen):
-        """Test that a slow response triggers TimeoutError."""
+        """Test that a slow response triggers RetriesExhaustedError wrapping TimeoutError."""
         import time
 
         def slow_response(*args, **kwargs):
@@ -224,8 +227,10 @@ class TestOllamaAdapter:
         adapter = OllamaAdapter(model="llama3.1:8b", timeout=1, retry_count=1)
         messages = [ModelMessage(role="user", content="Test")]
 
-        with pytest.raises(TimeoutError, match="timed out"):
+        with pytest.raises(RetriesExhaustedError) as exc_info:
             adapter.generate(messages)
+        assert isinstance(exc_info.value.last_error, TimeoutError)
+        assert exc_info.value.telemetry.attempts == 1
 
 
 class TestOpenAIAdapter:
@@ -260,7 +265,7 @@ class TestOpenAIAdapter:
     def test_default_timeout_and_retry(self):
         """Test default timeout and retry values."""
         adapter = OpenAIAdapter()
-        assert adapter.timeout == 30
+        assert adapter.timeout == DEFAULT_MODEL_TIMEOUT
         assert adapter.retry_count == 3
 
     @patch("openai.OpenAI")
@@ -374,7 +379,7 @@ class TestOpenAIAdapter:
 
     @patch("openai.OpenAI")
     def test_missing_choices_raises_clear_response_error(self, mock_openai_class):
-        """Test malformed provider responses fail with a useful error."""
+        """Test malformed provider responses fail with RetriesExhaustedError."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = SimpleNamespace(
             choices=None
@@ -385,8 +390,10 @@ class TestOpenAIAdapter:
         adapter._client = mock_client
 
         messages = [ModelMessage(role="user", content="Test")]
-        with pytest.raises(ModelResponseError, match="missing choices"):
+        with pytest.raises(RetriesExhaustedError) as exc_info:
             adapter.generate(messages)
+        assert isinstance(exc_info.value.last_error, ModelResponseError)
+        assert "missing choices" in str(exc_info.value.last_error)
 
     @patch("openai.OpenAI")
     def test_missing_choices_is_retryable(self, mock_openai_class):
@@ -417,7 +424,7 @@ class TestOpenAIAdapter:
 
     @patch("openai.OpenAI")
     def test_provider_error_response_is_preserved(self, mock_openai_class):
-        """Test provider error payloads are surfaced in adapter errors."""
+        """Test provider error payloads are surfaced in RetriesExhaustedError."""
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = SimpleNamespace(
             choices=None,
@@ -429,8 +436,9 @@ class TestOpenAIAdapter:
         adapter._client = mock_client
 
         messages = [ModelMessage(role="user", content="Test")]
-        with pytest.raises(ModelResponseError, match="upstream provider overloaded"):
+        with pytest.raises(RetriesExhaustedError) as exc_info:
             adapter.generate(messages)
+        assert "upstream provider overloaded" in str(exc_info.value.last_error)
 
 
 class TestParseModelName:

@@ -27,14 +27,17 @@ from gitbench.export import FORMAT_REGISTRY, get_available_formats
 from gitbench.harness.capabilities import validate_models, load_effort_matrix, save_effort_mapping
 from gitbench.harness.capacity import (
     CapacityInfo,
+    RequestAttemptGate,
     RequestBudgetCoordinator,
     derive_capacity_info,
     describe_request_budgets,
     global_request_limit,
+    resolve_cooldown_config,
     resolve_group_intervals,
     resolve_group_limits,
 )
 from gitbench.harness.model import (
+    DEFAULT_MODEL_TIMEOUT,
     MockModelClient,
     OllamaAdapter,
     OpenAIAdapter,
@@ -84,7 +87,7 @@ class ReasoningPreflightTarget:
     provider: str
     base_url: str
     api_key: str | None
-    timeout: int | None
+    timeout: int
     retry_count: int
     extra_body: dict[str, Any] | None
 
@@ -100,7 +103,7 @@ class EffortPreflightTarget:
     provider: str
     base_url: str
     api_key: str | None
-    timeout: int | None
+    timeout: int
 
 
 def _progress_model_names(models: list[str]) -> list[str]:
@@ -140,17 +143,17 @@ def _progress_model_names_for_runs(
 def _effective_timeout(
     profile_conf: dict,
     cli_timeout: int | None,
-) -> int | None:
+) -> int:
     """Return the timeout to pass to the model adapter.
 
-    ``None`` deliberately preserves provider-specific adapter defaults.
+    Precedence: CLI override > profile timeout > 240 seconds.
     """
     if cli_timeout is not None:
         return cli_timeout
     profile_timeout = profile_conf.get("timeout")
-    if profile_timeout is None:
-        return None
-    return int(profile_timeout)
+    if profile_timeout is not None:
+        return int(profile_timeout)
+    return DEFAULT_MODEL_TIMEOUT
 
 
 def _effective_retry_count(
@@ -520,7 +523,7 @@ def _run_effort_preflights(
                 effort=target.requested_effort,
                 prompt=prompt,
                 api_key=target.api_key,
-                timeout=target.timeout or 30,
+                timeout=target.timeout,
             )
             if body is None:
                 continue
@@ -729,24 +732,25 @@ def check_git_availability() -> bool:
 
 def get_model_client(
     model: str,
-    timeout: int | None = None,
+    timeout: int = DEFAULT_MODEL_TIMEOUT,
     retry_count: int = DEFAULT_RETRY_COUNT,
     base_url: str | None = None,
     api_key: str | None = None,
     provider: str | None = None,
+    attempt_gate: "RequestAttemptGate | None" = None,
 ) -> OpenAIAdapter | OllamaAdapter | MockModelClient:
     """Get the model client based on model name and provider.
 
     Args:
         model: Model name. Use 'mock' for testing.
-        timeout: Timeout in seconds for model generation. When ``None``,
-            uses the provider adapter default.
+        timeout: Timeout in seconds for model generation (default: 240).
         retry_count: Number of retry attempts on failure.
         base_url: Optional API base URL. For Ollama, defaults to http://localhost:11434.
                   For OpenAI-compatible providers, set explicitly.
         api_key: Optional API key for OpenAI-compatible providers.
         provider: Explicit provider type: 'ollama', 'openai', or None to auto-detect.
                   When a profile is used, this comes from the config's 'provider' field.
+        attempt_gate: Optional request-attempt gate for capacity coordination.
 
     Returns:
         The appropriate model client instance.
@@ -767,15 +771,9 @@ def get_model_client(
         ollama_base = ollama_base.rstrip("/")
         if ollama_base.endswith("/v1"):
             ollama_base = ollama_base[:-3]
-        kwargs: dict = {"base_url": ollama_base, "retry_count": retry_count}
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        return OllamaAdapter(model=model, **kwargs)
+        return OllamaAdapter(model=model, base_url=ollama_base, timeout=timeout, retry_count=retry_count, attempt_gate=attempt_gate)
     else:
-        kwargs = {"retry_count": retry_count, "base_url": base_url, "api_key": api_key}
-        if timeout is not None:
-            kwargs["timeout"] = timeout
-        return OpenAIAdapter(model=model, **kwargs)
+        return OpenAIAdapter(model=model, timeout=timeout, retry_count=retry_count, base_url=base_url, api_key=api_key, attempt_gate=attempt_gate)
 
 
 def _get_git_sha() -> str | None:
@@ -1490,8 +1488,8 @@ def doctor(
     default=None,
     type=click.IntRange(1),
     help=(
-        "Timeout in seconds for each model attempt. "
-        "Defaults to the provider adapter default unless set in profile config."
+        "Timeout in seconds for each model attempt "
+        "(default: profile timeout or 240)."
     ),
 )
 @click.option(
@@ -1706,6 +1704,9 @@ def run(
             capacity_by_target[(run_index, model_index)] = info
     group_limits = resolve_group_limits(capacity_by_target.values())
     group_intervals = resolve_group_intervals(config, capacity_by_target.values())
+    fallback_cooldown, _cooldown_overrides = resolve_cooldown_config(
+        config, capacity_by_target.values()
+    )
 
     request_budget = RequestBudgetCoordinator(
         global_limit=global_request_limit(
@@ -1714,6 +1715,7 @@ def run(
         ),
         group_limits=group_limits,
         group_intervals=group_intervals,
+        fallback_cooldown=fallback_cooldown,
     )
     logger.info(
         describe_request_budgets(
@@ -1911,6 +1913,10 @@ def run(
                             base_url=p_base_url,
                             api_key=p_api_key,
                             provider=p_provider,
+                            attempt_gate=RequestAttemptGate(
+                                request_budget,
+                                capacity_by_target[(run_index, 0)].capacity_key,
+                            ),
                         )
                         capacity_info = capacity_by_target[(run_index, 0)]
                         runner = BenchmarkRunner(
@@ -1923,6 +1929,11 @@ def run(
                                 profile_conf
                             ),
                             judge_config=resolved_judge_config,
+                            model_timeout=p_timeout,
+                            attempt_gate=RequestAttemptGate(
+                                request_budget,
+                                capacity_info.capacity_key,
+                            ),
                         )
                         future = executor.submit(
                             runner.run_all,
@@ -2023,6 +2034,10 @@ def run(
                                     base_url=p_base_url,
                                     api_key=p_api_key,
                                     provider=p_provider,
+                                    attempt_gate=RequestAttemptGate(
+                                        request_budget,
+                                        capacity_info.capacity_key,
+                                    ),
                                 )
                                 runner = BenchmarkRunner(
                                     _benchmark_registry,
@@ -2034,6 +2049,11 @@ def run(
                                         profile_conf
                                     ),
                                     judge_config=resolved_judge_config,
+                                    model_timeout=p_timeout,
+                                    attempt_gate=RequestAttemptGate(
+                                        request_budget,
+                                        capacity_info.capacity_key,
+                                    ),
                                 )
                                 future = executor.submit(
                                     runner.run_all,
@@ -2079,6 +2099,7 @@ def run(
                                 finish_model_result(model_result)
                     else:
                         for index, current_model in enumerate(models_to_run):
+                            capacity_info = capacity_by_target[(run_index, index)]
                             model_client = get_model_client(
                                 current_model,
                                 timeout=p_timeout,
@@ -2086,8 +2107,11 @@ def run(
                                 base_url=p_base_url,
                                 api_key=p_api_key,
                                 provider=p_provider,
+                                attempt_gate=RequestAttemptGate(
+                                    request_budget,
+                                    capacity_info.capacity_key,
+                                ),
                             )
-                            capacity_info = capacity_by_target[(run_index, index)]
                             runner = BenchmarkRunner(
                                 _benchmark_registry,
                                 model_client,
@@ -2098,6 +2122,11 @@ def run(
                                     profile_conf
                                 ),
                                 judge_config=resolved_judge_config,
+                                model_timeout=p_timeout,
+                                attempt_gate=RequestAttemptGate(
+                                    request_budget,
+                                    capacity_info.capacity_key,
+                                ),
                             )
                             model_result = runner.run_all(
                                 benchmarks_to_run,

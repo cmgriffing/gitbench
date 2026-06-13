@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import random
 import threading
 import time
 from contextlib import contextmanager, nullcontext
@@ -10,6 +11,10 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Iterator
 
 from gitbench.harness.reasoning import parse_model_reasoning
+
+DEFAULT_COOLDOWN_SECONDS = 30
+MAX_JITTER_SECONDS = 1.0
+JITTER_FRACTION = 0.10
 
 
 @dataclass(frozen=True)
@@ -207,6 +212,48 @@ def resolve_group_intervals(
     return result
 
 
+def _positive_float(value: Any) -> float | None:
+    """Parse a positive float, returning None on failure."""
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def resolve_cooldown_config(
+    config: dict[str, Any],
+    infos: Iterable[CapacityInfo],
+) -> tuple[float, dict[str, float]]:
+    """Resolve the fallback cooldown and per-group overrides.
+
+    Returns ``(fallback_seconds, per_key_overrides)``.
+    The global fallback defaults to ``DEFAULT_COOLDOWN_SECONDS`` (30).
+    Per-group ``rate_limit_cooldown_seconds`` on explicit concurrency
+    groups overrides the fallback for that key.
+    """
+    concurrency = config.get("concurrency") or {}
+    global_cooldown = _positive_float(concurrency.get("rate_limit_cooldown_seconds"))
+    fallback = global_cooldown if global_cooldown is not None else DEFAULT_COOLDOWN_SECONDS
+
+    per_key: dict[str, float] = {}
+    for group in concurrency.get("groups") or []:
+        if not isinstance(group, dict):
+            continue
+        key = group.get("key")
+        if not key:
+            continue
+        group_cooldown = _positive_float(group.get("rate_limit_cooldown_seconds"))
+        if group_cooldown is not None:
+            per_key[key] = group_cooldown
+
+    return fallback, per_key
+
+
 class RateLimitedBoundedSemaphore:
     """A ``BoundedSemaphore`` wrapper that enforces a minimum interval
     between successive releases and acquires.
@@ -247,7 +294,9 @@ class RateLimitedBoundedSemaphore:
 
 
 class RequestBudgetCoordinator:
-    """Coordinates global and per-capacity-group request semaphores."""
+    """Coordinates global and per-capacity-group request semaphores
+    with shared cooldown state for rate-limit responses.
+    """
 
     def __init__(
         self,
@@ -255,13 +304,25 @@ class RequestBudgetCoordinator:
         global_limit: int | None = None,
         group_limits: dict[str, int | None] | None = None,
         group_intervals: dict[str, float] | None = None,
+        fallback_cooldown: float = DEFAULT_COOLDOWN_SECONDS,
+        _time_monotonic: callable = time.monotonic,
+        _time_sleep: callable = time.sleep,
+        _random_random: callable = random.random,
     ) -> None:
         self.global_limit = global_limit
         self.group_limits = dict(group_limits or {})
         self.group_intervals = dict(group_intervals or {})
+        self.fallback_cooldown = fallback_cooldown
         self._global = threading.BoundedSemaphore(global_limit) if global_limit else None
         self._groups: dict[str, RateLimitedBoundedSemaphore] = {}
         self._lock = threading.Lock()
+        # Cooldown state
+        self._cooldowns: dict[str, float] = {}
+        self._cooldown_lock = threading.Lock()
+        # Injectable timing/randomness for deterministic tests
+        self._time_monotonic = _time_monotonic
+        self._time_sleep = _time_sleep
+        self._random_random = _random_random
 
     def _group_semaphore(self, capacity_key: str) -> RateLimitedBoundedSemaphore | None:
         limit = self.group_limits.get(capacity_key)
@@ -275,6 +336,47 @@ class RequestBudgetCoordinator:
                 self._groups[capacity_key] = semaphore
             return semaphore
 
+    def _cooldown_remaining(self, capacity_key: str) -> float:
+        """Return seconds until the capacity key is unblocked, or 0.0."""
+        with self._cooldown_lock:
+            deadline = self._cooldowns.get(capacity_key)
+            if deadline is None:
+                return 0.0
+            remaining = deadline - self._time_monotonic()
+            return max(0.0, remaining)
+
+    def _wait_cooldown(self, capacity_key: str) -> float:
+        """Sleep until the capacity key cooldown expires.
+
+        Returns the actual seconds waited (for telemetry).
+        """
+        waited = 0.0
+        while True:
+            remaining = self._cooldown_remaining(capacity_key)
+            if remaining <= 0:
+                return waited
+            self._time_sleep(remaining)
+            waited += remaining
+
+    def report_rate_limit(
+        self,
+        capacity_key: str,
+        delay_seconds: float,
+    ) -> None:
+        """Extend the cooldown for a capacity group after a 429 response.
+
+        The cooldown is atomically extended to the later of the current
+        deadline and ``now + delay_seconds + jitter``.
+        """
+        jitter = self._random_random() * JITTER_FRACTION * delay_seconds
+        if jitter > MAX_JITTER_SECONDS:
+            jitter = MAX_JITTER_SECONDS
+        new_deadline = self._time_monotonic() + delay_seconds + jitter
+        with self._cooldown_lock:
+            existing = self._cooldowns.get(capacity_key)
+            if existing is None or new_deadline > existing:
+                self._cooldowns[capacity_key] = new_deadline
+
     @contextmanager
     def acquire(self, capacity_key: str) -> Iterator[None]:
         """Acquire global then group permits, releasing both on exit."""
@@ -284,6 +386,17 @@ class RequestBudgetCoordinator:
         with global_context:
             with group_context:
                 yield
+
+    @contextmanager
+    def acquire_attempt(self, capacity_key: str) -> Iterator[float]:
+        """Wait for cooldown, then acquire permits for one provider attempt.
+
+        Yields the cooldown wait duration in seconds (0.0 if no wait).
+        The caller must release permits by exiting the context.
+        """
+        cooldown_wait = self._wait_cooldown(capacity_key)
+        with self.acquire(capacity_key):
+            yield cooldown_wait
 
 
 def describe_request_budgets(
@@ -314,3 +427,46 @@ def describe_request_budgets(
             base += f"; intervals={intervals_label}"
 
     return base
+
+
+class RequestAttemptGate:
+    """Optional gate that model adapters use to coordinate each provider
+    network attempt through the shared capacity coordinator.
+
+    Adapters acquire the gate immediately before an HTTP call and release
+    it immediately after.  The gate handles cooldown waiting, permit
+    acquisition, and returns the cooldown wait duration for telemetry.
+
+    When no coordinator is supplied the gate is a no-op, so adapters
+    work unchanged in tests and doctor paths.
+    """
+
+    def __init__(
+        self,
+        coordinator: RequestBudgetCoordinator | None = None,
+        capacity_key: str = "",
+    ) -> None:
+        self._coordinator = coordinator
+        self._capacity_key = capacity_key
+
+    @contextmanager
+    def acquire(self) -> Iterator[float]:
+        """Acquire the attempt gate, yielding cooldown wait seconds.
+
+        When no coordinator is configured this is a no-op that yields 0.0.
+        """
+        if self._coordinator is None or not self._capacity_key:
+            yield 0.0
+        else:
+            with self._coordinator.acquire_attempt(self._capacity_key) as waited:
+                yield waited
+
+    def report_rate_limit(self, delay_seconds: float) -> None:
+        """Report a 429 response to the shared coordinator.
+
+        No-op when no coordinator is configured.
+        """
+        if self._coordinator is not None and self._capacity_key:
+            self._coordinator.report_rate_limit(
+                self._capacity_key, delay_seconds
+            )

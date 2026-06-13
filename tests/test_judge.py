@@ -1,10 +1,11 @@
 """Tests for JudgeClient."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from gitbench.harness.judge import JUDGE_COMMIT_MESSAGE_PROMPT, JudgeClient
+from gitbench.harness.model import DEFAULT_MODEL_TIMEOUT
 from gitbench.harness.types import ModelMessage
 
 
@@ -240,3 +241,75 @@ class TestJudgeClient:
         assert "ORIGINAL_PROMPT" in formatted
         assert "Score:" in formatted
         assert "<original_prompt>" in formatted
+
+
+class TestJudgeTimeoutIntegration:
+    """Tests that judge model clients receive the resolved timeout."""
+
+    def test_runner_passes_model_timeout_to_judge_clients(self):
+        """BenchmarkRunner passes model_timeout to judge model clients."""
+        from gitbench.harness.runner import BenchmarkRunner
+
+        registry = {}
+        model_client = MagicMock()
+        judge_config = {
+            "profile": "judge-profile",
+            "_config": {
+                "models": {
+                    "judge-profile": {
+                        "models": ["judge-model"],
+                        "provider": "openai",
+                    }
+                }
+            },
+        }
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            with patch("gitbench.cli.get_model_client") as mock_get_client:
+                mock_judge_client = MagicMock()
+                mock_get_client.return_value = mock_judge_client
+
+                runner = BenchmarkRunner(
+                    registry,
+                    model_client,
+                    judge_config=judge_config,
+                    model_timeout=120,
+                )
+
+                mock_get_client.assert_called_once()
+                call_kwargs = mock_get_client.call_args
+                assert call_kwargs.kwargs["timeout"] == 120
+                assert call_kwargs.kwargs["retry_count"] == 5
+
+    def test_runner_default_model_timeout_is_240(self):
+        """BenchmarkRunner defaults model_timeout to 240."""
+        from gitbench.harness.runner import BenchmarkRunner
+
+        registry = {}
+        model_client = MagicMock()
+        judge_config = {
+            "profile": "judge-profile",
+            "_config": {
+                "models": {
+                    "judge-profile": {
+                        "models": ["judge-model"],
+                        "provider": "openai",
+                    }
+                }
+            },
+        }
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            with patch("gitbench.cli.get_model_client") as mock_get_client:
+                mock_judge_client = MagicMock()
+                mock_get_client.return_value = mock_judge_client
+
+                runner = BenchmarkRunner(
+                    registry,
+                    model_client,
+                    judge_config=judge_config,
+                )
+
+                mock_get_client.assert_called_once()
+                call_kwargs = mock_get_client.call_args
+                assert call_kwargs.kwargs["timeout"] == DEFAULT_MODEL_TIMEOUT

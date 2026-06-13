@@ -7,13 +7,59 @@ import time
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
+from dataclasses import dataclass, field
 from typing import Any
 
+from gitbench.harness.capacity import RequestAttemptGate
 from gitbench.harness.reasoning import parse_model_reasoning
 
 from .types import ModelMessage
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_MODEL_TIMEOUT = 240
+
+
+@dataclass
+class RequestTelemetry:
+    """Telemetry accumulated during a model adapter's retry loop.
+
+    Captures provider attempts, cumulative wait times, and retry reason
+    counts so exhausted requests and successful retries are diagnosable
+    from logs and persisted fixture scores.
+    """
+
+    attempts: int = 1
+    local_retry_wait_ms: float = 0.0
+    capacity_cooldown_wait_ms: float = 0.0
+    retry_reasons: dict[str, int] = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "attempts": self.attempts,
+            "local_retry_wait_ms": self.local_retry_wait_ms,
+            "capacity_cooldown_wait_ms": self.capacity_cooldown_wait_ms,
+            "retry_reasons": dict(self.retry_reasons),
+        }
+
+
+class RetriesExhaustedError(RuntimeError):
+    """Raised when all configured retry attempts fail.
+
+    Carries the accumulated request telemetry so the runner can attach
+    it to the failed fixture score.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        last_error: Exception,
+        telemetry: "RequestTelemetry",
+    ) -> None:
+        self.last_error = last_error
+        self.telemetry = telemetry
+        super().__init__(message)
 
 
 def parse_model_name(model: str) -> tuple[str, str | None]:
@@ -228,16 +274,17 @@ class ModelInterface(ABC):
 class OpenAIAdapter(ModelInterface):
     """Adapter for OpenAI API compatible models."""
 
-    def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None, timeout: int = 30, retry_count: int = 3, base_url: str | None = None):
+    def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None, timeout: int = DEFAULT_MODEL_TIMEOUT, retry_count: int = 3, base_url: str | None = None, attempt_gate: RequestAttemptGate | None = None):
         """Initialize the OpenAI adapter.
 
         Args:
             model: The model identifier (default: gpt-4o-mini). May include
                    ``#level`` suffix for reasoning effort (e.g. ``o3-mini#high``).
             api_key: Optional API key. If not provided, reads from OPENAI_API_KEY env var.
-            timeout: Timeout in seconds for model generation (default: 30).
+            timeout: Timeout in seconds for model generation (default: 240).
             retry_count: Number of retries on failure (default: 3).
             base_url: Optional API base URL for OpenAI-compatible providers (e.g. OpenRouter).
+            attempt_gate: Optional request-attempt gate for capacity coordination.
         """
         self._full_model = model
         base_model, parsed_level = parse_model_name(model)
@@ -248,6 +295,7 @@ class OpenAIAdapter(ModelInterface):
         self._api_key = api_key
         self._base_url = base_url
         self._client = None
+        self._attempt_gate = attempt_gate
 
     @property
     def client(self):
@@ -277,6 +325,10 @@ class OpenAIAdapter(ModelInterface):
 
     def generate(self, messages: list[ModelMessage], **kwargs: Any) -> dict:
         """Generate a response using the OpenAI API with timeout and retry.
+
+        Each provider attempt is gated through the optional attempt gate
+        for capacity coordination.  HTTP 429 responses establish shared
+        group cooldowns; other retryable errors use local backoff.
 
         Args:
             messages: List of ModelMessage objects.
@@ -313,6 +365,11 @@ class OpenAIAdapter(ModelInterface):
                     "schema": structured_output_contract.schema,
                 },
             }
+
+        gate = self._attempt_gate
+        local_retry_wait_ms = 0.0
+        cooldown_wait_ms = 0.0
+        retry_reasons: dict[str, int] = {}
 
         for attempt in range(1, self.retry_count + 1):
             try:
@@ -412,26 +469,30 @@ class OpenAIAdapter(ModelInterface):
                     except Exception as e:
                         error.append(e)
 
-                timer = threading.Timer(self.timeout, lambda: None)
-                api_thread = threading.Thread(target=call_api, daemon=True)
-                api_thread.start()
-                timer.start()
-                api_thread.join(timeout=self.timeout)
-                timer.cancel()
+                gate_ctx = gate.acquire() if gate is not None else nullcontext()
+                with gate_ctx as cooldown_wait:
+                    if gate is not None:
+                        cooldown_wait_ms += cooldown_wait * 1000
+                    timer = threading.Timer(self.timeout, lambda: None)
+                    api_thread = threading.Thread(target=call_api, daemon=True)
+                    api_thread.start()
+                    timer.start()
+                    api_thread.join(timeout=self.timeout)
+                    timer.cancel()
 
-                if api_thread.is_alive():
-                    logger.error(
-                        "Model call timed out after %ds (attempt %d/%d)",
-                        self.timeout,
-                        attempt,
-                        self.retry_count,
-                    )
-                    raise TimeoutError(
-                        f"Model call timed out after {self.timeout}s"
-                    )
+                    if api_thread.is_alive():
+                        logger.error(
+                            "Model call timed out after %ds (attempt %d/%d)",
+                            self.timeout,
+                            attempt,
+                            self.retry_count,
+                        )
+                        raise TimeoutError(
+                            f"Model call timed out after {self.timeout}s"
+                        )
 
-                if error:
-                    raise error[0]
+                    if error:
+                        raise error[0]
 
                 if attempt > 1:
                     logger.info(
@@ -439,36 +500,85 @@ class OpenAIAdapter(ModelInterface):
                         attempt,
                         self.retry_count,
                     )
-                return result[0]
+                response = result[0]
+                response["request_telemetry"] = RequestTelemetry(
+                    attempts=attempt,
+                    local_retry_wait_ms=local_retry_wait_ms,
+                    capacity_cooldown_wait_ms=cooldown_wait_ms,
+                    retry_reasons=retry_reasons,
+                )
+                return response
 
-            except (
-                TimeoutError,
-                openai.RateLimitError,
-                openai.APITimeoutError,
-                openai.APIConnectionError,
-                openai.InternalServerError,
-                ModelResponseError,
-            ) as e:
+            except openai.RateLimitError as e:
                 last_error = e
+                retry_reasons["rate_limit"] = retry_reasons.get("rate_limit", 0) + 1
                 if attempt < self.retry_count:
-                    backoff = min(2 ** (attempt - 1), 16)
                     retry_after = _extract_retry_after(e)
-                    delay = max(backoff, retry_after)
+                    if retry_after <= 0:
+                        retry_after = 30.0  # fallback when Retry-After missing
+                    if self._attempt_gate is not None:
+                        self._attempt_gate.report_rate_limit(retry_after)
                     logger.info(
-                        "Retryable error on attempt %d/%d: %s — retrying in %ds",
+                        "Rate limit on attempt %d/%d: %s — cooldown %ds",
                         attempt,
                         self.retry_count,
                         type(e).__name__,
-                        delay,
+                        retry_after,
                     )
-                    threading.Event().wait(delay)
                 else:
                     logger.error(
                         "All %d retries exhausted. Last error: %s",
                         self.retry_count,
                         e,
                     )
-                    raise
+                    raise RetriesExhaustedError(
+                        f"All {self.retry_count} retries exhausted",
+                        last_error=e,
+                        telemetry=RequestTelemetry(
+                            attempts=attempt,
+                            local_retry_wait_ms=local_retry_wait_ms,
+                            capacity_cooldown_wait_ms=cooldown_wait_ms,
+                            retry_reasons=retry_reasons,
+                        ),
+                    ) from e
+            except (
+                TimeoutError,
+                openai.APITimeoutError,
+                openai.APIConnectionError,
+                openai.InternalServerError,
+                ModelResponseError,
+            ) as e:
+                last_error = e
+                retry_reasons[type(e).__name__] = (
+                    retry_reasons.get(type(e).__name__, 0) + 1
+                )
+                if attempt < self.retry_count:
+                    backoff = min(2 ** (attempt - 1), 16)
+                    local_retry_wait_ms += backoff * 1000
+                    logger.info(
+                        "Retryable error on attempt %d/%d: %s — retrying in %ds",
+                        attempt,
+                        self.retry_count,
+                        type(e).__name__,
+                        backoff,
+                    )
+                    threading.Event().wait(backoff)
+                else:
+                    logger.error(
+                        "All %d retries exhausted. Last error: %s",
+                        self.retry_count,
+                        e,
+                    )
+                    raise RetriesExhaustedError(
+                        f"All {self.retry_count} retries exhausted",
+                        last_error=e,
+                        telemetry=RequestTelemetry(
+                            attempts=attempt,
+                            local_retry_wait_ms=local_retry_wait_ms,
+                            capacity_cooldown_wait_ms=cooldown_wait_ms,
+                            retry_reasons=retry_reasons,
+                        ),
+                    ) from e
             except Exception:
                 raise
 
@@ -482,15 +592,16 @@ class OllamaAdapter(ModelInterface):
     Talks to Ollama's native /api/chat endpoint.
     """
 
-    def __init__(self, model: str, base_url: str = "http://localhost:11434", timeout: int = 120, retry_count: int = 3):
+    def __init__(self, model: str, base_url: str = "http://localhost:11434", timeout: int = DEFAULT_MODEL_TIMEOUT, retry_count: int = 3, attempt_gate: RequestAttemptGate | None = None):
         """Initialize the Ollama adapter.
 
         Args:
             model: Ollama model name (e.g. 'llama3.1:8b', 'gemma4:26b').
                    May include ``#level`` suffix (logged but ignored).
             base_url: Ollama server base URL (default: http://localhost:11434).
-            timeout: Timeout in seconds for model generation (default: 120).
+            timeout: Timeout in seconds for model generation (default: 240).
             retry_count: Number of retries on failure (default: 3).
+            attempt_gate: Optional request-attempt gate for capacity coordination.
         """
         self._full_model = model
         base_model, parsed_level = parse_model_name(model)
@@ -499,9 +610,13 @@ class OllamaAdapter(ModelInterface):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.retry_count = retry_count
+        self._attempt_gate = attempt_gate
 
     def generate(self, messages: list[ModelMessage], **kwargs: Any) -> dict:
         """Generate a response using the Ollama API with timeout and retry.
+
+        Each provider attempt is gated through the optional attempt gate
+        for capacity coordination.
 
         Args:
             messages: List of ModelMessage objects.
@@ -540,6 +655,11 @@ class OllamaAdapter(ModelInterface):
 
         url = f"{self.base_url}/api/chat"
         last_error: Exception | None = None
+
+        gate = self._attempt_gate
+        local_retry_wait_ms = 0.0
+        cooldown_wait_ms = 0.0
+        retry_reasons: dict[str, int] = {}
 
         for attempt in range(1, self.retry_count + 1):
             try:
@@ -622,23 +742,27 @@ class OllamaAdapter(ModelInterface):
                     except Exception as e:
                         error.append(e)
 
-                api_thread = threading.Thread(target=call_api, daemon=True)
-                api_thread.start()
-                api_thread.join(timeout=self.timeout)
+                gate_ctx = gate.acquire() if gate is not None else nullcontext()
+                with gate_ctx as cooldown_wait:
+                    if gate is not None:
+                        cooldown_wait_ms += cooldown_wait * 1000
+                    api_thread = threading.Thread(target=call_api, daemon=True)
+                    api_thread.start()
+                    api_thread.join(timeout=self.timeout)
 
-                if api_thread.is_alive():
-                    logger.error(
-                        "Ollama call timed out after %ds (attempt %d/%d)",
-                        self.timeout,
-                        attempt,
-                        self.retry_count,
-                    )
-                    raise TimeoutError(
-                        f"Ollama call timed out after {self.timeout}s"
-                    )
+                    if api_thread.is_alive():
+                        logger.error(
+                            "Ollama call timed out after %ds (attempt %d/%d)",
+                            self.timeout,
+                            attempt,
+                            self.retry_count,
+                        )
+                        raise TimeoutError(
+                            f"Ollama call timed out after {self.timeout}s"
+                        )
 
-                if error:
-                    raise error[0]
+                    if error:
+                        raise error[0]
 
                 if attempt > 1:
                     logger.info(
@@ -646,12 +770,23 @@ class OllamaAdapter(ModelInterface):
                         attempt,
                         self.retry_count,
                     )
-                return result[0]
+                response = result[0]
+                response["request_telemetry"] = RequestTelemetry(
+                    attempts=attempt,
+                    local_retry_wait_ms=local_retry_wait_ms,
+                    capacity_cooldown_wait_ms=cooldown_wait_ms,
+                    retry_reasons=retry_reasons,
+                )
+                return response
 
             except (TimeoutError, urllib.error.URLError, ConnectionError, OSError) as e:
                 last_error = e
+                retry_reasons[type(e).__name__] = (
+                    retry_reasons.get(type(e).__name__, 0) + 1
+                )
                 if attempt < self.retry_count:
                     delay = min(2 ** (attempt - 1), 16)
+                    local_retry_wait_ms += delay * 1000
                     logger.info(
                         "Retryable error on attempt %d/%d: %s — retrying in %ds",
                         attempt,
@@ -666,7 +801,16 @@ class OllamaAdapter(ModelInterface):
                         self.retry_count,
                         e,
                     )
-                    raise
+                    raise RetriesExhaustedError(
+                        f"All {self.retry_count} retries exhausted",
+                        last_error=e,
+                        telemetry=RequestTelemetry(
+                            attempts=attempt,
+                            local_retry_wait_ms=local_retry_wait_ms,
+                            capacity_cooldown_wait_ms=cooldown_wait_ms,
+                            retry_reasons=retry_reasons,
+                        ),
+                    ) from e
             except Exception:
                 raise
 
@@ -681,7 +825,7 @@ class MockModelClient(ModelInterface):
     def __init__(
         self,
         response: str = "Mock response",
-        timeout: int = 30,
+        timeout: int = DEFAULT_MODEL_TIMEOUT,
         retry_count: int = 3,
         model: str = "mock",
     ):

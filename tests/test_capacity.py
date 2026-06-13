@@ -5,11 +5,14 @@ import time
 
 from gitbench.harness.benchmark import Benchmark
 from gitbench.harness.capacity import (
+    DEFAULT_COOLDOWN_SECONDS,
     RateLimitedBoundedSemaphore,
+    RequestAttemptGate,
     RequestBudgetCoordinator,
     CapacityInfo,
     derive_capacity_info,
     global_request_limit,
+    resolve_cooldown_config,
     resolve_group_intervals,
     resolve_group_limits,
 )
@@ -25,21 +28,26 @@ class _Cleanup:
 class _SlowModel:
     reasoning_level = None
 
-    def __init__(self) -> None:
+    def __init__(self, attempt_gate=None) -> None:
         self.active = 0
         self.max_active = 0
         self.lock = threading.Lock()
+        self._attempt_gate = attempt_gate
 
     def generate(self, messages: list[ModelMessage], **kwargs):
-        with self.lock:
-            self.active += 1
-            self.max_active = max(self.max_active, self.active)
-        try:
-            time.sleep(0.05)
-            return {"text": "ok", "usage": None}
-        finally:
+        from contextlib import nullcontext
+
+        gate_ctx = self._attempt_gate.acquire() if self._attempt_gate is not None else nullcontext()
+        with gate_ctx:
             with self.lock:
-                self.active -= 1
+                self.active += 1
+                self.max_active = max(self.max_active, self.active)
+            try:
+                time.sleep(0.05)
+                return {"text": "ok", "usage": None}
+            finally:
+                with self.lock:
+                    self.active -= 1
 
 
 class _FastBenchmark(Benchmark):
@@ -195,9 +203,11 @@ def test_runner_gates_parallel_fixture_calls_by_group_budget():
         global_limit=4,
         group_limits={"test:group": 1},
     )
+    gate = RequestAttemptGate(budget, "test:group")
+    gated_model = _SlowModel(attempt_gate=gate)
     runner = BenchmarkRunner(
         {"fast": _FastBenchmark},
-        model,
+        gated_model,
         request_budget=budget,
         capacity_key="test:group",
     )
@@ -205,7 +215,7 @@ def test_runner_gates_parallel_fixture_calls_by_group_budget():
     result = runner.run_benchmark("fast", fixture_workers=4)
 
     assert result.total == 4
-    assert model.max_active == 1
+    assert gated_model.max_active == 1
 
 
 # ── RateLimitedBoundedSemaphore ────────────────────────────────────────
@@ -381,14 +391,19 @@ class _TimingRecorder:
     """Model that records per-call timestamps."""
     reasoning_level = None
 
-    def __init__(self) -> None:
+    def __init__(self, attempt_gate=None) -> None:
         self.timestamps: list[float] = []
         self.lock = threading.Lock()
+        self._attempt_gate = attempt_gate
 
     def generate(self, messages: list[ModelMessage], **kwargs):
-        with self.lock:
-            self.timestamps.append(time.perf_counter())
-        return {"text": "ok", "usage": None}
+        from contextlib import nullcontext
+
+        gate_ctx = self._attempt_gate.acquire() if self._attempt_gate is not None else nullcontext()
+        with gate_ctx:
+            with self.lock:
+                self.timestamps.append(time.perf_counter())
+            return {"text": "ok", "usage": None}
 
 
 def test_delay_enforced_between_sequential_fixtures():
@@ -398,9 +413,11 @@ def test_delay_enforced_between_sequential_fixtures():
         group_limits={"test:group": 1},
         group_intervals={"test:group": 0.2},
     )
+    gate = RequestAttemptGate(budget, "test:group")
+    gated_model = _TimingRecorder(attempt_gate=gate)
     runner = BenchmarkRunner(
         {"fast": _FastBenchmark},
-        model,
+        gated_model,
         request_budget=budget,
         capacity_key="test:group",
     )
@@ -408,8 +425,339 @@ def test_delay_enforced_between_sequential_fixtures():
     result = runner.run_benchmark("fast", fixture_workers=1)
 
     assert result.total == 4
-    assert len(model.timestamps) == 4
+    assert len(gated_model.timestamps) == 4
     # Sequential fixtures: each pair should be separated by at least the interval
-    for i in range(1, len(model.timestamps)):
-        gap = model.timestamps[i] - model.timestamps[i - 1]
+    for i in range(1, len(gated_model.timestamps)):
+        gap = gated_model.timestamps[i] - gated_model.timestamps[i - 1]
         assert gap >= 0.18, f"Expected gap >= 0.18s between fixtures {i-1} and {i}, got {gap:.3f}s"
+
+
+# ── Cooldown coordination ─────────────────────────────────────────────
+
+
+class _FakeTime:
+    """Injectable monotonic clock for deterministic cooldown tests."""
+
+    def __init__(self, start: float = 0.0) -> None:
+        self._now = start
+
+    def __call__(self) -> float:
+        return self._now
+
+    def advance(self, seconds: float) -> None:
+        self._now += seconds
+
+    def sleep(self, seconds: float) -> None:
+        """Fake sleep that advances the clock instead of blocking."""
+        self._now += seconds
+
+
+def test_cooldown_blocks_acquire_attempt():
+    """acquire_attempt waits when a cooldown is active."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 0.0,  # no jitter for deterministic test
+    )
+    budget.report_rate_limit("group-a", 30.0)
+
+    # Attempt should wait until cooldown expires
+    t0 = clock()
+    with budget.acquire_attempt("group-a") as waited:
+        t1 = clock()
+
+    # Clock should have advanced past the cooldown
+    assert waited == 30.0
+    assert t1 >= t0 + 30.0
+
+
+def test_cooldown_does_not_block_unrelated_group():
+    """A cooldown on group A does not block group B."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 0.0,
+    )
+    budget.report_rate_limit("group-a", 30.0)
+
+    # Group B should proceed immediately
+    with budget.acquire_attempt("group-b") as waited:
+        pass
+
+    assert waited == 0.0
+
+
+def test_cooldown_extended_not_shortened():
+    """A later cooldown extends; an earlier one does not shorten."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 0.0,
+    )
+
+    # First: 45-second cooldown
+    budget.report_rate_limit("group-a", 45.0)
+    clock.advance(10.0)  # 35s remaining
+
+    # Second: 10-second cooldown (should NOT shorten)
+    budget.report_rate_limit("group-a", 10.0)
+
+    with budget.acquire_attempt("group-a") as waited:
+        pass
+
+    # Should have waited the remaining 35s, not 10s
+    assert waited == 35.0
+
+
+def test_cooldown_extended_by_later_report():
+    """A later report with longer delay extends the deadline."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 0.0,
+    )
+
+    # First: 20-second cooldown
+    budget.report_rate_limit("group-a", 20.0)
+    clock.advance(5.0)  # 15s remaining
+
+    # Second: 60-second cooldown (should extend)
+    budget.report_rate_limit("group-a", 60.0)
+
+    with budget.acquire_attempt("group-a") as waited:
+        pass
+
+    # Should have waited 60s from the second report
+    assert waited == 60.0
+
+
+def test_cooldown_includes_jitter():
+    """Cooldown adds positive jitter up to 10%."""
+    clock = _FakeTime(100.0)
+    # max jitter: random() returns 1.0 → 10% of 30 = 3.0, capped at 1.0
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 1.0,
+    )
+    budget.report_rate_limit("group-a", 30.0)
+
+    with budget.acquire_attempt("group-a") as waited:
+        pass
+
+    # 30s base + 1.0s max jitter = 31.0
+    assert waited == 31.0
+
+
+def test_jitter_capped_at_one_second():
+    """Jitter is capped at 1 second even for long delays."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 1.0,
+    )
+    # 10% of 100 = 10, but capped at 1.0
+    budget.report_rate_limit("group-a", 100.0)
+
+    with budget.acquire_attempt("group-a") as waited:
+        pass
+
+    assert waited == 101.0
+
+
+def test_cooldown_zero_jitter():
+    """Zero random() produces no jitter."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 0.0,
+    )
+    budget.report_rate_limit("group-a", 30.0)
+
+    with budget.acquire_attempt("group-a") as waited:
+        pass
+
+    assert waited == 30.0
+
+
+def test_multiple_waiters_respect_cooldown():
+    """Multiple threads all wait for the same cooldown."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        group_limits={"group-a": 2},
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 0.0,
+    )
+    budget.report_rate_limit("group-a", 30.0)
+
+    waited_values: list[float] = []
+    ready = threading.Event()
+
+    def worker():
+        ready.wait()
+        with budget.acquire_attempt("group-a") as waited:
+            waited_values.append(waited)
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+
+    # Advance clock past cooldown so both can proceed
+    clock.advance(35.0)
+    ready.set()
+
+    for t in threads:
+        t.join()
+
+    # Both should have waited ~30s (cooldown was already expired by advance)
+    # Since clock advanced 35s before they started, remaining was 0
+    assert len(waited_values) == 2
+    for w in waited_values:
+        assert w == 0.0  # cooldown already expired
+
+
+def test_group_concurrency_after_cooldown():
+    """After cooldown expires, group concurrency limits still apply."""
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        group_limits={"group-a": 1},
+    )
+
+    state = {"active": 0, "max_active": 0}
+    lock = threading.Lock()
+    ready = threading.Event()
+
+    def worker():
+        with budget.acquire_attempt("group-a") as _:
+            with lock:
+                state["active"] += 1
+                state["max_active"] = max(state["max_active"], state["active"])
+            ready.wait()
+            with lock:
+                state["active"] -= 1
+
+    threads = [threading.Thread(target=worker) for _ in range(3)]
+    for t in threads:
+        t.start()
+
+    time.sleep(0.1)
+    assert state["max_active"] == 1  # only one at a time
+    ready.set()
+    for t in threads:
+        t.join()
+
+
+def test_resolve_cooldown_config_default():
+    """Default fallback is 30 seconds with no config."""
+    fallback, per_key = resolve_cooldown_config({}, [])
+    assert fallback == DEFAULT_COOLDOWN_SECONDS
+    assert per_key == {}
+
+
+def test_resolve_cooldown_config_global_override():
+    """Global rate_limit_cooldown_seconds overrides the default."""
+    config = {"concurrency": {"rate_limit_cooldown_seconds": 60}}
+    fallback, per_key = resolve_cooldown_config(config, [])
+    assert fallback == 60.0
+
+
+def test_resolve_cooldown_config_per_group_override():
+    """Per-group override takes precedence for that key."""
+    config = {
+        "concurrency": {
+            "rate_limit_cooldown_seconds": 30,
+            "groups": [
+                {
+                    "key": "openrouter:anthropic/claude-opus",
+                    "match": ["anthropic/claude-opus-*"],
+                    "rate_limit_cooldown_seconds": 90,
+                }
+            ],
+        }
+    }
+    fallback, per_key = resolve_cooldown_config(config, [])
+    assert fallback == 30.0
+    assert per_key == {"openrouter:anthropic/claude-opus": 90.0}
+
+
+def test_resolve_cooldown_config_invalid_values_ignored():
+    """Negative or zero cooldown values are ignored."""
+    config = {"concurrency": {"rate_limit_cooldown_seconds": -5}}
+    fallback, _ = resolve_cooldown_config(config, [])
+    assert fallback == DEFAULT_COOLDOWN_SECONDS
+
+    config = {"concurrency": {"rate_limit_cooldown_seconds": 0}}
+    fallback, _ = resolve_cooldown_config(config, [])
+    assert fallback == DEFAULT_COOLDOWN_SECONDS
+
+
+# ── End-to-end cooldown integration ────────────────────────────────────
+
+
+def test_effort_variant_cooldown_blocks_other_variant():
+    """When one effort variant triggers a cooldown, another variant waits."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        group_limits={"openrouter:test/model": 2},
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 0.0,
+    )
+
+    # Simulate: variant A triggers a 30s cooldown
+    budget.report_rate_limit("openrouter:test/model", 30.0)
+
+    # Variant B (same capacity key) should wait
+    with budget.acquire_attempt("openrouter:test/model") as waited:
+        pass
+
+    assert waited == 30.0
+
+    # An unrelated group should not wait
+    with budget.acquire_attempt("other-group") as waited:
+        pass
+
+    assert waited == 0.0
+
+
+def test_unrelated_group_proceeds_during_cooldown():
+    """An unrelated capacity group is not blocked by another group's cooldown."""
+    clock = _FakeTime(100.0)
+    budget = RequestBudgetCoordinator(
+        global_limit=4,
+        group_limits={"group-a": 1, "group-b": 1},
+        _time_monotonic=clock,
+        _time_sleep=clock.sleep,
+        _random_random=lambda: 0.0,
+    )
+
+    # Cooldown on group-a
+    budget.report_rate_limit("group-a", 30.0)
+
+    # Group-b proceeds immediately
+    with budget.acquire_attempt("group-b") as waited:
+        pass
+
+    assert waited == 0.0
+
+    # Group-a waits
+    with budget.acquire_attempt("group-a") as waited:
+        pass
+
+    assert waited == 30.0

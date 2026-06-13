@@ -30,6 +30,7 @@ from gitbench.cli import (
     get_model_client,
     resolve_run_output_path,
 )
+from gitbench.harness.model import DEFAULT_MODEL_TIMEOUT
 from gitbench.ui.display import RichProgressDisplay
 from gitbench.version import BENCHMARK_SUITE_VERSION
 
@@ -130,7 +131,7 @@ class TestGetModelClient:
             from gitbench.harness.model import OpenAIAdapter
             client = get_model_client("gpt-4o", provider="openai")
             assert isinstance(client, OpenAIAdapter)
-            assert client.timeout == 30
+            assert client.timeout == DEFAULT_MODEL_TIMEOUT
 
     def test_provider_openai_overrides_localhost_base_url(self):
         """Test that explicit provider='openai' wins even with localhost base_url."""
@@ -144,7 +145,7 @@ class TestGetModelClient:
         from gitbench.harness.model import OllamaAdapter
         client = get_model_client("any-model", base_url="http://localhost:11434")
         assert isinstance(client, OllamaAdapter)
-        assert client.timeout == 120
+        assert client.timeout == DEFAULT_MODEL_TIMEOUT
 
     def test_custom_timeout_and_retry_are_forwarded(self):
         """Explicit timeout/retry values override provider defaults."""
@@ -224,9 +225,18 @@ class TestReasoningPreflightDiscovery:
 class TestModelRetryPolicy:
     """Tests for CLI/profile timeout and retry resolution."""
 
-    def test_provider_defaults_are_preserved_without_cli_or_profile_values(self):
-        assert _effective_timeout({}, None) is None
+    def test_default_timeout_is_240_without_cli_or_profile(self):
+        """Default timeout is 240 when neither CLI nor profile specifies one."""
+        assert _effective_timeout({}, None) == DEFAULT_MODEL_TIMEOUT
         assert _effective_retry_count({}, None) == DEFAULT_RETRY_COUNT
+
+    def test_profile_timeout_overrides_default(self):
+        """Profile timeout overrides the 240-second default."""
+        assert _effective_timeout({"timeout": 180}, None) == 180
+
+    def test_cli_timeout_overrides_profile(self):
+        """CLI timeout overrides both profile and default."""
+        assert _effective_timeout({"timeout": 180}, 300) == 300
 
     def test_profile_timeout_and_retry_are_used_when_cli_values_absent(self):
         profile = {"timeout": 45, "retry_count": 2}
@@ -244,6 +254,73 @@ class TestModelRetryPolicy:
         assert _effective_doctor_timeout({}, None) == DEFAULT_DOCTOR_TIMEOUT
         assert _effective_doctor_timeout({"timeout": 45}, None) == 45
         assert _effective_doctor_timeout({"timeout": 45}, 180) == 180
+
+    def test_doctor_timeout_unchanged_by_model_timeout_policy(self):
+        """Doctor timeout resolution is independent of the 240-second model default."""
+        # Doctor default remains 120, not 240
+        assert _effective_doctor_timeout({}, None) == DEFAULT_DOCTOR_TIMEOUT
+        assert DEFAULT_DOCTOR_TIMEOUT == 120
+        # Doctor does not fall through to DEFAULT_MODEL_TIMEOUT
+        assert _effective_doctor_timeout({}, None) != DEFAULT_MODEL_TIMEOUT
+
+    def test_get_model_client_always_passes_timeout(self):
+        """get_model_client always passes a concrete timeout to adapters."""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            client = get_model_client("gpt-4o", provider="openai")
+            assert client.timeout == DEFAULT_MODEL_TIMEOUT
+
+        client2 = get_model_client("llama3.1:8b", provider="ollama")
+        assert client2.timeout == DEFAULT_MODEL_TIMEOUT
+
+    def test_get_model_client_respects_explicit_timeout(self):
+        """Explicit timeout is forwarded to the adapter."""
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            client = get_model_client("gpt-4o", provider="openai", timeout=60)
+            assert client.timeout == 60
+
+        client2 = get_model_client("llama3.1:8b", provider="ollama", timeout=90)
+        assert client2.timeout == 90
+
+    def test_preflight_targets_get_resolved_timeout(self):
+        """Reasoning preflight targets receive the resolved timeout."""
+        profile = {
+            "provider": "openai",
+            "base_url": "https://openrouter.ai/api/v1",
+        }
+        runs = [("test", profile, ["vendor/model:none"])]
+
+        # Default: 240
+        targets = _discover_reasoning_preflight_targets(
+            runs,
+            base_url_override=None,
+            provider_override=None,
+            timeout_override=None,
+            retry_count_override=None,
+        )
+        assert len(targets) == 1
+        assert targets[0].timeout == DEFAULT_MODEL_TIMEOUT
+
+        # CLI override
+        targets = _discover_reasoning_preflight_targets(
+            runs,
+            base_url_override=None,
+            provider_override=None,
+            timeout_override=60,
+            retry_count_override=None,
+        )
+        assert targets[0].timeout == 60
+
+        # Profile override
+        profile_with_timeout = dict(profile, timeout=90)
+        runs2 = [("test", profile_with_timeout, ["vendor/model:none"])]
+        targets = _discover_reasoning_preflight_targets(
+            runs2,
+            base_url_override=None,
+            provider_override=None,
+            timeout_override=None,
+            retry_count_override=None,
+        )
+        assert targets[0].timeout == 90
 
 
 class TestListCommand:

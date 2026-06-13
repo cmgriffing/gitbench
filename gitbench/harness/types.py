@@ -97,6 +97,7 @@ class Score:
     expected: str | None = None
     description: str | None = None
     duration_ms: float | None = None
+    request_telemetry: dict | None = None
     # Structured-output fields (attached at runtime, not in default serialization)
     _output_mode: str | None = field(default=None, repr=False)
     _parsed_payload: dict | None = field(default=None, repr=False)
@@ -112,7 +113,7 @@ class Score:
             "reasoning_tokens", "api_duration_ms", "transcript",
             "purpose", "difficulty", "tags",
             "prompt", "expected", "description",
-            "duration_ms",
+            "duration_ms", "request_telemetry",
         )
         for field_name in none_fields:
             if result.get(field_name) is None:
