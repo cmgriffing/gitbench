@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Lucide icons provide a consistent, lightweight icon set used throughout the GitBench web interface.
+
+## Requirements
 
 ### Requirement: Sidebar uses Lucide icons
 The Sidebar component SHALL render Lucide SVG icons instead of unicode emoji characters for all six navigation links. Icons SHALL be imported from `lucide-react` and rendered server-side by Astro (no `client:*` directive) to avoid client-side JavaScript for static icons.

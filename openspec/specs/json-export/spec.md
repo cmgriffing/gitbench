@@ -1,9 +1,7 @@
 ## Purpose
 
 JSON export defines the generated report data shape used by the web app and report APIs.
-
 ## Requirements
-
 ### Requirement: render_json exports aggregated data to JSON file
 The `render.py` module SHALL provide a `render_json(data, output_path)` function that writes the aggregated data dict (from `aggregate_runs()`) as a formatted JSON file. The output SHALL include model summaries with cost aggregates (`total_cost_usd`, `avg_cost_usd`), benchmark summaries, the results matrix, per-fixture results with full model outputs (not truncated), fixture metadata (purpose, difficulty, tags, prompt, expected), cost data (`cost_usd`), and run history. The `"unknown"` model SHALL NOT appear in the output.
 
@@ -64,15 +62,22 @@ The `gitbench render` CLI command SHALL support a `--format json` option that ca
 - **THEN** the aggregated data is written as JSON to the specified path
 
 ### Requirement: CLI provides gitbench report command
-The CLI SHALL provide a `gitbench report` command that: (1) optionally runs benchmarks if needed, (2) aggregates results from `gitbench-results/`, (3) writes `ui/public/results.json`, (4) runs `npm run build` in `ui/`, and (5) opens the built report or prints the path.
+The CLI SHALL provide a `gitbench report` command that: (1) aggregates legacy run results from `gitbench-results/`, (2) ingests campaign artifacts from campaign directories containing `campaign.json`, (3) writes `gitbench/web/public/results.json`, (4) writes the generated SQLite report database, (5) runs `pnpm build` in `gitbench/web/` unless skipped, and (6) opens the built report or prints the path when requested.
 
 #### Scenario: report command builds and opens
 - **WHEN** `gitbench report --open` is executed
-- **THEN** the Astro site is built to `ui/dist/` and the dashboard page is opened in the browser
+- **THEN** the Astro site is built to `gitbench/web/dist/`
+- **AND** the dashboard page is opened through the supported preview flow
 
 #### Scenario: report command skips build if --no-build
 - **WHEN** `gitbench report --no-build` is executed
-- **THEN** only `results.json` is written; the build step is skipped
+- **THEN** report JSON and SQLite data artifacts are written
+- **AND** the Astro build step is skipped
+
+#### Scenario: report command ingests campaign artifacts
+- **WHEN** `gitbench report` scans a result directory containing `campaign.json` and raw campaign attempt envelopes
+- **THEN** the generated report JSON SHALL include campaign metadata, trials, exact raw-attempt references, fixture aggregates, and campaign summaries
+- **AND** it SHALL NOT require a separate manual campaign export step
 
 ### Requirement: aggregate_runs filters out the "unknown" model
 The `aggregate_runs()` function SHALL, after building all data structures, remove any entry for model name `"unknown"` from: `model_list`, `model_summaries`, `matrix`, `fixtures`, and `runs_meta`. This filtering SHALL happen as the final step before returning the result dict.
@@ -144,3 +149,55 @@ The aggregated JSON SHALL preserve provider/base-model/reasoning grouping while 
 - **WHEN** a base model has `high` reasoning results in both text and JSON-schema modes
 - **THEN** the corresponding base model group exposes both variants for the `high` effort
 - **AND** each variant has its own pass rate and total cost
+
+### Requirement: JSON export represents campaigns and attempts
+
+The JSON export SHALL include campaign metadata, trial summaries, fixture reliability aggregates, explicit metric numerators and denominators, resource summaries, and references or records for raw attempts.
+
+#### Scenario: Export a repeated campaign
+
+- **WHEN** a five-trial campaign is exported
+- **THEN** the export SHALL identify all five planned trials and their completion states
+- **AND** fixture aggregates SHALL include passing and valid attempt counts
+- **AND** raw attempts SHALL retain exact campaign and trial identities
+
+### Requirement: JSON export imports historical results as legacy campaigns
+
+The export pipeline SHALL interpret pre-campaign result artifacts as one-trial legacy campaigns without inventing repeated-trial evidence.
+
+#### Scenario: Import a historical artifact
+
+- **WHEN** an artifact from the previous report schema is loaded
+- **THEN** it SHALL produce a one-trial campaign marked `legacy`
+- **AND** repeated-trial variability fields SHALL be absent or explicitly unavailable
+
+### Requirement: New exports use unambiguous metric names
+
+New campaign exports SHALL use `mean_success_rate` and explicitly named `pass_any_at_n` fields and SHALL NOT use `pass_at_k` to represent ordinary pass rate.
+
+#### Scenario: Read campaign summary metrics
+
+- **WHEN** a consumer reads a campaign model summary
+- **THEN** it SHALL be able to distinguish one-attempt mean success from passing at least once in multiple attempts
+
+### Requirement: Campaign JSON export uses unambiguous metrics
+Campaign JSON export SHALL use `mean_success_rate`, `pass_any_at_n`, `planned_trials`, `completed_trials`, `valid_attempts`, `passing_attempts`, and `excluded_attempts` for campaign metrics. Campaign export SHALL NOT use `pass_at_k` as the headline campaign metric.
+
+#### Scenario: Repeated campaign export
+- **WHEN** a campaign with five planned trials is exported
+- **THEN** the campaign JSON SHALL identify all five trials and their completion state
+- **AND** fixture summaries SHALL expose passing and valid attempt counts
+- **AND** model and benchmark summaries SHALL expose `mean_success_rate`
+
+#### Scenario: Legacy artifact remains readable
+- **WHEN** `gitbench report` ingests a historical one-shot result artifact
+- **THEN** the legacy aggregate fields SHALL remain readable
+- **AND** the report SHALL NOT infer repeated-trial stability from that artifact
+
+### Requirement: Campaign JSON export preserves exact attempt identity
+Every raw campaign attempt record or reference in JSON export SHALL include campaign ID, trial index, model ID, reasoning effort, output mode, benchmark, and fixture ID.
+
+#### Scenario: Exact identity exported
+- **WHEN** a raw attempt is exported for a JSON-schema high-reasoning model run
+- **THEN** its exported identity SHALL include `campaign_id`, `trial_index`, `model_id`, `reasoning_effort`, `output_mode`, `benchmark`, and `fixture_id`
+

@@ -91,9 +91,9 @@ Each model adapter is configured with 5 retries:
 - The adapter SHALL retry with exponential backoff on transient failures
 - On rate limits (HTTP 429), the adapter SHALL respect the ``Retry-After`` header
 - Failed models are excluded from the average; only successful scores count
-- If all models in the profile fail, the system SHALL fall back to ``SequenceMatcher``
-- The resulting ``Score`` SHALL have a non-null ``error`` field containing "judge_failed"
-- This fallback behavior lives in the `llm_judge` scoring branch, not the `similarity` branch.
+- In legacy one-shot scoring, if all models in the profile fail, the system SHALL fall back to ``SequenceMatcher`` and the resulting ``Score`` SHALL have a non-null ``error`` field containing "judge_failed"
+- In campaign scoring, if all models in the profile fail, the attempt SHALL be marked unscored with judge evidence, SHALL be excluded from quality denominators, and SHALL make the campaign incomplete
+- Fallback behavior lives in the `llm_judge` scoring branch, not the `similarity` branch.
 
 #### Scenario: Judge averages multiple model scores
 - **WHEN** the judge profile has 3 models returning 0.8, 0.6, and 0.7
@@ -103,9 +103,16 @@ Each model adapter is configured with 5 retries:
 - **WHEN** one model fails and two return 0.8 and 0.4
 - **THEN** the judge SHALL return 0.6 (average of the two successful scores)
 
-#### Scenario: All judge models fail
-- **WHEN** every model in the judge profile exhausts its retries while scoring an llm_judge fixture
-- **THEN** the score falls back to SequenceMatcher against `fixture.expected` and `Score.error` contains "judge_failed"
+#### Scenario: All judge models fail in legacy one-shot scoring
+- **WHEN** every model in the judge profile exhausts its retries while scoring an llm_judge fixture outside campaign execution
+- **THEN** the score falls back to SequenceMatcher against `fixture.expected`
+- **AND** `Score.error` contains "judge_failed"
+
+#### Scenario: All judge models fail in campaign scoring
+- **WHEN** every model in the judge profile exhausts its retries while scoring an llm_judge fixture inside campaign execution
+- **THEN** the campaign attempt SHALL be unscored
+- **AND** judge evidence SHALL preserve the failed member results
+- **AND** the attempt SHALL not count as a model-quality failure
 
 #### Scenario: Partial judge failure
 - **WHEN** one judge model fails and others return scores
@@ -121,3 +128,51 @@ The `BenchmarkRunner` SHALL construct a single judge-aware `Scorer` when a judge
 #### Scenario: Runner without judge configuration
 - **WHEN** the runner is initialized without a `judge` section
 - **THEN** the `Scorer` has no judge client, and only llm_judge fixtures would error (prevented by preflight)
+
+### Requirement: Judge failure handling preserves scoring consistency
+
+LLM-judge scoring SHALL retry according to configured policy and SHALL mark the target attempt unscored if required judge results remain unavailable. It SHALL NOT fall back to a different scoring method within the campaign.
+
+#### Scenario: A required judge remains unavailable
+
+- **WHEN** judge retries are exhausted and the configured aggregate cannot be produced
+- **THEN** the target attempt SHALL be marked unscored
+- **AND** the campaign SHALL remain incomplete
+- **AND** no heuristic fallback score SHALL enter campaign quality aggregates
+
+### Requirement: Judge decisions are cached by campaign evidence identity
+
+LLM-judge decisions SHALL be cached by fixture input hash, target output hash, and judge configuration hash within a campaign.
+
+#### Scenario: Identical output is judged again
+
+- **WHEN** the same fixture input, target output, and judge configuration recur in the campaign
+- **THEN** the scorer SHALL reuse the cached judge decision
+- **AND** it SHALL not issue duplicate judge calls
+
+#### Scenario: Judge configuration changes
+
+- **WHEN** any judge model, prompt, aggregation rule, or request configuration changes
+- **THEN** the prior cached decision SHALL not be reused
+
+### Requirement: Judge member evidence is auditable
+
+The result store SHALL retain member-level judge scores, aggregation outcome, model/provider provenance, and failure state for each judged attempt.
+
+#### Scenario: Inspect a judged fixture
+
+- **WHEN** a user opens raw evidence for an LLM-judged attempt
+- **THEN** each judge member result and the final aggregation SHALL be available subject to publication safety rules
+
+### Requirement: Campaign judge scoring uses cache keys
+Campaign scoring SHALL pass a cache key to judge evaluation derived from the fixture input hash, target output hash, and judge configuration hash. Repeated identical target outputs for the same fixture input within a campaign SHALL reuse cached judge evidence or score.
+
+#### Scenario: Identical output judged once
+- **WHEN** two attempts in the same campaign have the same fixture input hash, target output hash, and judge configuration hash
+- **THEN** the second attempt SHALL use the campaign judge cache
+- **AND** it SHALL NOT issue duplicate judge model calls
+
+#### Scenario: Different judge configuration bypasses cache
+- **WHEN** the judge configuration hash changes
+- **THEN** an otherwise identical fixture input and target output SHALL be judged again
+

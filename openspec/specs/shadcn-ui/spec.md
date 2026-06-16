@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Shadcn UI provides the component library and design system foundation for the GitBench web interface.
+
+## Requirements
 
 ### Requirement: Tailwind CSS is configured
 The Astro project SHALL use Tailwind CSS v4 with the `@tailwindcss/vite` plugin integrated via the Astro config. Existing CSS custom properties (`--bg`, `--surface`, `--card`, `--accent`, `--pass`, `--fail`, `--warn`, etc.) SHALL be mapped into Tailwind's `@theme` block so shadcn components render with the project's dark color palette.

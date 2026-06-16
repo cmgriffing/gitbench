@@ -1,5 +1,7 @@
-## ADDED Requirements
+## Purpose
 
+The CLI live display provides a real-time, Rich-based TUI progress view of benchmark execution, showing per-model progress panels, a comparison summary table, and optional verbose logging.
+## Requirements
 ### Requirement: RichProgressDisplay implements RunProgress protocol
 The `RichProgressDisplay` class SHALL implement the `RunProgress` protocol (`model_started`, `benchmark_started`, `fixture_finished`, `benchmark_finished`, `model_finished`) and render a live Rich-based TUI display to stderr.
 
@@ -103,3 +105,57 @@ After this change, the files `gitbench/ui/terminal.py`, `gitbench/ui/progress.py
 #### Scenario: Rich is installable as a dependency
 - **WHEN** `pip install -e .` is run
 - **THEN** Rich SHALL be installed automatically
+
+### Requirement: CLI displays campaign scope before execution
+
+Before starting a campaign, the CLI SHALL display the selected models, efforts, output modes, fixtures, planned trials, total target attempts, and estimated additional judge and safety calls when calculable.
+
+#### Scenario: Preview an expensive campaign
+
+- **WHEN** a campaign plans multiple trial rounds
+- **THEN** the confirmation display SHALL show total planned calls rather than only one-trial counts
+
+### Requirement: CLI displays trial and campaign progress
+
+During execution, the CLI SHALL show the campaign ID, current trial, completed and planned attempts, failure counts, and resume state.
+
+#### Scenario: Resume a campaign
+
+- **WHEN** execution resumes with existing valid attempts
+- **THEN** the live display SHALL identify reused attempts and remaining attempts
+
+### Requirement: CLI completion distinguishes status dimensions
+
+At exit, the CLI SHALL separately report quality completion, operational failures, safety/publication state, and aggregate resource consumption.
+
+#### Scenario: Finish with judge failures
+
+- **WHEN** target attempts complete but judge attempts remain unscored
+- **THEN** the CLI SHALL report the campaign as incomplete
+- **AND** it SHALL not print a final complete ranking
+
+### Requirement: Campaign display reflects actual execution
+When a campaign is running, the live display and non-TTY fallback SHALL show actual campaign execution counts derived from the campaign schedule and persisted attempts, not only planned preview counts.
+
+#### Scenario: Trial progress advances
+- **WHEN** a two-trial campaign completes one attempt
+- **THEN** the display SHALL increment completed campaign attempts by one
+- **AND** it SHALL show the current trial or aggregate trial progress
+
+#### Scenario: Reused attempts are visible
+- **WHEN** resume skips compatible persisted attempts
+- **THEN** the display SHALL show reused attempt counts separately from newly executed attempts
+- **AND** remaining attempts SHALL equal planned attempts minus reused and newly completed attempts
+
+### Requirement: Campaign display distinguishes failure classes
+Campaign progress output SHALL distinguish quality failures, infrastructure failures, invalid/hash-mismatch attempts, unscored attempts, and safety/publishability state.
+
+#### Scenario: Infrastructure failure during campaign
+- **WHEN** a provider attempt exhausts retries during a campaign
+- **THEN** the display SHALL count it as an infrastructure failure
+- **AND** it SHALL not present it as an ordinary model-quality failed fixture
+
+#### Scenario: Campaign remains unpublished
+- **WHEN** a complete campaign has pending or blocked safety review
+- **THEN** the final display SHALL show that the campaign is complete but not publishable
+

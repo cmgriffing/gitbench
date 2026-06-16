@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Section info tips provide contextual help text with CSS tooltips on desktop and inline text on mobile for UI sections.
+
+## Requirements
 
 ### Requirement: Info tip uses CSS tooltip on desktop, inline text on mobile
 Section blurbs that are helpful but not critical SHALL use the `info-tip` CSS class pattern. On viewports wider than 768px, the blurb SHALL render as a positioned tooltip that appears on hover over the section label. On viewports 768px or narrower, the blurb SHALL render as a static paragraph below the section label. No JavaScript SHALL be required.

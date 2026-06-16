@@ -1,5 +1,7 @@
-## ADDED Requirements
+## Purpose
 
+The pricing pipeline extracts and processes cost data from API responses to enable per-model cost comparisons in benchmark results.
+## Requirements
 ### Requirement: OpenRouter cost is extracted from API response
 The `OpenAIAdapter.generate()` method SHALL extract the `cost` field from the OpenRouter API response's `usage` object and include it in the returned usage dict under the key `"cost"`. The `cost` value SHALL be a float representing USD. When the `cost` field is absent or None (e.g., for non-OpenRouter providers), the returned usage dict SHALL omit the `"cost"` key or set it to None.
 
@@ -57,3 +59,20 @@ The `ModelSummary` interface in `web/src/lib/types.ts` SHALL include `total_cost
 #### Scenario: ModelSummary type has cost fields
 - **WHEN** reading `types.ts`
 - **THEN** `ModelSummary` includes `total_cost_usd: number | null` and `avg_cost_usd: number | null`
+
+### Requirement: Pricing pipeline aggregates campaign costs at explicit scopes
+
+The pricing pipeline SHALL calculate attempt cost, mean cost per complete trial, total campaign cost, and cost consumed by operational failures as separate values.
+
+#### Scenario: Price a complete campaign
+
+- **WHEN** all attempts have token usage and applicable model pricing
+- **THEN** the campaign SHALL expose mean complete-trial cost and total cost
+- **AND** the total SHALL reconcile with priced target, judge, retry, and configured safety calls
+
+#### Scenario: Pricing is unavailable
+
+- **WHEN** any call lacks applicable pricing data
+- **THEN** affected aggregates SHALL be marked partial
+- **AND** the pipeline SHALL not present the known subtotal as a complete campaign total
+

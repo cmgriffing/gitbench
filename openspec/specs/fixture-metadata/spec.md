@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Fixture metadata provides optional structured fields in fixture YAML files for additional context and categorization.
+
+## Requirements
 
 ### Requirement: Fixture YAML supports optional metadata fields
 Fixture YAML files SHALL support three new optional top-level fields: `purpose`, `difficulty`, and `tags`. All three fields are optional — a fixture without them MUST load without error.

@@ -363,3 +363,41 @@ The `QuadrantComparisonChart` SHALL render output modes as separate points when 
 - **WHEN** the paired quadrant tooltip renders
 - **THEN** it contains no separator and explanatory footnote
 
+### Requirement: Chart components accept campaign-aware aggregates
+
+Benchmark heatmaps, pass-rate charts, scatter plots, time series, and output-mode comparison charts SHALL accept campaign identity, completeness, and explicit attempt numerators and denominators.
+
+#### Scenario: Render incomplete aggregate data
+
+- **WHEN** a chart receives an incomplete campaign aggregate
+- **THEN** it SHALL visually and textually mark the data as incomplete
+- **AND** it SHALL not present the value as part of a default complete-campaign ranking
+
+### Requirement: Trial variability and reasoning-effort ranges use distinct encodings
+
+Charts SHALL NOT reuse the same whisker or range encoding for variability across repeated trials and range across reasoning-effort configurations.
+
+#### Scenario: Overview includes multiple efforts and trials
+
+- **WHEN** an overview point summarizes both multiple reasoning efforts and repeated trials
+- **THEN** the primary range SHALL retain its documented reasoning-effort meaning
+- **AND** trial minimum, maximum, or standard deviation SHALL appear in a separately labeled tooltip or detail view
+
+### Requirement: Chart tooltips expose denominators
+
+Reliability chart tooltips SHALL include passing attempts, valid attempts, planned trials, completed trials, and campaign status.
+
+#### Scenario: Inspect a success-rate bar
+
+- **WHEN** a user focuses or hovers a model success-rate bar
+- **THEN** the tooltip SHALL identify the campaign and show the attempt numerator and denominator
+
+### Requirement: Reliability charts are not color-dependent
+
+Charts SHALL expose equivalent reliability meaning through labels, patterns, symbols, or accessible descriptions in addition to color.
+
+#### Scenario: Read a flaky fixture marker
+
+- **WHEN** the marker is focused using a keyboard
+- **THEN** its accessible name SHALL identify the fixture as flaky and state its pass ratio
+

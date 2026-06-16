@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Fixture calibration corrects known brittle or ambiguous test fixtures to ensure reliable and fair benchmark comparisons.
+
+## Requirements
 
 ### Requirement: Known brittle fixtures are corrected
 Fixtures with known incorrect, ambiguous, or brittle expectations SHALL be corrected so valid answers pass, objectively wrong expectations are removed, and the repository state identifies one deterministic expected answer.

@@ -1,4 +1,8 @@
-## ADDED Requirements
+## Purpose
+
+Reasoning level tracking captures and exposes the reasoning effort level used by models during benchmark execution.
+
+## Requirements
 
 ### Requirement: Score exposes reasoning level
 The `Score` dataclass and its `to_dict()`/`from_dict()` methods SHALL include an optional `reasoning_level` field populated from the adapter's reasoning level.
