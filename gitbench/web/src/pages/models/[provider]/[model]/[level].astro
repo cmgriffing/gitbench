@@ -2,6 +2,7 @@
 import { ModelReliabilitySummary } from "@/components/ModelReliabilitySummary";
 import Layout from "@/components/Layout.astro";
 import FixtureCard from "@/components/fixtures/FixtureCard.astro";
+import FixtureCardBoth from "@/components/fixtures/FixtureCardBoth.astro";
 import { loadDataSync } from "@/lib/data";
 import { modelLevelPath } from "@/lib/routes";
 import {
@@ -84,13 +85,18 @@ const { provider, baseModel, level, modelName, jsonModelName, group, data } =
     data: GitBenchData;
   };
 
+// Derive text model name: when modelName === jsonModelName, only JSON exists
+const textModelName =
+  jsonModelName != null && modelName === jsonModelName ? null : modelName;
+
+const hasJsonVariant = jsonModelName != null;
+
 const summary = data.model_summaries[modelName];
 if (!summary) {
   return new Response("Model not found", { status: 404 });
 }
 
-const passRate = Math.round(summary.pass_at_k * 1000) / 10;
-const outputMode = modelName.endsWith("__json_schema") ? "json_schema" : "text";
+const outputMode = textModelName ? "text" : "json_schema";
 const outputModeLabel = outputMode === "text" ? "Text" : "JSON Schema";
 const encodedModelGroup = encodeURIComponent(`${provider}/${baseModel}`);
 const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
@@ -99,14 +105,61 @@ const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
 const hasComparison =
   jsonModelName != null && data.model_summaries[jsonModelName] != null;
 
-// Collect all fixture results for this model (text mode as primary)
-const allFixtures: (FixtureResult & { benchmark: string })[] = [];
-for (const bench of data.benchmarks) {
-  const results = data.fixtures[modelName]?.[bench] || [];
-  for (const r of results) {
-    allFixtures.push({ ...r, benchmark: bench });
+// Collect fixture results for text model
+const textFixtures: (FixtureResult & { benchmark: string })[] = [];
+if (textModelName) {
+  for (const bench of data.benchmarks) {
+    const results = data.fixtures[textModelName]?.[bench] || [];
+    for (const r of results) {
+      textFixtures.push({ ...r, benchmark: bench });
+    }
   }
 }
+
+// Collect fixture results for JSON model
+const jsonFixtures: (FixtureResult & { benchmark: string })[] = [];
+if (jsonModelName) {
+  for (const bench of data.benchmarks) {
+    const results = data.fixtures[jsonModelName]?.[bench] || [];
+    for (const r of results) {
+      jsonFixtures.push({ ...r, benchmark: bench });
+    }
+  }
+}
+
+// Build merged "both" fixtures by joining text and JSON per fixture ID + benchmark
+const bothFixtures: Array<{
+  fixture_id: string;
+  benchmark: string;
+  textResult: (FixtureResult & { benchmark: string }) | null;
+  jsonResult: (FixtureResult & { benchmark: string }) | null;
+}> = [];
+{
+  const textMap = new Map<string, FixtureResult & { benchmark: string }>();
+  for (const fx of textFixtures) {
+    textMap.set(`${fx.benchmark}/${fx.fixture_id}`, fx);
+  }
+  const jsonMap = new Map<string, FixtureResult & { benchmark: string }>();
+  for (const fx of jsonFixtures) {
+    jsonMap.set(`${fx.benchmark}/${fx.fixture_id}`, fx);
+  }
+  const allKeys = new Set([...textMap.keys(), ...jsonMap.keys()]);
+  for (const key of allKeys) {
+    const textResult = textMap.get(key) ?? null;
+    const jsonResult = jsonMap.get(key) ?? null;
+    const ref = textResult || jsonResult;
+    if (!ref) continue;
+    bothFixtures.push({
+      fixture_id: ref.fixture_id,
+      benchmark: ref.benchmark,
+      textResult,
+      jsonResult,
+    });
+  }
+}
+
+// Keep allFixtures for backward compat (gallery count, existing logic)
+const allFixtures = textFixtures.length > 0 ? textFixtures : jsonFixtures;
 
 // Compute text-vs-structured comparison when both modes exist
 let comparison: import("@/lib/model-comparison").ModeComparison | null = null;
@@ -164,45 +217,94 @@ for (const fid in data.fixture_index) {
   for (const t of fi.tags) allTags.add(t);
 }
 
-const passCls =
-  summary.pass_at_k >= 0.8 ? "pass" : summary.pass_at_k < 0.5 ? "fail" : "warn";
-const passColor =
-  summary.pass_at_k >= 0.8
-    ? "bg-pass-bg text-pass border-pass-border"
-    : summary.pass_at_k < 0.5
-      ? "bg-fail-bg text-fail border-(--color-fail-border)"
-      : "bg-warn-bg text-(--color-warn) border-(--color-warn-border)";
+const hasReasoningLevel = level && level !== "default";
 
-// Compute total tokens and cost
-let totalInputTokens = 0;
-let totalOutputTokens = 0;
-let totalReasoningTokens = 0;
-let hasReasoningTelemetry = false;
-let totalCost = 0;
-let hasCost = false;
-for (const bench of data.benchmarks) {
-  const results = data.fixtures[modelName]?.[bench] || [];
-  for (const r of results) {
-    totalInputTokens += r.input_tokens || 0;
-    totalOutputTokens += r.output_tokens || 0;
-    if (r.reasoning_tokens != null) {
-      totalReasoningTokens += r.reasoning_tokens;
-      hasReasoningTelemetry = true;
-    }
-    if (r.cost_usd != null) {
-      totalCost += r.cost_usd;
-      hasCost = true;
-    }
-  }
+interface HeaderStats {
+  summary: typeof summary;
+  passRate: number;
+  passCls: string;
+  passColor: string;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalReasoningTokens: number;
+  hasReasoningTelemetry: boolean;
+  totalCost: number;
+  hasCost: boolean;
+  aggregateTokenLabel: string | null;
 }
 
-const hasReasoningLevel = level && level !== "default";
-const aggregateTokenLabel = formatAggregateTokenUsage(
-  totalInputTokens,
-  totalOutputTokens,
-  hasReasoningLevel ? level : null,
-  hasReasoningTelemetry ? totalReasoningTokens : null,
-);
+function computeStatsForModel(model: string | null): HeaderStats | null {
+  if (!model) return null;
+  const s = data.model_summaries[model];
+  if (!s) return null;
+
+  const pr = Math.round(s.pass_at_k * 1000) / 10;
+  const pc = s.pass_at_k >= 0.8 ? "pass" : s.pass_at_k < 0.5 ? "fail" : "warn";
+  const pcolor =
+    s.pass_at_k >= 0.8
+      ? "bg-pass-bg text-pass border-pass-border"
+      : s.pass_at_k < 0.5
+        ? "bg-fail-bg text-fail border-(--color-fail-border)"
+        : "bg-warn-bg text-(--color-warn) border-(--color-warn-border)";
+
+  let tin = 0;
+  let tout = 0;
+  let treason = 0;
+  let hasRT = false;
+  let cost = 0;
+  let hasCost = false;
+  for (const bench of data.benchmarks) {
+    const results = data.fixtures[model]?.[bench] || [];
+    for (const r of results) {
+      tin += r.input_tokens || 0;
+      tout += r.output_tokens || 0;
+      if (r.reasoning_tokens != null) {
+        treason += r.reasoning_tokens;
+        hasRT = true;
+      }
+      if (r.cost_usd != null) {
+        cost += r.cost_usd;
+        hasCost = true;
+      }
+    }
+  }
+
+  const tokenLabel = formatAggregateTokenUsage(
+    tin,
+    tout,
+    hasReasoningLevel ? level : null,
+    hasRT ? treason : null,
+  );
+
+  return {
+    summary: s,
+    passRate: pr,
+    passCls: pc,
+    passColor: pcolor,
+    totalInputTokens: tin,
+    totalOutputTokens: tout,
+    totalReasoningTokens: treason,
+    hasReasoningTelemetry: hasRT,
+    totalCost: cost,
+    hasCost,
+    aggregateTokenLabel: tokenLabel,
+  };
+}
+
+const textStats = computeStatsForModel(textModelName);
+const jsonStats = computeStatsForModel(jsonModelName);
+
+// Keep existing variable names mapped from the primary model's stats
+const primaryStats = textStats ?? jsonStats!;
+const passRate = primaryStats.passRate;
+const passCls = primaryStats.passCls;
+const passColor = primaryStats.passColor;
+const totalInputTokens = primaryStats.totalInputTokens;
+const totalOutputTokens = primaryStats.totalOutputTokens;
+const hasReasoningTelemetry = primaryStats.hasReasoningTelemetry;
+const totalCost = primaryStats.totalCost;
+const hasCost = primaryStats.hasCost;
+const aggregateTokenLabel = primaryStats.aggregateTokenLabel;
 ---
 
 <Layout title={`${providerName} / ${baseModel} / ${level || "default"}`}>
@@ -256,34 +358,84 @@ const aggregateTokenLabel = formatAggregateTokenUsage(
 
   <!-- Stats + Compare -->
   <div class="flex justify-between items-start flex-wrap gap-4 mb-8">
-    <div>
-      <div class="flex gap-2 items-center flex-wrap mb-2">
-        <Badge variant="outline" className={`font-mono text-xs ${passColor}`}>
-          {passRate}%
-        </Badge>
-        <span class="font-mono text-xs text-(--color-text-dim)">
-          {summary.total_passed} / {summary.total_fixtures} fixtures
-        </span>
-        <span
-          class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60"
-        >
-          {summary.total_runs} run(s)
-        </span>
-      </div>
-      <div
-        class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60 mt-1"
-      >
-        {
-          (totalInputTokens > 0 || totalOutputTokens > 0) &&
-          aggregateTokenLabel && (
-            <span class="mr-3">
-              {aggregateTokenLabel}
+    <div
+      class="flex flex-col gap-2"
+      id="header-stats-container"
+      data-has-text={textModelName != null}
+      data-has-json={jsonModelName != null}
+    >
+      {textStats && (
+        <div data-stats="text">
+          <div class="flex gap-2 items-center flex-wrap mb-2">
+            <Badge
+              variant="outline"
+              className={`font-mono text-xs ${textStats.passColor}`}
+            >
+              {textStats.passRate}%
+            </Badge>
+            <span class="font-mono text-xs text-(--color-text-dim)">
+              {textStats.summary.total_passed} / {textStats.summary.total_fixtures} fixtures
             </span>
-          )
-        }
-        {hasCost && <span>${totalCost.toFixed(8)}</span>}
-      </div>
-    </div>
+            <span
+              class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60"
+            >
+              {textStats.summary.total_runs} run(s)
+            </span>
+          </div>
+          <div
+            class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60 mt-1"
+          >
+            {
+              (textStats.totalInputTokens > 0 ||
+                textStats.totalOutputTokens > 0) &&
+              textStats.aggregateTokenLabel && (
+                <span class="mr-3">
+                  {textStats.aggregateTokenLabel}
+                </span>
+              )
+            }
+            {textStats.hasCost && (
+              <span>${textStats.totalCost.toFixed(8)}</span>
+            )}
+          </div>
+        </div>
+      )}
+      {jsonStats && (
+        <div data-stats="json" style={textStats ? "display:none" : ""}>
+          <div class="flex gap-2 items-center flex-wrap mb-2">
+            <Badge
+              variant="outline"
+              className={`font-mono text-xs ${jsonStats.passColor}`}
+            >
+              {jsonStats.passRate}%
+            </Badge>
+            <span class="font-mono text-xs text-(--color-text-dim)">
+              {jsonStats.summary.total_passed} / {jsonStats.summary.total_fixtures} fixtures
+            </span>
+            <span
+              class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60"
+            >
+              {jsonStats.summary.total_runs} run(s)
+            </span>
+          </div>
+          <div
+            class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60 mt-1"
+          >
+            {
+              (jsonStats.totalInputTokens > 0 ||
+                jsonStats.totalOutputTokens > 0) &&
+              jsonStats.aggregateTokenLabel && (
+                <span class="mr-3">
+                  {jsonStats.aggregateTokenLabel}
+                </span>
+              )
+            }
+            {jsonStats.hasCost && (
+              <span>${jsonStats.totalCost.toFixed(8)}</span>
+            )}
+          </div>
+        </div>
+      )}
     <a href={`/compare?with=${encodedModelGroup}`}>
       <Button
         variant="outline"
@@ -299,7 +451,7 @@ const aggregateTokenLabel = formatAggregateTokenUsage(
   <!-- Reliability summary -->
   <section class="mb-8">
     <div class="section-label">
-      <span>Reliability by Benchmark ({outputModeLabel})</span>
+      <span>Reliability by Benchmark (<span id="reliability-mode-label">{outputModeLabel}</span>)</span>
     </div>
     <div class="card p-5">
       <ModelReliabilitySummary
@@ -557,6 +709,34 @@ const aggregateTokenLabel = formatAggregateTokenUsage(
 
     <!-- Filter controls -->
     <div id="filter-bar" class="flex gap-1.5 flex-wrap mb-4 items-center">
+      {hasJsonVariant && (
+        <div
+          id="output-mode-toggle"
+          class="flex items-center gap-0.5 rounded-lg border border-border bg-(--color-surface) p-0.5"
+        >
+          <button
+            type="button"
+            data-mode="text"
+            class="rounded-md px-3 py-1.5 text-xs font-mono font-medium transition-colors bg-(--color-accent) text-(--color-accent-fg)"
+          >
+            Text
+          </button>
+          <button
+            type="button"
+            data-mode="json_schema"
+            class="rounded-md px-3 py-1.5 text-xs font-mono font-medium transition-colors text-(--color-text-dim) hover:text-(--color-text)"
+          >
+            JSON
+          </button>
+          <button
+            type="button"
+            data-mode="both"
+            class="rounded-md px-3 py-1.5 text-xs font-mono font-medium transition-colors text-(--color-text-dim) hover:text-(--color-text)"
+          >
+            Both
+          </button>
+        </div>
+      )}
       <span>
         <select id="filter-bench" class="brand-select text-xs">
           <option value="">All benchmarks</option>
@@ -599,26 +779,75 @@ const aggregateTokenLabel = formatAggregateTokenUsage(
       class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3"
       id="fixture-gallery"
     >
-      {
-        allFixtures.map((fx) => {
-          const fi = data.fixture_index[`${fx.benchmark}/${fx.fixture_id}`];
-          const simPct = Math.round(fx.similarity * 1000) / 10;
-          return (
-            <FixtureCard
-              fixtureId={fx.fixture_id}
-              benchmark={fx.benchmark || fi?.benchmark || ""}
-              passed={fx.passed}
-              similarity={simPct}
-              difficulty={fi?.difficulty || ""}
-              tags={fi?.tags || []}
-              inputTokens={fx.input_tokens}
-              outputTokens={fx.output_tokens}
-              reasoningTokens={fx.reasoning_tokens}
-              reasoningLevel={fx.reasoning_level}
-            />
-          );
-        })
-      }
+      {textFixtures.length > 0 && (
+        <div class="fixture-set contents" data-mode="text">
+          {
+            textFixtures.map((fx) => {
+              const fi = data.fixture_index[`${fx.benchmark}/${fx.fixture_id}`];
+              const simPct = Math.round(fx.similarity * 1000) / 10;
+              return (
+                <FixtureCard
+                  fixtureId={fx.fixture_id}
+                  benchmark={fx.benchmark || fi?.benchmark || ""}
+                  passed={fx.passed}
+                  similarity={simPct}
+                  difficulty={fi?.difficulty || ""}
+                  tags={fi?.tags || []}
+                  inputTokens={fx.input_tokens}
+                  outputTokens={fx.output_tokens}
+                  reasoningTokens={fx.reasoning_tokens}
+                  reasoningLevel={fx.reasoning_level}
+                />
+              );
+            })
+          }
+        </div>
+      )}
+      {jsonFixtures.length > 0 && (
+        <div class="fixture-set contents" data-mode="json" style="display:none">
+          {
+            jsonFixtures.map((fx) => {
+              const fi = data.fixture_index[`${fx.benchmark}/${fx.fixture_id}`];
+              const simPct = Math.round(fx.similarity * 1000) / 10;
+              return (
+                <FixtureCard
+                  fixtureId={fx.fixture_id}
+                  benchmark={fx.benchmark || fi?.benchmark || ""}
+                  passed={fx.passed}
+                  similarity={simPct}
+                  difficulty={fi?.difficulty || ""}
+                  tags={fi?.tags || []}
+                  inputTokens={fx.input_tokens}
+                  outputTokens={fx.output_tokens}
+                  reasoningTokens={fx.reasoning_tokens}
+                  reasoningLevel={fx.reasoning_level}
+                />
+              );
+            })
+          }
+        </div>
+      )}
+      {bothFixtures.length > 0 && (
+        <div class="fixture-set contents" data-mode="both" style="display:none">
+          {
+            bothFixtures.map((bf) => {
+              const fi = data.fixture_index[`${bf.benchmark}/${bf.fixture_id}`];
+              return (
+                <FixtureCardBoth
+                  fixtureId={bf.fixture_id}
+                  benchmark={bf.benchmark || fi?.benchmark || ""}
+                  textPassed={bf.textResult?.passed ?? null}
+                  textSimilarity={bf.textResult?.similarity ?? null}
+                  jsonPassed={bf.jsonResult?.passed ?? null}
+                  jsonSimilarity={bf.jsonResult?.similarity ?? null}
+                  difficulty={fi?.difficulty || ""}
+                  tags={fi?.tags || []}
+                />
+              );
+            })
+          }
+        </div>
+      )}
     </div>
   </section>
 </Layout>
@@ -716,6 +945,123 @@ const aggregateTokenLabel = formatAggregateTokenUsage(
   Object.keys(filterParamMap).forEach((id) => {
     getFilterSelect(id)?.addEventListener("change", () => applyFilters());
   });
+
+  // === Output mode toggle ===
+  var OUTPUT_MODE_KEY = "gitbench-output-mode";
+
+  function getStoredOutputMode() {
+    try {
+      var stored = localStorage.getItem(OUTPUT_MODE_KEY);
+      if (stored === "text" || stored === "json_schema" || stored === "both") {
+        return stored;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return "text";
+  }
+
+  function getReliabilityLabel(mode) {
+    if (mode === "json_schema") return "JSON";
+    return "Text";
+  }
+
+  function setOutputMode(mode, options) {
+    options = options || {};
+    try {
+      localStorage.setItem(OUTPUT_MODE_KEY, mode);
+    } catch (e) {
+      // ignore
+    }
+
+    // Toggle card set visibility
+    document.querySelectorAll(".fixture-set").forEach(function (set) {
+      var setMode = set.getAttribute("data-mode");
+      if (mode === "both") {
+        // Show both sets; text and json sets hidden, both set visible
+        set.style.display = setMode === "both" ? "" : "none";
+      } else if (mode === "text") {
+        set.style.display = setMode === "text" ? "" : "none";
+      } else if (mode === "json_schema") {
+        set.style.display = setMode === "json" ? "" : "none";
+      } else {
+        set.style.display = "";
+      }
+    });
+
+    // Toggle header stats visibility
+    var textStatsEl = document.querySelector('[data-stats="text"]');
+    var jsonStatsEl = document.querySelector('[data-stats="json"]');
+    if (mode === "both") {
+      if (textStatsEl) textStatsEl.style.display = "";
+      if (jsonStatsEl) jsonStatsEl.style.display = "";
+    } else if (mode === "json_schema") {
+      if (textStatsEl) textStatsEl.style.display = "none";
+      if (jsonStatsEl) jsonStatsEl.style.display = "";
+    } else {
+      // text mode
+      if (textStatsEl) textStatsEl.style.display = "";
+      if (jsonStatsEl) jsonStatsEl.style.display = "none";
+    }
+
+    // Update toggle button states
+    document.querySelectorAll("#output-mode-toggle button").forEach(function (btn) {
+      var isActive = btn.getAttribute("data-mode") === mode;
+      btn.className = isActive
+        ? "rounded-md px-3 py-1.5 text-xs font-mono font-medium transition-colors bg-(--color-accent) text-(--color-accent-fg)"
+        : "rounded-md px-3 py-1.5 text-xs font-mono font-medium transition-colors text-(--color-text-dim) hover:text-(--color-text)";
+    });
+
+    // Update reliability section label
+    var labelEl = document.getElementById("reliability-mode-label");
+    if (labelEl) labelEl.textContent = getReliabilityLabel(mode);
+
+    // Re-apply filters to the newly visible card set
+    applyFilters({ syncUrl: false });
+
+    // Dispatch event for React islands (ModelReliabilitySummary)
+    if (!options.skipEvent) {
+      window.dispatchEvent(
+        new CustomEvent("output-mode-change", { detail: { mode: mode } })
+      );
+    }
+  }
+
+  // Initialize output mode on page load
+  (function initOutputMode() {
+    var toggle = document.getElementById("output-mode-toggle");
+    if (!toggle) return; // No JSON variant, toggle not rendered
+
+    // Determine available modes from the page
+    var statsContainer = document.getElementById("header-stats-container");
+    var hasText = statsContainer
+      ? statsContainer.getAttribute("data-has-text") === "true"
+      : true;
+    var hasJson = statsContainer
+      ? statsContainer.getAttribute("data-has-json") === "true"
+      : false;
+
+    var storedMode = getStoredOutputMode();
+
+    // If no text fixtures exist, default to json_schema
+    if (!hasText && hasJson && storedMode === "text") {
+      storedMode = "json_schema";
+    }
+    // If no JSON variant, force text
+    if (!hasJson) {
+      storedMode = "text";
+    }
+
+    // Set up toggle button click handlers
+    toggle.querySelectorAll("button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        setOutputMode(btn.getAttribute("data-mode"));
+      });
+    });
+
+    // Apply initial mode
+    setOutputMode(storedMode, { skipEvent: false });
+  })();
 
   applyFilters();
 </script>

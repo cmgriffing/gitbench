@@ -30,10 +30,36 @@ export interface ModelReliabilitySummaryProps {
   outputMode?: string;
 }
 
+const OUTPUT_MODE_STORAGE_KEY = "gitbench-output-mode";
+
+function readInitialOutputMode(fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const stored = window.localStorage.getItem(OUTPUT_MODE_STORAGE_KEY);
+    if (stored === "text" || stored === "json_schema" || stored === "both") {
+      return stored;
+    }
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
+function fetchOutputMode(mode: string): string {
+  // In "both" mode, fetch text results (comparison section covers cross-mode deltas)
+  if (mode === "both") return "text";
+  return mode;
+}
+
 export function ModelReliabilitySummary({
   model,
   outputMode = "text",
 }: ModelReliabilitySummaryProps) {
+  // Read initial output mode from localStorage, falling back to the prop
+  const [activeOutputMode, setActiveOutputMode] = useState<string>(() =>
+    readInitialOutputMode(outputMode),
+  );
+
   const [results, setResults] = useState<Record<
     string,
     FixtureResult[]
@@ -42,10 +68,26 @@ export function ModelReliabilitySummary({
   const [error, setError] = useState<string | null>(null);
   const campaignId = useCampaignId();
 
+  // Listen for output-mode-change events from the vanilla JS toggle
+  useEffect(() => {
+    function handleOutputModeChange(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail && typeof detail.mode === "string") {
+        setActiveOutputMode(detail.mode);
+      }
+    }
+    window.addEventListener("output-mode-change", handleOutputModeChange);
+    return () =>
+      window.removeEventListener("output-mode-change", handleOutputModeChange);
+  }, []);
+
+  // Use "text" for fetch in "both" mode (comparison section covers cross-mode)
+  const fetchMode = fetchOutputMode(activeOutputMode);
+
   useEffect(() => {
     setLoading(true);
     setError(null);
-    loadModelResults(model, { output_mode: outputMode })
+    loadModelResults(model, { output_mode: fetchMode })
       .then((data) => {
         setResults(data.results ?? {});
       })
@@ -53,7 +95,7 @@ export function ModelReliabilitySummary({
         setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => setLoading(false));
-  }, [model, outputMode, campaignId]);
+  }, [model, fetchMode, campaignId]);
 
   const byBenchmark = useMemo(() => {
     if (!results) return {};
