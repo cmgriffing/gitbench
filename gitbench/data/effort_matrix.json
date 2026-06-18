@@ -28,6 +28,58 @@
         "high": "high",
         "xhigh": "xhigh"
       }
+    },
+    "gemini-3-flash-preview": {
+      "mappings": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      }
+    },
+    "gpt-5.5": {
+      "mappings": {
+        "none": "none",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      }
+    },
+    "gpt-oss-120b": {
+      "mappings": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      }
+    },
+    "claude-opus-4.8": {
+      "mappings": {
+        "none": "none",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      }
+    },
+    "claude-sonnet-4.6": {
+      "mappings": {
+        "none": "none",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      }
+    },
+    "glm-5.2": {
+      "mappings": {
+        "none": "none",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      }
     }
   }
 }

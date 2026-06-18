@@ -10,7 +10,7 @@
     "dev:api": "vercel dev",
     "build:db": "node scripts/build-db.mjs",
     "test:api": "node --experimental-strip-types --experimental-transform-types --test test/*.test.mjs",
-    "build": "astro build",
+    "build": "node scripts/build-db.mjs && astro build",
     "preview": "astro preview",
     "astro": "astro",
     "fmt": "prettier src --write"

@@ -1,8 +1,8 @@
 # build output
 dist/
 # generated data (produced by Python CLI)
-public/results.json
-data/gitbench.db
+# public/results.json
+# data/gitbench.db
 # generated types
 .astro/
 
