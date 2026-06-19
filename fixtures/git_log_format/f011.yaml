@@ -139,6 +139,7 @@ prompt: In the most recent commit, which file had the most lines changed accordi
 expected: large.txt
 scoring:
   type: exact_match
+output_schema: filename
 purpose: Tests ability to identify the most-changed file from stat output. Evaluates
   parsing git log --stat for change frequency.
 difficulty: medium

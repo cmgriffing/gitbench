@@ -22,12 +22,14 @@ import { useCampaignId } from "@/lib/use-campaign";
 
 interface PassRateBarChartProps {
   benchmarkName?: string;
+  initialData?: GitBenchData;
 }
 
 export default function PassRateBarChart({
   benchmarkName,
+  initialData,
 }: PassRateBarChartProps = {}) {
-  const [data, setData] = useState<GitBenchData | null>(null);
+  const [data, setData] = useState<GitBenchData | null>(initialData ?? null);
   const campaignId = useCampaignId();
   const {
     selectedGroups,
@@ -38,8 +40,9 @@ export default function PassRateBarChart({
   } = useSyncedModelSelection(data);
 
   useEffect(() => {
+    if (initialData && !campaignId) return;
     loadPassRateChart(benchmarkName).then(setData);
-  }, [benchmarkName, campaignId]);
+  }, [benchmarkName, campaignId, initialData]);
 
   const chartData = useMemo(() => {
     if (!data) return [];

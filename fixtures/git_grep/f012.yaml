@@ -29,6 +29,7 @@ expected: 'src/auth.py
   tests/test_auth.py'
 scoring:
   type: unordered_line_set
+output_schema: file_list
 purpose: Tests ability to use count mode with git grep -c. Evaluates aggregation-style
   search output interpretation.
 difficulty: medium

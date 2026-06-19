@@ -15,6 +15,7 @@ prompt: Using git show --stat, which file was changed in the 'Update binary imag
 expected: image.png
 scoring:
   type: exact_match
+output_schema: filename
 purpose: Tests ability to inspect a binary file change in a commit. Evaluates binary-change
   handling in commit display.
 difficulty: medium

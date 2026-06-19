@@ -149,7 +149,7 @@ def write_result_payload(path: str | Path, payload: dict[str, Any]) -> Path:
     """Write a result JSON payload."""
     output_path = Path(path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2))
+    output_path.write_text(json.dumps(payload, indent=2, allow_nan=False))
     return output_path
 
 

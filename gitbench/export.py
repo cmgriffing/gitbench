@@ -116,7 +116,7 @@ def export_artificialanalysis(envelope: dict) -> str:
 
 def export_json(envelope: dict) -> str:
     """Return the complete run envelope as formatted JSON."""
-    return json.dumps(envelope, indent=2)
+    return json.dumps(envelope, indent=2, allow_nan=False)
 
 
 def get_available_formats() -> list[str]:
@@ -180,7 +180,7 @@ def build_campaign_report(campaign: Campaign) -> CampaignReport:
 def export_campaign_report(campaign: Campaign) -> str:
     """Return a campaign report as formatted JSON in the new schema."""
     report = build_campaign_report(campaign)
-    return json.dumps(report.to_dict(), indent=2)
+    return json.dumps(report.to_dict(), indent=2, allow_nan=False)
 
 
 def build_compatibility_report(legacy_envelope: dict[str, Any]) -> CampaignReport:
@@ -197,7 +197,11 @@ def build_compatibility_report(legacy_envelope: dict[str, Any]) -> CampaignRepor
 
 def export_compatibility_report(legacy_envelope: dict[str, Any]) -> str:
     """Return a compatibility report as formatted JSON in the new schema."""
-    return json.dumps(build_compatibility_report(legacy_envelope).to_dict(), indent=2)
+    return json.dumps(
+        build_compatibility_report(legacy_envelope).to_dict(),
+        indent=2,
+        allow_nan=False,
+    )
 
 
 # ── Format Registry ──────────────────────────────────────────────────────────

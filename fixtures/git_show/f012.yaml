@@ -14,6 +14,7 @@ prompt: Using git show --stat, how many files were added in the commit 'Add all 
 expected: '3'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to inspect a commit touching multiple files. Evaluates multi-file
   commit comprehension.
 difficulty: medium

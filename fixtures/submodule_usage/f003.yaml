@@ -36,6 +36,7 @@ scoring:
     - type: git_output
       command: git submodule status
       not_contains: lib
+output_schema: command_list
 purpose: Tests ability to properly remove a submodule (deinit + rm). Evaluates complete
   submodule-removal procedure knowledge.
 difficulty: medium

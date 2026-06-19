@@ -1,29 +1,23 @@
 """Tests for structured-output contract templates, canonicalization, and validation."""
 
-import json
-
 import pytest
 
+from gitbench.fixture_structured_validator import (
+    validate_all_fixtures,
+    validate_fixture_contract,
+)
 from gitbench.harness.types import Fixture, StructuredOutputContract
 from gitbench.structured_output import (
-    branch_list_template,
+    SCHEMA_REGISTRY,
+    StructuredOutputParseError,
+    StructuredOutputSchemaError,
     canonicalize,
-    commit_message_template,
-    commit_selection_template,
-    command_list_template,
-    command_template,
     contract_for_benchmark_fixture,
     fixture_expected_as_payload,
-    hash_template,
-    numeric_template,
-    resolved_content_template,
     roundtrip_check,
-    stash_ref_template,
+    strict_json_loads,
     validate_contract,
-)
-from gitbench.fixture_structured_validator import (
-    validate_fixture_contract,
-    validate_all_fixtures,
+    validate_structured_payload,
 )
 
 
@@ -43,54 +37,87 @@ def _make_fixture(expected, scoring_type):
     )
 
 
-class TestContractTemplates:
-    def test_commit_message_template(self):
-        schema = commit_message_template()
+class TestSchemaRegistry:
+    def test_commit_message_schema(self):
+        contract = SCHEMA_REGISTRY["commit_message"]
+        schema = contract.schema
         assert schema["type"] == "object"
-        assert "commit" in schema["properties"]
-        assert schema["properties"]["commit"]["type"] == "string"
+        assert "commit_message" in schema["properties"]
+        assert schema["properties"]["commit_message"]["type"] == "string"
         assert schema["additionalProperties"] is False
-        assert "commit" in schema["required"]
+        assert "commit_message" in schema["required"]
 
-    def test_command_template(self):
-        schema = command_template()
+    def test_command_schema(self):
+        schema = SCHEMA_REGISTRY["command"].schema
         assert schema["type"] == "object"
         assert "command" in schema["properties"]
 
-    def test_numeric_template(self):
-        schema = numeric_template()
+    def test_count_schema(self):
+        schema = SCHEMA_REGISTRY["count"].schema
         assert schema["type"] == "object"
         assert schema["properties"]["count"]["type"] == "integer"
 
-    def test_hash_template(self):
-        schema = hash_template()
+    def test_hash_schema(self):
+        schema = SCHEMA_REGISTRY["hash"].schema
         assert schema["type"] == "object"
         assert "hash" in schema["properties"]
 
-    def test_stash_ref_template(self):
-        schema = stash_ref_template()
+    def test_stash_ref_schema(self):
+        schema = SCHEMA_REGISTRY["stash_ref"].schema
         assert schema["type"] == "object"
         assert "stash" in schema["properties"]
 
-    def test_resolved_content_template(self):
-        schema = resolved_content_template()
+    def test_resolved_content_schema(self):
+        schema = SCHEMA_REGISTRY["resolved_content"].schema
         assert schema["type"] == "object"
         assert "resolved_content" in schema["properties"]
 
-    def test_branch_list_template(self):
-        schema = branch_list_template()
+    def test_branch_list_schema(self):
+        schema = SCHEMA_REGISTRY["branch_list"].schema
         assert schema["type"] == "object"
         assert schema["properties"]["branches_to_delete"]["type"] == "array"
 
-    def test_commit_selection_template(self):
-        schema = commit_selection_template()
+    def test_commit_selection_schema(self):
+        schema = SCHEMA_REGISTRY["commit_selection"].schema
         assert schema["type"] == "object"
         assert schema["properties"]["commits"]["type"] == "array"
 
-    def test_command_list_template(self):
-        schema = command_list_template()
+    def test_command_list_schema(self):
+        schema = SCHEMA_REGISTRY["command_list"].schema
         assert schema["type"] == "object"
         assert schema["properties"]["commands"]["type"] == "array"
+
+
+class TestStrictStructuredJson:
+    @pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+    def test_rejects_non_standard_constants(self, constant):
+        with pytest.raises(StructuredOutputParseError, match="non-standard"):
+            strict_json_loads(f'{{"commit": {constant}}}')
+
+    def test_rejects_numeric_overflow(self):
+        with pytest.raises(StructuredOutputParseError, match="non-finite"):
+            strict_json_loads('{"values": [1e400]}')
+
+    def test_accepts_finite_standard_json(self):
+        assert strict_json_loads('{"commit": "fix parser", "count": 2}') == {
+            "commit": "fix parser",
+            "count": 2,
+        }
+
+    def test_validates_payload_against_contract(self):
+        contract = SCHEMA_REGISTRY["commit_message"]
+
+        validate_structured_payload({"commit_message": "fix parser"}, contract)
+
+        with pytest.raises(StructuredOutputSchemaError, match="required property"):
+            validate_structured_payload({}, contract)
+        with pytest.raises(StructuredOutputSchemaError, match="type string"):
+            validate_structured_payload({"commit_message": 42}, contract)
+        with pytest.raises(StructuredOutputSchemaError, match="undeclared property"):
+            validate_structured_payload(
+                {"commit_message": "fix parser", "extra": True},
+                contract,
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -100,40 +127,24 @@ class TestContractTemplates:
 
 class TestCanonicalize:
     def test_string_rendering(self):
-        contract = StructuredOutputContract(
-            schema=commit_message_template(),
-            primary_path="commit",
-            canonicalize="string",
-        )
-        result = canonicalize({"commit": "Add hello.txt"}, contract)
+        contract = SCHEMA_REGISTRY["commit_message"]
+        result = canonicalize({"commit_message": "Add hello.txt"}, contract)
         assert result == "Add hello.txt"
 
     def test_lines_rendering(self):
-        contract = StructuredOutputContract(
-            schema=branch_list_template(),
-            primary_path="branches_to_delete",
-            canonicalize="lines",
-        )
+        contract = SCHEMA_REGISTRY["branch_list"]
         result = canonicalize(
             {"branches_to_delete": ["fix-typo", "fix-b"]}, contract
         )
         assert result == "fix-typo\nfix-b"
 
     def test_numeric_rendering(self):
-        contract = StructuredOutputContract(
-            schema=numeric_template(),
-            primary_path="count",
-            canonicalize="numeric_string",
-        )
+        contract = SCHEMA_REGISTRY["count"]
         result = canonicalize({"count": 42}, contract)
         assert result == "42"
 
     def test_empty_value(self):
-        contract = StructuredOutputContract(
-            schema=command_template(),
-            primary_path="command",
-            canonicalize="string",
-        )
+        contract = SCHEMA_REGISTRY["command"]
         result = canonicalize({}, contract)
         assert result == ""
 
@@ -145,11 +156,7 @@ class TestCanonicalize:
 
 class TestValidateContract:
     def test_valid_contract(self):
-        contract = StructuredOutputContract(
-            schema=commit_message_template(),
-            primary_path="commit",
-            canonicalize="string",
-        )
+        contract = SCHEMA_REGISTRY["commit_message"]
         errors = validate_contract(contract)
         assert errors == []
 
@@ -190,7 +197,7 @@ class TestValidateContract:
 
     def test_empty_primary_path(self):
         contract = StructuredOutputContract(
-            schema=commit_message_template(),
+            schema=SCHEMA_REGISTRY["commit_message"].schema,
             primary_path="",
             canonicalize="string",
         )
@@ -208,7 +215,7 @@ class TestExpectedAsPayload:
         fixture = _make_fixture("Add hello.txt with greeting message", "similarity")
         contract = contract_for_benchmark_fixture(fixture, "commit_messages")
         payload = fixture_expected_as_payload(fixture, contract)
-        assert payload == {"commit": "Add hello.txt with greeting message"}
+        assert payload == {"commit_message": "Add hello.txt with greeting message"}
         assert roundtrip_check(fixture, contract)
 
     def test_branch_list_roundtrip(self):
@@ -220,15 +227,16 @@ class TestExpectedAsPayload:
 
     def test_numeric_roundtrip(self):
         fixture = _make_fixture("42", "numeric_exact")
-        # Use a benchmark that isn't a state-assertion benchmark
-        contract = contract_for_benchmark_fixture(fixture, "reflog")
+        # Use a benchmark without a default so scoring-type fallback applies
+        contract = contract_for_benchmark_fixture(fixture, "test_benchmark")
         payload = fixture_expected_as_payload(fixture, contract)
         assert payload == {"count": 42}
         assert roundtrip_check(fixture, contract)
 
     def test_hash_roundtrip(self):
         fixture = _make_fixture("abc1234", "commit_hash_by_subject")
-        contract = contract_for_benchmark_fixture(fixture, "reflog")
+        # Use a benchmark without a default so scoring-type fallback applies
+        contract = contract_for_benchmark_fixture(fixture, "test_benchmark")
         payload = fixture_expected_as_payload(fixture, contract)
         assert payload == {"hash": "abc1234"}
         assert roundtrip_check(fixture, contract)
@@ -242,7 +250,8 @@ class TestExpectedAsPayload:
 
     def test_command_list_roundtrip(self):
         fixture = _make_fixture("git checkout main\ngit pull", "command_equivalence")
-        contract = contract_for_benchmark_fixture(fixture, "tag_management")
+        # Use a benchmark without a default so scoring-type fallback applies
+        contract = contract_for_benchmark_fixture(fixture, "test_benchmark")
         payload = fixture_expected_as_payload(fixture, contract)
         assert payload == {"commands": ["git checkout main", "git pull"]}
         assert roundtrip_check(fixture, contract)
@@ -254,10 +263,9 @@ class TestExpectedAsPayload:
         assert payload == {"stash": "stash@{0}"}
         assert roundtrip_check(fixture, contract)
 
-
-# ---------------------------------------------------------------------------
-# Explicit contract field tests
-# ---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
+    # Explicit contract field tests
+    # ---------------------------------------------------------------------------
 
 
 class TestExplicitContractField:

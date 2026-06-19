@@ -477,6 +477,7 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
             bd["passed"] += result.get("passed", 0)
 
             for score in result.get("scores", []):
+                structured_error = score.get("structured_error")
                 bd["scores"].append(score.get("similarity", 0))
                 bd["fixtures"].append({
                     "fixture_id": score.get("fixture_id", "?"),
@@ -496,9 +497,11 @@ def aggregate_runs(runs: list[dict]) -> dict[str, Any]:
                     "duration_ms": score.get("duration_ms"),
                     "api_duration_ms": score.get("api_duration_ms"),
                     "output_mode": score.get("output_mode", output_mode),
-                    "parsed_payload": score.get("parsed_payload"),
+                    "parsed_payload": (
+                        None if structured_error else score.get("parsed_payload")
+                    ),
                     "raw_structured_output": score.get("raw_structured_output"),
-                    "structured_error": score.get("structured_error"),
+                    "structured_error": structured_error,
                     "safety_review": score.get("safety_review"),
                 })
                 # Report runtime is successful API call latency, not fixture wall time.
@@ -695,7 +698,8 @@ def render_json(data: dict[str, Any], output_path: str) -> None:
 
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_json.dumps(data, indent=2, default=str))
+    serialized = _json.dumps(data, indent=2, default=str, allow_nan=False)
+    path.write_text(serialized)
 
 
 def write_sqlite_report_db(
@@ -718,7 +722,11 @@ def write_sqlite_report_db(
 
 
 def _json_dumps(value: Any) -> str:
-    return json.dumps(value if value is not None else [], separators=(",", ":"))
+    return json.dumps(
+        value if value is not None else [],
+        separators=(",", ":"),
+        allow_nan=False,
+    )
 
 
 def _clean_model_name(name: str) -> tuple[str, str]:
@@ -876,11 +884,14 @@ def _insert_report_data(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
             for result in fixtures_list:
                 # Serialize structured payloads as JSON strings
                 parsed_payload = None
-                if result.get("parsed_payload"):
-                    try:
-                        parsed_payload = json.dumps(result["parsed_payload"])
-                    except (TypeError, ValueError):
-                        parsed_payload = str(result["parsed_payload"])
+                if (
+                    not result.get("structured_error")
+                    and result.get("parsed_payload") is not None
+                ):
+                    parsed_payload = json.dumps(
+                        result["parsed_payload"],
+                        allow_nan=False,
+                    )
                 result_rows.append(
                     {
                         "model_name": clean_name,

@@ -30,6 +30,7 @@ prompt: How many commits are in this repository? Use git log --oneline to count.
 expected: '7'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to count total commits from oneline output. Evaluates counting
   from compact log display.
 difficulty: easy

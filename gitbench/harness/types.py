@@ -54,21 +54,27 @@ class Fixture:
     difficulty: str = ""    # One of: trivial, easy, medium, hard, expert
     tags: list[str] = field(default_factory=list)  # Searchable keywords
     structured_output: StructuredOutputContract | None = None  # JSON-schema contract
+    output_schema: str | None = None  # Named schema reference (e.g. "commit_message")
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         result = asdict(self)
         if result.get("structured_output") is None:
             del result["structured_output"]
+        if result.get("output_schema") is None:
+            del result["output_schema"]
         return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "Fixture":
         """Create from dictionary."""
         contract_data = data.pop("structured_output", None)
+        output_schema = data.pop("output_schema", None)
         fixture = cls(**data)
         if contract_data:
             fixture.structured_output = StructuredOutputContract.from_dict(contract_data)
+        if output_schema is not None:
+            fixture.output_schema = output_schema
         return fixture
 
 

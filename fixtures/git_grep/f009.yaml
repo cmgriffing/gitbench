@@ -20,6 +20,7 @@ prompt: Here is the output of a git grep command run against the feature/v2 bran
 expected: '2.0'
 scoring:
   type: exact_match
+output_schema: version_number
 purpose: Tests ability to search across branches using git grep on a specific ref.
   Evaluates revision-scoped search.
 difficulty: medium

@@ -35,6 +35,7 @@ scoring:
     - type: file_content
       path: utils/utils.py
       value: utils code
+output_schema: command_list
 purpose: Tests ability to add multiple submodules to a repository. Evaluates multi-submodule
   management.
 difficulty: medium

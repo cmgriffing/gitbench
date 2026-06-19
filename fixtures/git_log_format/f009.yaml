@@ -21,6 +21,7 @@ prompt: How many merge commits are in this repository? Use git log --merges to f
 expected: '1'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to identify a merge commit from log output. Evaluates recognizing
   merge-commit characteristics.
 difficulty: medium

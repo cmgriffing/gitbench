@@ -25,6 +25,7 @@ prompt: Here is the output of a git log --grep command run on this repository. H
 expected: '2'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to search commit messages using git log --grep. Evaluates understanding
   of log-search vs file-search.
 difficulty: medium

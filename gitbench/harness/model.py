@@ -13,6 +13,7 @@ from typing import Any
 
 from gitbench.harness.capacity import RequestAttemptGate
 from gitbench.harness.reasoning import parse_model_reasoning
+from gitbench.structured_output import StructuredOutputParseError, strict_json_loads
 
 from .types import ModelMessage
 
@@ -397,8 +398,8 @@ class OpenAIAdapter(ModelInterface):
                         if structured_output_contract is not None:
                             raw_structured_output = text
                             try:
-                                parsed_payload = json.loads(text)
-                            except json.JSONDecodeError as e:
+                                parsed_payload = strict_json_loads(text)
+                            except StructuredOutputParseError as e:
                                 structured_error = (
                                     f"Failed to parse structured JSON response: {e}"
                                 )
@@ -689,8 +690,8 @@ class OllamaAdapter(ModelInterface):
                             if structured_output_contract is not None:
                                 raw_structured_output = content
                                 try:
-                                    parsed_payload = json.loads(content)
-                                except json.JSONDecodeError as e:
+                                    parsed_payload = strict_json_loads(content)
+                                except StructuredOutputParseError as e:
                                     structured_error = (
                                         f"Failed to parse structured Ollama JSON: {e}"
                                     )
@@ -882,8 +883,8 @@ class MockModelClient(ModelInterface):
         if structured_output_contract is not None:
             raw_structured_output = self.response
             try:
-                parsed_payload = json.loads(self.response)
-            except json.JSONDecodeError as e:
+                parsed_payload = strict_json_loads(self.response)
+            except StructuredOutputParseError as e:
                 structured_error = f"Failed to parse mock structured JSON: {e}"
 
         return {

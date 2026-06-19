@@ -127,6 +127,15 @@ class FixtureLoader:
             from gitbench.harness.types import StructuredOutputContract
             structured_output = StructuredOutputContract.from_dict(so_data)
 
+        # Parse optional output_schema name reference
+        output_schema = data.get("output_schema")
+        if output_schema is not None and not isinstance(output_schema, str):
+            logger.warning(
+                "Fixture '%s': 'output_schema' must be a string, got %s",
+                fixture_id, type(output_schema).__name__,
+            )
+            output_schema = None
+
         # Soft validation: warn if metadata fields are missing
         missing = [f for f in METADATA_FIELDS if f not in data]
         if missing:
@@ -171,6 +180,7 @@ class FixtureLoader:
             difficulty=difficulty,
             tags=tags,
             structured_output=structured_output,
+            output_schema=output_schema,
         )
 
     def load_dir(self, dirpath: str) -> list[Fixture]:

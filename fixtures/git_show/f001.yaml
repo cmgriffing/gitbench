@@ -15,6 +15,7 @@ prompt: Using git show, what is the author email of the latest commit? Output ON
 expected: alice@example.com
 scoring:
   type: exact_match
+output_schema: email
 purpose: Tests ability to extract author email from git show output. Evaluates basic
   commit-inspection comprehension.
 difficulty: trivial

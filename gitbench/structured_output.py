@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from typing import Any
 
@@ -11,224 +12,147 @@ from gitbench.harness.types import Fixture, StructuredOutputContract
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Contract templates — one per benchmark/scoring family
-# ---------------------------------------------------------------------------
+
+class StructuredOutputParseError(ValueError):
+    """Raised when a model response is not strict, finite JSON."""
 
 
-def _json_schema_object(
-    properties: dict[str, Any],
-    required: list[str],
-    title: str = "",
-    description: str = "",
-) -> dict[str, Any]:
-    """Build a strict JSON Schema object shape.
-
-    Every object-level schema enforces ``additionalProperties: false`` so
-    that providers cannot return undeclared keys.
-    """
-    schema: dict[str, Any] = {
-        "type": "object",
-        "properties": properties,
-        "required": required,
-        "additionalProperties": False,
-    }
-    if title:
-        schema["title"] = title
-    if description:
-        schema["description"] = description
-    return schema
+class StructuredOutputSchemaError(ValueError):
+    """Raised when parsed structured output violates its fixture schema."""
 
 
-# -- Simple scalar templates ------------------------------------------------
+def strict_json_loads(text: str) -> Any:
+    """Parse standard JSON and reject all non-finite numeric values."""
+
+    def reject_constant(value: str) -> None:
+        raise StructuredOutputParseError(
+            f"non-standard JSON constant {value!r} is not allowed"
+        )
+
+    try:
+        payload = json.loads(text, parse_constant=reject_constant)
+    except StructuredOutputParseError:
+        raise
+    except json.JSONDecodeError as exc:
+        raise StructuredOutputParseError(str(exc)) from exc
+
+    _reject_non_finite(payload)
+    return payload
 
 
-def commit_message_template() -> dict[str, Any]:
-    """Schema for a single commit-message field."""
-    return _json_schema_object(
-        properties={
-            "commit": {"type": "string", "description": "The commit message"},
-        },
-        required=["commit"],
-        title="CommitMessage",
-    )
+def _reject_non_finite(value: Any, path: str = "$") -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise StructuredOutputParseError(f"non-finite number at {path} is not allowed")
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _reject_non_finite(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_non_finite(child, f"{path}[{index}]")
 
 
-def command_template() -> dict[str, Any]:
-    """Schema for a single git command."""
-    return _json_schema_object(
-        properties={
-            "command": {
-                "type": "string",
-                "description": "The git command to execute",
-            },
-        },
-        required=["command"],
-        title="GitCommand",
-    )
+def validate_structured_payload(
+    payload: Any,
+    contract: StructuredOutputContract,
+) -> None:
+    """Validate a parsed payload against the JSON Schema subset GitBench emits."""
+    errors: list[str] = []
+    _validate_schema_value(payload, contract.schema, "$", errors)
+    if errors:
+        raise StructuredOutputSchemaError(errors[0])
 
 
-def numeric_template() -> dict[str, Any]:
-    """Schema for a numeric / count answer."""
-    return _json_schema_object(
-        properties={
-            "count": {
-                "type": "integer",
-                "description": "The numeric answer",
-            },
-        },
-        required=["count"],
-        title="NumericAnswer",
-    )
+def _validate_schema_value(
+    value: Any,
+    schema: dict[str, Any],
+    path: str,
+    errors: list[str],
+) -> None:
+    if errors:
+        return
+
+    if "const" in schema and value != schema["const"]:
+        errors.append(f"{path} must equal {schema['const']!r}")
+        return
+    if "enum" in schema and value not in schema["enum"]:
+        errors.append(f"{path} must be one of {schema['enum']!r}")
+        return
+
+    expected_type = schema.get("type")
+    if expected_type is not None and not _matches_json_type(value, expected_type):
+        errors.append(f"{path} must be of type {expected_type}")
+        return
+
+    if expected_type == "object":
+        properties = schema.get("properties", {})
+        for required in schema.get("required", []):
+            if required not in value:
+                errors.append(f"{path} is missing required property {required!r}")
+                return
+        for key, child in value.items():
+            child_schema = properties.get(key)
+            if child_schema is not None:
+                _validate_schema_value(child, child_schema, f"{path}.{key}", errors)
+            elif schema.get("additionalProperties") is False:
+                errors.append(f"{path} contains undeclared property {key!r}")
+            elif isinstance(schema.get("additionalProperties"), dict):
+                _validate_schema_value(
+                    child,
+                    schema["additionalProperties"],
+                    f"{path}.{key}",
+                    errors,
+                )
+            if errors:
+                return
+    elif expected_type == "array":
+        if "minItems" in schema and len(value) < schema["minItems"]:
+            errors.append(f"{path} must contain at least {schema['minItems']} items")
+            return
+        if "maxItems" in schema and len(value) > schema["maxItems"]:
+            errors.append(f"{path} must contain at most {schema['maxItems']} items")
+            return
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, child in enumerate(value):
+                _validate_schema_value(child, item_schema, f"{path}[{index}]", errors)
+                if errors:
+                    return
+    elif expected_type == "string":
+        if "minLength" in schema and len(value) < schema["minLength"]:
+            errors.append(f"{path} must contain at least {schema['minLength']} characters")
+        elif "maxLength" in schema and len(value) > schema["maxLength"]:
+            errors.append(f"{path} must contain at most {schema['maxLength']} characters")
+        elif "pattern" in schema and re.search(schema["pattern"], value) is None:
+            errors.append(f"{path} must match pattern {schema['pattern']!r}")
+    elif expected_type in ("integer", "number"):
+        if "minimum" in schema and value < schema["minimum"]:
+            errors.append(f"{path} must be at least {schema['minimum']}")
+        elif "maximum" in schema and value > schema["maximum"]:
+            errors.append(f"{path} must be at most {schema['maximum']}")
 
 
-def hash_template() -> dict[str, Any]:
-    """Schema for a git commit hash."""
-    return _json_schema_object(
-        properties={
-            "hash": {
-                "type": "string",
-                "description": "The commit hash",
-            },
-        },
-        required=["hash"],
-        title="CommitHash",
-    )
-
-
-def stash_ref_template() -> dict[str, Any]:
-    """Schema for a stash reference."""
-    return _json_schema_object(
-        properties={
-            "stash": {
-                "type": "string",
-                "description": "The stash reference (e.g. stash@{0})",
-            },
-        },
-        required=["stash"],
-        title="StashRef",
-    )
-
-
-def reflog_ref_template() -> dict[str, Any]:
-    """Schema for a reflog reference."""
-    return _json_schema_object(
-        properties={
-            "ref": {
-                "type": "string",
-                "description": "The reflog reference",
-            },
-        },
-        required=["ref"],
-        title="ReflogRef",
-    )
-
-
-def bisect_commit_template() -> dict[str, Any]:
-    """Schema for a bisect bad-commit answer."""
-    return _json_schema_object(
-        properties={
-            "commit": {
-                "type": "string",
-                "description": "The commit hash or subject of the bad commit",
-            },
-        },
-        required=["commit"],
-        title="BisectCommit",
-    )
-
-
-def resolved_content_template() -> dict[str, Any]:
-    """Schema for resolved file content (merge-conflicts)."""
-    return _json_schema_object(
-        properties={
-            "resolved_content": {
-                "type": "string",
-                "description": "The resolved file content",
-            },
-        },
-        required=["resolved_content"],
-        title="ResolvedContent",
-    )
-
-
-def json_object_template(properties: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Schema for a generic JSON object (json_semantic_equal).
-
-    When no properties are supplied a single ``"value"`` field is used.
-    """
-    if properties is None:
-        properties = {
-            "value": {"type": "string", "description": "The JSON value answer"},
-        }
-    return _json_schema_object(
-        properties=properties,
-        required=list(properties.keys()),
-        title="JsonObject",
-    )
-
-
-# -- Collection templates ---------------------------------------------------
-
-
-def command_list_template() -> dict[str, Any]:
-    """Schema for multiple git commands (one per line in expected text)."""
-    return _json_schema_object(
-        properties={
-            "commands": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "The git commands to execute, one per element",
-            },
-        },
-        required=["commands"],
-        title="GitCommands",
-    )
-
-
-def branch_list_template() -> dict[str, Any]:
-    """Schema for a list of branch names."""
-    return _json_schema_object(
-        properties={
-            "branches_to_delete": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Branch names to delete",
-            },
-        },
-        required=["branches_to_delete"],
-        title="BranchList",
-    )
-
-
-def commit_selection_template() -> dict[str, Any]:
-    """Schema for a list of commit hashes (commit squashing)."""
-    return _json_schema_object(
-        properties={
-            "commits": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "The commit hashes to select",
-            },
-        },
-        required=["commits"],
-        title="CommitSelection",
-    )
-
-
-def string_list_template(field_name: str = "items") -> dict[str, Any]:
-    """Schema for an order-insensitive list of strings."""
-    return _json_schema_object(
-        properties={
-            field_name: {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": f"The {field_name} list",
-            },
-        },
-        required=[field_name],
-        title="StringList",
-    )
+def _matches_json_type(value: Any, expected_type: str | list[str]) -> bool:
+    if isinstance(expected_type, list):
+        return any(_matches_json_type(value, item) for item in expected_type)
+    if expected_type == "null":
+        return value is None
+    if expected_type == "boolean":
+        return isinstance(value, bool)
+    if expected_type == "object":
+        return isinstance(value, dict)
+    if expected_type == "array":
+        return isinstance(value, list)
+    if expected_type == "string":
+        return isinstance(value, str)
+    if expected_type == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected_type == "number":
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and (not isinstance(value, float) or math.isfinite(value))
+        )
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -306,137 +230,282 @@ def _resolve_path(payload: dict[str, Any], path: str) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Scoring-type → template mapping
+# Named schema registry
 # ---------------------------------------------------------------------------
 
-SCORING_TYPE_TEMPLATES: dict[str, tuple[callable, str, str]] = {
-    # (template_fn, primary_path, canonicalize_strategy)
-    "similarity": (commit_message_template, "commit", "string"),
-    "llm_judge": (commit_message_template, "commit", "string"),
-    "exact_match": (command_template, "command", "string"),
-    "numeric_exact": (numeric_template, "count", "numeric_string"),
-    "commit_hash_by_subject": (hash_template, "hash", "string"),
-    "unordered_line_set": (string_list_template, "items", "lines"),
-    "json_semantic_equal": (json_object_template, "value", "string"),
-    "command_equivalence": (command_list_template, "commands", "command_lines"),
-    "stash_recovery": (stash_ref_template, "stash", "stash_ref"),
-    "reflog_recovery": (reflog_ref_template, "ref", "string"),
-    "commit_selection": (commit_selection_template, "commits", "lines"),
-    "bisect_regression": (bisect_commit_template, "commit", "string"),
-}
-
-# Benchmarks/situations where the default mapping should be overridden.
-# Keyed by benchmark name.
-BENCHMARK_TEMPLATE_OVERRIDES: dict[str, tuple[callable, str, str]] = {
-    "cherry_pick": (resolved_content_template, "resolved_content", "file_block"),
-    "merge_conflicts": (resolved_content_template, "resolved_content", "file_block"),
-    "rebase": (resolved_content_template, "resolved_content", "file_block"),
-    "branch_cleanup": (branch_list_template, "branches_to_delete", "lines"),
-    "commit_messages": (commit_message_template, "commit", "string"),
-}
-
-# Scoring types that use state_assertions — these don't have a single scalar
-# answer field but still benefit from structured output for the command text.
-STATE_ASSERTION_BENCHMARKS = {
-    "blame_forensics",
-    "cherry_pick",
-    "git_clean",
-    "git_grep",
-    "git_log_format",
-    "git_show",
-    "rebase",
-    "submodule_usage",
-    "tag_management",
-    "worktree_usage",
-}
+class SchemaResolutionError(ValueError):
+    """Raised when no structured-output schema can be resolved for a fixture."""
 
 
-def resolve_contract_for_fixture(fixture: Fixture) -> StructuredOutputContract | None:
-    """Resolve or derive a structured-output contract for a fixture.
-
-    Prefers the fixture's explicit ``structured_output`` field.  Falls back
-    to deriving a contract from the fixture's scoring type and the benchmark
-    family templates.
-
-    Returns ``None`` when no suitable template can be resolved.
-    """
-    if fixture.structured_output is not None:
-        return fixture.structured_output
-
-    scoring_type = fixture.scoring.get("type", "similarity")
-
-    # Determine the benchmark name from the fixture id convention
-    # Fixture ids are globally unique but benchmark context may be needed.
-    # We check the overrides first, then the generic mapping.
-    template_fn, primary_path, canonicalize = SCORING_TYPE_TEMPLATES.get(
-        scoring_type, (None, "", "")
-    )
-    if template_fn is None:
-        logger.debug(
-            "No structured-output template for scoring type %r (fixture %s)",
-            scoring_type,
-            fixture.id,
-        )
-        return None
-
+def _registry_entry(
+    key: str,
+    key_type: str,
+    description: str,
+    canonicalize: str,
+    title: str = "",
+    display_label: str = "",
+) -> StructuredOutputContract:
+    """Create a SCHEMA_REGISTRY entry as a complete StructuredOutputContract."""
+    if key_type == "array":
+        prop: dict[str, Any] = {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": description,
+        }
+    else:
+        prop = {
+            "type": key_type,
+            "description": description,
+        }
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {key: prop},
+        "required": [key],
+        "additionalProperties": False,
+    }
+    if title:
+        schema["title"] = title
     return StructuredOutputContract(
-        schema=template_fn(),
-        primary_path=primary_path,
+        schema=schema,
+        primary_path=key,
         canonicalize=canonicalize,
-        display_label=primary_path.replace("_", " ").title(),
+        display_label=display_label or key.replace("_", " ").title(),
     )
+
+
+SCHEMA_REGISTRY: dict[str, StructuredOutputContract] = {
+    "commit_message": _registry_entry(
+        key="commit_message",
+        key_type="string",
+        description="The commit message of the identified commit",
+        canonicalize=CANONICALIZE_STRING,
+        title="CommitMessage",
+    ),
+    "bisect_commit": _registry_entry(
+        key="commit",
+        key_type="string",
+        description="The commit hash or subject of the bad commit",
+        canonicalize=CANONICALIZE_STRING,
+        title="BisectCommit",
+    ),
+    "commit_selection": _registry_entry(
+        key="commits",
+        key_type="array",
+        description="The commit hashes or subjects to select for squashing",
+        canonicalize=CANONICALIZE_LINES,
+        title="CommitSelection",
+    ),
+    "hash": _registry_entry(
+        key="hash",
+        key_type="string",
+        description="The commit hash",
+        canonicalize=CANONICALIZE_STRING,
+        title="CommitHash",
+    ),
+    "command": _registry_entry(
+        key="command",
+        key_type="string",
+        description="The git command to execute",
+        canonicalize=CANONICALIZE_STRING,
+        title="GitCommand",
+    ),
+    "command_list": _registry_entry(
+        key="commands",
+        key_type="array",
+        description="The git commands to execute, one per element",
+        canonicalize=CANONICALIZE_COMMAND_LINES,
+        title="GitCommands",
+    ),
+    "stash_ref": _registry_entry(
+        key="stash",
+        key_type="string",
+        description="The stash reference (e.g. stash@{0})",
+        canonicalize=CANONICALIZE_STASH_REF,
+        title="StashRef",
+    ),
+    "reflog_ref": _registry_entry(
+        key="ref",
+        key_type="string",
+        description="The reflog reference",
+        canonicalize=CANONICALIZE_STRING,
+        title="ReflogRef",
+    ),
+    "resolved_content": _registry_entry(
+        key="resolved_content",
+        key_type="string",
+        description="The resolved file content",
+        canonicalize=CANONICALIZE_FILE_BLOCK,
+        title="ResolvedContent",
+    ),
+    "branch_list": _registry_entry(
+        key="branches_to_delete",
+        key_type="array",
+        description="Branch names to delete",
+        canonicalize=CANONICALIZE_LINES,
+        title="BranchList",
+    ),
+    "string_list": _registry_entry(
+        key="items",
+        key_type="array",
+        description="The list of matching items",
+        canonicalize=CANONICALIZE_LINES,
+        title="StringList",
+    ),
+    "count": _registry_entry(
+        key="count",
+        key_type="integer",
+        description="The numeric count",
+        canonicalize=CANONICALIZE_NUMERIC_STRING,
+        title="NumericAnswer",
+    ),
+    "email": _registry_entry(
+        key="email",
+        key_type="string",
+        description="The email address",
+        canonicalize=CANONICALIZE_STRING,
+        title="Email",
+    ),
+    "filename": _registry_entry(
+        key="filename",
+        key_type="string",
+        description="The file name",
+        canonicalize=CANONICALIZE_STRING,
+        title="Filename",
+    ),
+    "file_content": _registry_entry(
+        key="content",
+        key_type="string",
+        description="The file content",
+        canonicalize=CANONICALIZE_STRING,
+        title="FileContent",
+    ),
+    "file_list": _registry_entry(
+        key="files",
+        key_type="array",
+        description="The matching file names",
+        canonicalize=CANONICALIZE_LINES,
+        title="FileList",
+    ),
+    "file_status": _registry_entry(
+        key="status_code",
+        key_type="string",
+        description="The git status code (A, M, R, D, etc.)",
+        canonicalize=CANONICALIZE_STRING,
+        title="FileStatus",
+    ),
+    "commit_message_list": _registry_entry(
+        key="commit_message_list",
+        key_type="array",
+        description="The list of commit messages",
+        canonicalize=CANONICALIZE_LINES,
+        title="CommitMessageList",
+    ),
+    "yes_no": _registry_entry(
+        key="found",
+        key_type="string",
+        description="Whether the search found matches (yes or no)",
+        canonicalize=CANONICALIZE_STRING,
+        title="YesNo",
+    ),
+    "line_numbers": _registry_entry(
+        key="line_numbers",
+        key_type="string",
+        description="The line numbers where the pattern appears, comma-separated",
+        canonicalize=CANONICALIZE_STRING,
+        title="LineNumbers",
+    ),
+    "version_number": _registry_entry(
+        key="version_number",
+        key_type="string",
+        description="The version number found",
+        canonicalize=CANONICALIZE_STRING,
+        title="VersionNumber",
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
+# Benchmark defaults and scoring-type fallbacks
+# ---------------------------------------------------------------------------
+
+BENCHMARK_DEFAULT_SCHEMAS: dict[str, str] = {
+    "blame_forensics": "commit_message",
+    "commit_messages": "commit_message",
+    "git_clean": "command",
+    "tag_management": "command",
+    "worktree_usage": "command",
+    "submodule_usage": "command",
+    "cherry_pick": "resolved_content",
+    "merge_conflicts": "resolved_content",
+    "rebase": "resolved_content",
+    "branch_cleanup": "branch_list",
+    "stash_recovery": "stash_ref",
+    "reflog": "reflog_ref",
+    "git_bisect": "bisect_commit",
+    "commit_squash": "commit_selection",
+}
+
+SCORING_TYPE_FALLBACKS: dict[str, str] = {
+    "numeric_exact": "count",
+    "commit_hash_by_subject": "hash",
+    "unordered_line_set": "string_list",
+    "command_equivalence": "command_list",
+    "stash_recovery": "stash_ref",
+    "reflog_recovery": "reflog_ref",
+    "bisect_regression": "bisect_commit",
+    "commit_selection": "commit_selection",
+    "llm_judge": "commit_message",
+    "similarity": "commit_message",
+    "state_assertions": "command_list",
+}
 
 
 def contract_for_benchmark_fixture(
     fixture: Fixture,
     benchmark_name: str,
-) -> StructuredOutputContract | None:
-    """Resolve contract using both generic templates and benchmark overrides.
+) -> StructuredOutputContract:
+    """Resolve a structured-output contract using the named schema registry.
 
     Precedence:
-    1. Fixture's explicit ``structured_output`` field (always wins).
-    2. Benchmark-level override (branch_cleanup, cherry_pick, merge_conflicts, rebase, commit_messages).
-    3. Scoring-type-specific template (for special cases within state-assertion benchmarks).
-    4. State-assertion benchmark fallback (command_list).
+    0. Fixture's explicit ``structured_output`` field (backward compat, always wins).
+    1. Fixture's ``output_schema`` field → SCHEMA_REGISTRY lookup.
+    2. BENCHMARK_DEFAULT_SCHEMAS[benchmark_name] → SCHEMA_REGISTRY lookup.
+    3. SCORING_TYPE_FALLBACKS[scoring_type] → SCHEMA_REGISTRY lookup.
+    4. Error: no resolution found.
     """
-    # Explicit fixture contract always wins
+    # 0. Explicit structured_output contract (backward compatibility)
     if fixture.structured_output is not None:
         return fixture.structured_output
 
-    # Benchmark-level override for benchmarks where all fixtures share a shape
-    if benchmark_name in BENCHMARK_TEMPLATE_OVERRIDES:
-        template_fn, primary_path, canonicalize = BENCHMARK_TEMPLATE_OVERRIDES[benchmark_name]
-        return StructuredOutputContract(
-            schema=template_fn(),
-            primary_path=primary_path,
-            canonicalize=canonicalize,
-            display_label=primary_path.replace("_", " ").title(),
-        )
+    # 1. Fixture-level output_schema override
+    if fixture.output_schema is not None:
+        schema_name = fixture.output_schema
+        if schema_name not in SCHEMA_REGISTRY:
+            raise SchemaResolutionError(
+                f"Fixture {fixture.id} ({benchmark_name}): "
+                f"output_schema references unknown schema '{schema_name}'. "
+                f"Available schemas: {sorted(SCHEMA_REGISTRY.keys())}"
+            )
+        return SCHEMA_REGISTRY[schema_name]
 
+    # 2. Benchmark-level default
+    if benchmark_name in BENCHMARK_DEFAULT_SCHEMAS:
+        schema_name = BENCHMARK_DEFAULT_SCHEMAS[benchmark_name]
+        return SCHEMA_REGISTRY[schema_name]
+
+    # 3. Scoring-type fallback
     scoring_type = fixture.scoring.get("type", "similarity")
+    if scoring_type in SCORING_TYPE_FALLBACKS:
+        schema_name = SCORING_TYPE_FALLBACKS[scoring_type]
+        return SCHEMA_REGISTRY[schema_name]
 
-    # Scoring-type-specific template (for special cases within state-assertion benchmarks)
-    template_fn, primary_path, canonicalize = SCORING_TYPE_TEMPLATES.get(
-        scoring_type, (None, "", "")
+    # 4. Error
+    raise SchemaResolutionError(
+        f"No schema resolution for fixture {fixture.id} "
+        f"(benchmark {benchmark_name}, scoring type {scoring_type}). "
+        f"Add 'output_schema' to the fixture YAML, "
+        f"or add a benchmark default or scoring-type fallback."
     )
-    if template_fn is not None:
-        return StructuredOutputContract(
-            schema=template_fn(),
-            primary_path=primary_path,
-            canonicalize=canonicalize,
-            display_label=primary_path.replace("_", " ").title(),
-        )
-
-    # For state-assertion benchmarks, use a command-list schema
-    if benchmark_name in STATE_ASSERTION_BENCHMARKS:
-        return StructuredOutputContract(
-            schema=command_list_template(),
-            primary_path="commands",
-            canonicalize="command_lines",
-            display_label="Commands",
-        )
-
-    return None
 
 
 def validate_contract(contract: StructuredOutputContract) -> list[str]:

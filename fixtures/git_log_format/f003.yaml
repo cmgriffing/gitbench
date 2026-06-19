@@ -29,6 +29,7 @@ expected: 'Initial code by Alice
   Bugfix by Alice'
 scoring:
   type: unordered_line_set
+output_schema: commit_message_list
 purpose: Tests ability to identify commits by a specific author. Evaluates author-filtering
   in git log.
 difficulty: easy

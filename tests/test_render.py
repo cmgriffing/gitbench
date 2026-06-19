@@ -530,6 +530,56 @@ class TestRenderJson:
 
         assert output.exists()
 
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_rejects_non_finite_values(self, tmp_path, value):
+        output = tmp_path / "results.json"
+
+        with pytest.raises(ValueError, match="Out of range float values"):
+            render_json({"value": value}, str(output))
+
+        assert not output.exists()
+
+    def test_output_uses_browser_compatible_json(self, tmp_path):
+        output = tmp_path / "results.json"
+        render_json({"nested": {"values": [1, 2.5, None]}}, str(output))
+
+        parsed = json.loads(
+            output.read_text(),
+            parse_constant=lambda value: pytest.fail(
+                f"browser-incompatible JSON constant: {value}"
+            ),
+        )
+        assert parsed == {"nested": {"values": [1, 2.5, None]}}
+
+    def test_invalid_structured_result_drops_parsed_payload(self, tmp_path):
+        raw_output = '{"unexpected":"value"}'
+        envelope = _make_envelope_with_scores(
+            [
+                {
+                    "fixture_id": "f001",
+                    "passed": False,
+                    "similarity": 0,
+                    "model_output": raw_output,
+                    "output_mode": "json_schema",
+                    "parsed_payload": {"unexpected": "value"},
+                    "raw_structured_output": raw_output,
+                    "structured_error": "Structured output schema validation failed",
+                }
+            ]
+        )
+        data = aggregate_runs([envelope])
+        output = tmp_path / "results.json"
+
+        render_json(data, str(output))
+
+        fixture = json.loads(output.read_text())["fixtures"]["mock"][
+            "commit_messages"
+        ][0]
+        assert fixture["parsed_payload"] is None
+        assert fixture["model_output"] == raw_output
+        assert fixture["raw_structured_output"] == raw_output
+        assert fixture["structured_error"].startswith("Structured output schema")
+
     def test_writes_models_as_objects(self, tmp_path):
         """Test that models are written as objects with name, baseModel, reasoningLevel."""
         runs = [_make_envelope(model="openai/o3-mini:high")]
@@ -845,6 +895,44 @@ class TestSqliteReportDb:
 
         assert rows == [("f001", 1000, 123.4), ("f002", 2000, None)]
         assert runtime_total == 123.4
+
+    def test_invalid_structured_result_stores_raw_output_not_payload(self, tmp_path):
+        raw_output = '{"commit":42}'
+        data = aggregate_runs(
+            [
+                _make_envelope_with_scores(
+                    [
+                        {
+                            "fixture_id": "f001",
+                            "passed": False,
+                            "similarity": 0,
+                            "model_output": raw_output,
+                            "output_mode": "json_schema",
+                            "parsed_payload": {"commit": 42},
+                            "raw_structured_output": raw_output,
+                            "structured_error": "Structured output schema validation failed",
+                        }
+                    ]
+                )
+            ]
+        )
+        db_path = tmp_path / "gitbench.db"
+
+        write_sqlite_report_db(data, db_path)
+
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT model_output, parsed_payload, raw_structured_output, structured_error
+                FROM fixture_results
+                """
+            ).fetchone()
+        assert row == (
+            raw_output,
+            None,
+            raw_output,
+            "Structured output schema validation failed",
+        )
 
     def test_rebuild_replaces_stale_data(self, tmp_path):
         """Test that an existing database is deleted and rebuilt."""

@@ -19,6 +19,7 @@ prompt: How many commits were made between 2025-02-01 and 2025-03-31 (inclusive)
 expected: '3'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to count commits in a date range. Evaluates combining time
   filters with aggregation.
 difficulty: medium

@@ -16,6 +16,7 @@ prompt: Using git show HEAD~1:doc.txt, what was the content of doc.txt in the fi
 expected: version one
 scoring:
   type: exact_match
+output_schema: file_content
 purpose: Tests ability to show file content at a specific revision. Evaluates historical-file-content
   retrieval.
 difficulty: medium

@@ -14,6 +14,7 @@ prompt: Using git show -s --format=%ae, what is the author email of the latest c
 expected: dev@org.io
 scoring:
   type: exact_match
+output_schema: email
 purpose: Tests ability to extract commit author date from git show. Evaluates date-field
   extraction from commit metadata.
 difficulty: easy

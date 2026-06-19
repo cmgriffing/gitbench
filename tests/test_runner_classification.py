@@ -1,12 +1,12 @@
 """Tests for runner attempt-status classification."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from gitbench.harness.model import MockModelClient, RetriesExhaustedError
 from gitbench.harness.runner import BenchmarkRunner
-from gitbench.harness.types import ModelMessage, Score
+from gitbench.harness.types import Score
 
 
 class _FailingModelClient(MockModelClient):
@@ -71,6 +71,7 @@ class TestRunnerFailureClassification:
         client.generate = lambda messages, **kwargs: {
             "text": "not valid json",
             "parsed_payload": None,
+            "raw_structured_output": "not valid json",
             "structured_error": "invalid json",
         }
 
@@ -84,6 +85,42 @@ class TestRunnerFailureClassification:
         assert score.passed is False
         assert score.operational_failure is False
         assert score._structured_error is not None
+        assert score.model_output == "not valid json"
+        assert score._raw_structured_output == "not valid json"
+        assert score._parsed_payload is None
+
+    def test_schema_invalid_structured_output_preserves_raw_response(self):
+        """Schema-invalid JSON fails before scoring and keeps raw evidence."""
+        from gitbench.benchmarks.commit_messages import CommitMessagesBenchmark
+
+        benchmark = CommitMessagesBenchmark()
+        fixture = benchmark.load_fixtures()[0]
+        raw_output = '{"unexpected":"value"}'
+        client = MockModelClient(model="mock")
+        client.generate = lambda messages, **kwargs: {
+            "text": raw_output,
+            "parsed_payload": {"unexpected": "value"},
+            "raw_structured_output": raw_output,
+            "structured_error": None,
+        }
+        runner = BenchmarkRunner(
+            {"commit_messages": type(benchmark)},
+            client,
+            output_mode="json_schema",
+        )
+        runner._scorer.score = MagicMock()
+
+        _, score = runner._run_fixture(benchmark, fixture)
+
+        assert score.passed is False
+        assert score.operational_failure is False
+        assert score.model_output == raw_output
+        assert score._raw_structured_output == raw_output
+        assert score._parsed_payload is None
+        assert score._structured_error.startswith(
+            "Structured output schema validation failed:"
+        )
+        runner._scorer.score.assert_not_called()
 
     def test_successful_attempt_records_provenance(self, tmp_path):
         """Successful attempts record route metadata and request config."""
@@ -106,4 +143,3 @@ class TestRunnerFailureClassification:
         assert score.request_config is not None
         assert score.request_config.get("output_mode") == "text"
         assert score.request_config.get("model_generate_kwargs") == {"max_tokens": 100}
-

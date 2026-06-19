@@ -32,6 +32,7 @@ prompt: In the commit with message 'Add code and docs', how many total insertion
 expected: '8'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to count total lines changed in a commit from stat output.
   Evaluates quantitative stat interpretation.
 difficulty: medium

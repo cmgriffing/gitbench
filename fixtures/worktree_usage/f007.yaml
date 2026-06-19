@@ -36,6 +36,7 @@ scoring:
     - type: file_content
       path: ../wt-b/b.txt
       value: B
+output_schema: command_list
 purpose: Tests ability to create and manage multiple worktrees simultaneously. Evaluates
   multi-worktree management.
 difficulty: hard

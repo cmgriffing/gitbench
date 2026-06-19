@@ -30,6 +30,7 @@ scoring:
     - type: file_content
       path: lib/lib.py
       value: lib code
+output_schema: command_list
 purpose: Tests ability to initialize submodules after cloning a repository. Evaluates
   understanding of submodule clone workflow.
 difficulty: medium

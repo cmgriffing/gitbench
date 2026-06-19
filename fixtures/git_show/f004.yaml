@@ -13,6 +13,7 @@ prompt: Using git show, what is the tagger email for the annotated tag 'v2.0.0'?
 expected: releaser@company.com
 scoring:
   type: exact_match
+output_schema: email
 purpose: Tests ability to inspect an annotated tag with tagger info and message. Evaluates
   annotated-tag comprehension.
 difficulty: medium

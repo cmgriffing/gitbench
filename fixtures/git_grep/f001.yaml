@@ -23,6 +23,7 @@ prompt: Here is the output of a git grep command run on this repository. Which f
 expected: src/auth.py
 scoring:
   type: unordered_line_set
+output_schema: file_list
 purpose: Tests ability to search tracked files for a keyword using git grep. Evaluates
   basic code search comprehension.
 difficulty: trivial

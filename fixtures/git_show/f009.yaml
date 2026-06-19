@@ -21,6 +21,7 @@ prompt: Using git show --merges -s --format=%P, how many parent commits does the
 expected: '2'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to inspect a merge commit and identify its parents. Evaluates
   merge-commit structure comprehension.
 difficulty: medium

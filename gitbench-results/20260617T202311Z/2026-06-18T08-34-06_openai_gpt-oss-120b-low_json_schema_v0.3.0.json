@@ -6067,8 +6067,8 @@
           "fixture_id": "f012",
           "passed": false,
           "similarity": 0.0,
-          "model_output": "",
-          "error": "Scoring error: Unsupported scoring type: bisect_regression",
+          "model_output": "94809e7090011064440288628908616474979308",
+          "error": "Structured output schema validation failed: $ must be of type object",
           "reasoning_level": "low",
           "input_tokens": 269,
           "output_tokens": 85,
@@ -6120,8 +6120,9 @@
             }
           },
           "output_mode": "json_schema",
-          "parsed_payload": Infinity,
+          "parsed_payload": null,
           "raw_structured_output": "94809e7090011064440288628908616474979308",
+          "structured_error": "Structured output schema validation failed: $ must be of type object",
           "safety_review": {
             "status": "allow",
             "policy_version": "inappropriate-nsfw-v2",
@@ -6131,7 +6132,7 @@
             },
             "reviewed_at": "2026-06-18T08:44:38.139143+00:00",
             "pre_review_content_sha256": "837b381c82ecf8dff93f6536bf4cfd914874709698834ede7b20971cb175aff1",
-            "current_content_sha256": "837b381c82ecf8dff93f6536bf4cfd914874709698834ede7b20971cb175aff1"
+            "current_content_sha256": "60ae2d261e995e9ebf2c72b66faaf0bede50d2eaa85eb925e47d141942aad4c3"
           }
         }
       ],

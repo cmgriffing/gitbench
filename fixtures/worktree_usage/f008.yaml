@@ -32,6 +32,7 @@ scoring:
     - type: git_output
       command: git -C ../feature-wt log --oneline -1
       contains: Add new file
+output_schema: command_list
 purpose: Tests ability to create a worktree and immediately make a commit in it. Evaluates
   end-to-end worktree commit workflow.
 difficulty: medium

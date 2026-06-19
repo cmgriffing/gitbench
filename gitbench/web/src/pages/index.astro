@@ -8,6 +8,10 @@ import TokenUsageChart from "@/components/charts/TokenUsageChart";
 import QuadrantComparisonChart from "@/components/charts/QuadrantComparisonChart";
 import ModelSelector from "@/components/charts/ModelSelector";
 import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
+import { getReportStore } from "@/lib/node-sqlite-report-store";
+import { chartData } from "@/lib/chart-data";
+
+const passRateData = chartData("pass-rate", getReportStore().getSummary());
 ---
 
 <Layout title="Overview">
@@ -48,7 +52,7 @@ import BenchmarkHeatmap from "@/components/charts/BenchmarkHeatmap";
     <div class="section-label">
       <span>Model Summary</span>
     </div>
-    <PassRateBarChart client:load />
+    <PassRateBarChart client:load initialData={passRateData} />
   </section>
 
   <section class="mt-10">

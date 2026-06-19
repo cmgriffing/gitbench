@@ -1391,6 +1391,68 @@ class TestRunCommand:
         assert data["model_summaries"]["openai/gpt-test:high"]["pass_at_k"] == 1.0
         assert data["model_summaries"]["openai/gpt-test:high__json_schema"]["pass_at_k"] == 0.0
 
+    def test_report_rejects_legacy_non_finite_payload_without_traceback(
+        self, runner, tmp_path
+    ):
+        """Malformed historical structured payloads produce a controlled CLI error."""
+        from gitbench.result_safety import POLICY_VERSION
+
+        results_root = tmp_path / "gitbench-results"
+        run_dir = results_root / "20260618T010203Z"
+        run_dir.mkdir(parents=True)
+        result_path = run_dir / "legacy.json"
+        payload = {
+            "version": 1,
+            "timestamp": "2026-06-18T01:02:03+00:00",
+            "model": "openai/test",
+            "results": [
+                {
+                    "benchmark": "commit_messages",
+                    "scores": [
+                        {
+                            "fixture_id": "f001",
+                            "passed": False,
+                            "similarity": 0,
+                            "model_output": "",
+                            "parsed_payload": float("inf"),
+                            "raw_structured_output": "1e400",
+                            "safety_review": {
+                                "status": "allow",
+                                "policy_version": POLICY_VERSION,
+                            },
+                        }
+                    ],
+                }
+            ],
+            "safety_review": {
+                "status": "complete",
+                "policy_version": POLICY_VERSION,
+                "reviewed_score_count": 1,
+                "redacted_score_count": 0,
+            },
+        }
+        result_path.write_text(json.dumps(payload))
+
+        with patch("gitbench.cli.load_config", return_value={}), \
+             patch(
+                 "gitbench.cli.load_result_safety_config",
+                 return_value={"profile": "safety", "model": "reviewer"},
+             ):
+            result = runner.invoke(
+                cli,
+                [
+                    "report",
+                    "--input-dir",
+                    str(results_root),
+                    "--no-build",
+                ],
+            )
+
+        assert result.exit_code != 0
+        assert result_path.as_posix() in result.output
+        assert "not deterministically JSON serializable" in result.output
+        assert "Traceback" not in result.output
+
     def test_report_no_build_ingests_campaign_artifacts_into_json_and_sqlite(
         self, runner, tmp_path
     ):

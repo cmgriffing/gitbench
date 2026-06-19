@@ -26,6 +26,7 @@ expected: 'Add authentication module
   Add authorization checks'
 scoring:
   type: unordered_line_set
+output_schema: commit_message_list
 purpose: Tests ability to list commit messages matching a grep pattern. Evaluates
   log filtering with message output.
 difficulty: easy

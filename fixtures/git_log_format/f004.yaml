@@ -31,6 +31,7 @@ prompt: How many commits were authored by Alice? Output ONLY the number, nothing
 expected: '3'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to count commits by a specific author. Evaluates combining
   author filter with counting.
 difficulty: easy

@@ -20,6 +20,7 @@ prompt: Here is the output of a git grep command limited to the src/ directory. 
 expected: '2'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to restrict search to a subdirectory path. Evaluates path-limited
   search scoping.
 difficulty: easy

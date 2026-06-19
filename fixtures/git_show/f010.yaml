@@ -15,6 +15,7 @@ prompt: Using git show --name-status, what is the status code for the file renam
 expected: R
 scoring:
   type: exact_match
+output_schema: file_status
 purpose: Tests ability to detect file rename in a commit. Evaluates rename-detection
   awareness in commit inspection.
 difficulty: medium

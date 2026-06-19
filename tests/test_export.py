@@ -2,10 +2,15 @@
 
 import csv
 import io
+import math
+
+import pytest
+
 from gitbench.export import (
-    export_csv,
-    export_artificialanalysis,
     FORMAT_REGISTRY,
+    export_artificialanalysis,
+    export_csv,
+    export_json,
     get_available_formats,
 )
 from gitbench.harness.campaign import AttemptStatus
@@ -138,6 +143,14 @@ def test_unknown_format_error():
         assert len(formats) > 0
         assert "csv" in formats
         assert "artificialanalysis" in formats
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_json_export_rejects_non_finite_values(value):
+    envelope = {**ENVELOPE, "invalid_value": value}
+
+    with pytest.raises(ValueError, match="Out of range float values"):
+        export_json(envelope)
 
 
 def test_export_empty_results():

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from gitbench.harness.types import Fixture, StructuredOutputContract
 from gitbench.structured_output import (
+    SchemaResolutionError,
     contract_for_benchmark_fixture,
     fixture_expected_as_payload,
     roundtrip_check,
@@ -51,19 +52,15 @@ def validate_fixture_contract(
     """
     issues: list[StructuredOutputIssue] = []
 
-    contract = contract_for_benchmark_fixture(fixture, benchmark_name)
-
-    if contract is None:
+    try:
+        contract = contract_for_benchmark_fixture(fixture, benchmark_name)
+    except SchemaResolutionError as exc:
         issues.append(
             StructuredOutputIssue(
                 fixture_id=fixture.id,
                 benchmark=benchmark_name,
                 code="missing-contract",
-                message=(
-                    f"Fixture {fixture.id} ({benchmark_name}): "
-                    "No structured-output contract could be resolved. "
-                    f"Scoring type is '{fixture.scoring.get('type', 'similarity')}'."
-                ),
+                message=str(exc),
             )
         )
         return issues

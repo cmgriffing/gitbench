@@ -27,6 +27,7 @@ prompt: Using git show --stat, how many files were changed in the commit 'Change
 expected: '1'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to show diff between two commits. Evaluates comparative-commit
   inspection.
 difficulty: medium

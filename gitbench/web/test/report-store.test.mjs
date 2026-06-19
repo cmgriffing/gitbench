@@ -182,6 +182,32 @@ function seedWithBothModes(db) {
   `);
 }
 
+function seedInvalidStructuredOutput(db) {
+  seedWithBothModes(db);
+  db.exec(`
+    INSERT INTO fixtures (
+      benchmark_name, fixture_id, prompt, expected, description, setup_json,
+      purpose, difficulty
+    )
+    VALUES (
+      'commit_messages', 'f002', 'prompt', 'expected', 'description',
+      '["git init"]', 'purpose', 'easy'
+    );
+    INSERT INTO fixture_results (
+      model_name, output_mode, benchmark_name, fixture_id, passed, similarity, error,
+      model_output, reasoning_level, input_tokens, output_tokens, total_tokens,
+      cost_usd, duration_ms, api_duration_ms, purpose, difficulty, tags_json,
+      parsed_payload, raw_structured_output, structured_error
+    )
+    VALUES (
+      'openai/gpt-test:high', 'json_schema', 'commit_messages', 'f002', 0, 0.0,
+      'Structured output schema validation failed', '{"commit":42}', 'high',
+      10, 5, 15, 0.01, 30, 15.0, 'purpose', 'easy', '["basic"]', NULL,
+      '{"commit":42}', 'Structured output schema validation failed'
+    );
+  `);
+}
+
 test("summary returns compact report data without full model output", () => {
   withStore((store) => {
     const summary = store.getSummary();
@@ -289,6 +315,21 @@ test("fixture detail text result has null structured fields", () => {
     assert.equal(textOutput.raw_structured_output, null);
     assert.equal(textOutput.structured_error, null);
   });
+});
+
+test("fixture detail preserves invalid structured-output display fields", () => {
+  withStore((store) => {
+    const fixture = store.getFixture("commit_messages", "f002");
+    assert.ok(fixture);
+    assert.equal(fixture.outputs.length, 1);
+    assert.equal(fixture.outputs[0].model_output, '{"commit":42}');
+    assert.equal(fixture.outputs[0].parsed_payload, null);
+    assert.equal(fixture.outputs[0].raw_structured_output, '{"commit":42}');
+    assert.equal(
+      fixture.outputs[0].structured_error,
+      "Structured output schema validation failed",
+    );
+  }, { seedFn: seedInvalidStructuredOutput });
 });
 
 test("history includes output_mode", () => {

@@ -945,7 +945,7 @@ def write_output_dir(envelope: dict, output_dir: str) -> Path:
         candidate = dir_path / f"{base}_{counter}.json"
         counter += 1
 
-    candidate.write_text(json.dumps(envelope, indent=2))
+    candidate.write_text(json.dumps(envelope, indent=2, allow_nan=False))
     return candidate
 
 
@@ -963,7 +963,7 @@ def write_jsonl(envelope: dict, jsonl_path: str) -> Path:
     file_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(file_path, "a") as f:
-        f.write(json.dumps(envelope) + "\n")
+        f.write(json.dumps(envelope, allow_nan=False) + "\n")
 
     return file_path
 
@@ -2795,7 +2795,7 @@ def run(
             # Write per-mode combined JSON only when running a single mode.
             # For "both" mode, aggregation happens after all modes complete.
             if len(modes_to_run) == 1:
-                output_json = json.dumps(combined, indent=2)
+                output_json = json.dumps(combined, indent=2, allow_nan=False)
                 write_text_file(mode_json_output, output_json)
                 click.echo(f"\nJSON results written to: {mode_json_output}", err=True)
 
@@ -3007,6 +3007,11 @@ def report(input_dir: str | None, input_file: str | None, output_path: str | Non
             raise click.ClickException(
                 f"{exc} Run 'gitbench safety-doctor {safety_input}' before "
                 "generating the report."
+            ) from exc
+        except ResultSafetyError as exc:
+            raise click.ClickException(
+                f"{safety_input}: {exc} Repair or regenerate this result artifact "
+                "before generating the report."
             ) from exc
 
     runs: list[dict] = []

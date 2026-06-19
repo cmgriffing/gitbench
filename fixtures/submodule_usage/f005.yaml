@@ -30,6 +30,7 @@ scoring:
     - type: git_output
       command: git log --oneline -1
       contains: Add lib submodule
+output_schema: command_list
 purpose: Tests ability to add a submodule and commit the change. Evaluates end-to-end
   submodule-addition workflow.
 difficulty: easy

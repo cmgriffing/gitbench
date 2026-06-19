@@ -24,6 +24,7 @@ prompt: How many commits in this repository have 'Fix' in their commit message? 
 expected: '2'
 scoring:
   type: exact_match
+output_schema: count
 purpose: Tests ability to count commits matching a grep pattern in git log. Evaluates
   log filtering and counting.
 difficulty: easy

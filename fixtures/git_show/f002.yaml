@@ -19,6 +19,7 @@ prompt: Using git show --stat, which file was modified in the commit with messag
 expected: a.txt
 scoring:
   type: exact_match
+output_schema: filename
 purpose: Tests ability to identify which files changed in a specific commit. Evaluates
   file-list extraction from git show.
 difficulty: easy

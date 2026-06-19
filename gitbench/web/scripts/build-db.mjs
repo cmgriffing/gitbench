@@ -247,7 +247,7 @@ function insertReportData(db, data) {
             purpose: result.purpose ?? null,
             difficulty: result.difficulty ?? null,
             tags_json: jsonArray(result.tags),
-            parsed_payload: result.parsed_payload != null
+            parsed_payload: result.structured_error == null && result.parsed_payload != null
               ? (typeof result.parsed_payload === "string"
                 ? result.parsed_payload
                 : JSON.stringify(result.parsed_payload))

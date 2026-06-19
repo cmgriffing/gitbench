@@ -245,7 +245,7 @@ class CampaignStore:
         )
         try:
             with os.fdopen(tmp_fd, "w") as f:
-                json.dump(attempt.to_dict(), f, indent=2)
+                json.dump(attempt.to_dict(), f, indent=2, allow_nan=False)
             os.replace(tmp_path, path)
             legacy_path = self._legacy_envelope_path(attempt.identity)
             if legacy_path != path and legacy_path.exists():

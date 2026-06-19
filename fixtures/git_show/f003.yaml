@@ -17,6 +17,7 @@ prompt: Using git show, what is the commit message of the commit that the lightw
 expected: Release version 1.0
 scoring:
   type: exact_match
+output_schema: commit_message
 purpose: Tests ability to inspect a lightweight tag pointing to a commit. Evaluates
   tag-to-commit resolution.
 difficulty: easy

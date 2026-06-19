@@ -3,20 +3,27 @@
 import logging
 import time
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from typing import Protocol
+from typing import Any, Protocol
 
 from gitbench.harness.benchmark import Benchmark
 from gitbench.harness.capacity import RequestAttemptGate, RequestBudgetCoordinator
+from gitbench.harness.campaign import hash_text
 from gitbench.harness.judge import JudgeClient
-from gitbench.harness.model import DEFAULT_MODEL_TIMEOUT, ModelInterface, ReasoningDisableError, RetriesExhaustedError
+from gitbench.harness.model import (
+    DEFAULT_MODEL_TIMEOUT,
+    ModelInterface,
+    ReasoningDisableError,
+    RetriesExhaustedError,
+)
 from gitbench.harness.scorer import Scorer
 from gitbench.harness.types import BenchmarkResult, Fixture, ModelMessage, Score
-from gitbench.harness.campaign import hash_text
-from gitbench.utils.git import FixtureGenerationContext
 from gitbench.structured_output import (
+    StructuredOutputSchemaError,
     canonicalize,
     contract_for_benchmark_fixture,
+    validate_structured_payload,
 )
+from gitbench.utils.git import FixtureGenerationContext
 from gitbench.version import BENCHMARK_SUITE_VERSION
 
 logger = logging.getLogger(__name__)
@@ -407,15 +414,30 @@ class BenchmarkRunner:
                 structured_error = None
                 request_telemetry = None
 
-            # Canonicalize structured output before scoring
-            if output_mode == "json_schema" and parsed_payload is not None and structured_output_contract is not None:
+            raw_structured_output = response.get("raw_structured_output")
+
+            # Validate and canonicalize structured output before scoring.
+            if (
+                output_mode == "json_schema"
+                and not structured_error
+                and structured_output_contract is not None
+            ):
                 try:
+                    validate_structured_payload(
+                        parsed_payload,
+                        structured_output_contract,
+                    )
                     model_output = canonicalize(parsed_payload, structured_output_contract)
-                except Exception as exc:
-                    structured_error = str(exc)
-                    model_output = ""
+                except StructuredOutputSchemaError as exc:
+                    structured_error = (
+                        f"Structured output schema validation failed: {exc}"
+                    )
 
             if structured_error:
+                if not isinstance(raw_structured_output, str):
+                    raw_structured_output = model_output
+                model_output = raw_structured_output
+                parsed_payload = None
                 score = Score(
                     fixture_id=fixture.id,
                     passed=False,
@@ -431,7 +453,7 @@ class BenchmarkRunner:
                 )
                 # Attach structured-output fields
                 score._parsed_payload = parsed_payload
-                score._raw_structured_output = response.get("raw_structured_output")
+                score._raw_structured_output = raw_structured_output
                 score._structured_error = structured_error
                 score._output_mode = output_mode
                 score.provider_route_metadata = self._provider_route_metadata()
@@ -488,7 +510,7 @@ class BenchmarkRunner:
             # Attach structured-output fields
             score._output_mode = output_mode
             score._parsed_payload = parsed_payload
-            score._raw_structured_output = response.get("raw_structured_output")
+            score._raw_structured_output = raw_structured_output
             score._structured_error = structured_error
 
             return fixture.id, score

@@ -25,6 +25,7 @@ scoring:
     - type: file_content
       path: ../feature-wt/feature.txt
       value: Updated
+output_schema: command_list
 purpose: Tests ability to make changes in a worktree and commit them. Evaluates worktree-as-workspace
   workflow.
 difficulty: medium

@@ -267,6 +267,7 @@ def build_content_bundle(score: dict[str, Any]) -> str:
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,
+            allow_nan=False,
         )
     except (TypeError, ValueError) as exc:
         raise SafetyReviewError(
@@ -557,7 +558,13 @@ def atomic_write_json(
     temp_path = Path(temp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            json.dump(
+                payload,
+                handle,
+                indent=2,
+                ensure_ascii=False,
+                allow_nan=False,
+            )
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
