@@ -80,6 +80,20 @@
         "high": "high",
         "xhigh": "xhigh"
       }
+    },
+    "laguna-xs.2": {
+      "mappings": {
+        "none": "none",
+        "high": "high",
+        "xhigh": "xhigh"
+      }
+    },
+    "laguna-m.1": {
+      "mappings": {
+        "none": "none",
+        "medium": "medium",
+        "xhigh": "xhigh"
+      }
     }
   }
 }

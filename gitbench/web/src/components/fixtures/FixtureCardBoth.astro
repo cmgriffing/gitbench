@@ -28,8 +28,10 @@ const tagsStr = tags.join(",");
 const textMissing = textPassed == null && textSimilarity == null;
 const jsonMissing = jsonPassed == null && jsonSimilarity == null;
 
-const textPct = textSimilarity != null ? Math.round(textSimilarity * 1000) / 10 : null;
-const jsonPct = jsonSimilarity != null ? Math.round(jsonSimilarity * 1000) / 10 : null;
+const textPct =
+  textSimilarity != null ? Math.round(textSimilarity * 1000) / 10 : null;
+const jsonPct =
+  jsonSimilarity != null ? Math.round(jsonSimilarity * 1000) / 10 : null;
 
 const textPassColor = textPassed
   ? "text-pass bg-pass-bg border-pass-border"
@@ -47,60 +49,72 @@ const jsonPassColor = jsonPassed
   data-tags={tagsStr}
 >
   <div class="flex items-start justify-between gap-3">
-    <span class="min-w-0 truncate font-mono text-xs font-medium text-(--color-text-mid)">
-      {fixtureId}
-    </span>
     <span class="shrink-0 font-mono text-[0.62rem] text-(--color-text-dim)">
       {benchmark}
+    </span>
+    <span
+      class="min-w-0 truncate font-mono text-xs font-medium text-(--color-text-mid)"
+    >
+      {fixtureId}
     </span>
   </div>
 
   <div class="flex flex-col gap-2 py-4">
     <div class="flex items-center justify-center gap-2">
-      <span class="font-mono text-[0.62rem] font-medium text-(--color-text-dim) w-3">T</span>
-      {textMissing ? (
-        <span class="font-mono text-sm font-semibold tabular-nums text-(--color-text-dim)">
-          —
-        </span>
-      ) : (
-        <>
-          <span class="font-mono text-sm font-semibold tabular-nums text-(--color-text)">
-            {textPct}%
+      <span
+        class="font-mono text-[0.62rem] font-medium text-(--color-text-dim) w-3"
+        >T</span
+      >
+      {
+        textMissing ? (
+          <span class="font-mono text-sm font-semibold tabular-nums text-(--color-text-dim)">
+            —
           </span>
-          <span
-            class={`inline-flex size-5 items-center justify-center rounded-full border ${textPassColor}`}
-          >
-            {textPassed ? (
-              <Check class="size-3" aria-hidden="true" />
-            ) : (
-              <X class="size-3" aria-hidden="true" />
-            )}
-          </span>
-        </>
-      )}
+        ) : (
+          <>
+            <span class="font-mono text-sm font-semibold tabular-nums text-(--color-text)">
+              {textPct}%
+            </span>
+            <span
+              class={`inline-flex size-5 items-center justify-center rounded-full border ${textPassColor}`}
+            >
+              {textPassed ? (
+                <Check class="size-3" aria-hidden="true" />
+              ) : (
+                <X class="size-3" aria-hidden="true" />
+              )}
+            </span>
+          </>
+        )
+      }
     </div>
     <div class="flex items-center justify-center gap-2">
-      <span class="font-mono text-[0.62rem] font-medium text-(--color-text-dim) w-3">J</span>
-      {jsonMissing ? (
-        <span class="font-mono text-sm font-semibold tabular-nums text-(--color-text-dim)">
-          —
-        </span>
-      ) : (
-        <>
-          <span class="font-mono text-sm font-semibold tabular-nums text-(--color-text)">
-            {jsonPct}%
+      <span
+        class="font-mono text-[0.62rem] font-medium text-(--color-text-dim) w-3"
+        >J</span
+      >
+      {
+        jsonMissing ? (
+          <span class="font-mono text-sm font-semibold tabular-nums text-(--color-text-dim)">
+            —
           </span>
-          <span
-            class={`inline-flex size-5 items-center justify-center rounded-full border ${jsonPassColor}`}
-          >
-            {jsonPassed ? (
-              <Check class="size-3" aria-hidden="true" />
-            ) : (
-              <X class="size-3" aria-hidden="true" />
-            )}
-          </span>
-        </>
-      )}
+        ) : (
+          <>
+            <span class="font-mono text-sm font-semibold tabular-nums text-(--color-text)">
+              {jsonPct}%
+            </span>
+            <span
+              class={`inline-flex size-5 items-center justify-center rounded-full border ${jsonPassColor}`}
+            >
+              {jsonPassed ? (
+                <Check class="size-3" aria-hidden="true" />
+              ) : (
+                <X class="size-3" aria-hidden="true" />
+              )}
+            </span>
+          </>
+        )
+      }
     </div>
   </div>
 </a>
