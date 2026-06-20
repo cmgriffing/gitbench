@@ -49,12 +49,19 @@ function minimalModelSummaries(
   ) as GitBenchData["model_summaries"];
 }
 
+function modelModeKey(modelName: string, outputMode: string): string {
+  return outputMode === "text" ? modelName : `${modelName}__${outputMode}`;
+}
+
 function compactHeatmapMatrix(summary: GitBenchData) {
   return Object.fromEntries(
     summary.models.map((model) => [
-      model.name,
+      modelModeKey(model.name, model.output_mode ?? "text"),
       summary.benchmarks.map((benchmark) => {
-        const cell = summary.matrix[model.name]?.[benchmark];
+        const cell =
+          summary.matrix[
+            modelModeKey(model.name, model.output_mode ?? "text")
+          ]?.[benchmark];
         return cell ? [cell.pass_at_k, cell.passed, cell.total] : null;
       }),
     ])
