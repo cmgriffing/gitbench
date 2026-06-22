@@ -2200,7 +2200,7 @@ def run(
 
         runner_cache: dict[tuple[str, str], BenchmarkRunner] = {}
 
-        def runner_for_identity(identity):
+        def runner_for_identity(identity, *, judge_cache=None):
             try:
                 run_index, model_index, _profile_name, profile_conf = model_profile_by_id[
                     identity.model_id
@@ -2245,6 +2245,7 @@ def run(
                     request_budget,
                     capacity_info.capacity_key,
                 ),
+                judge_cache=judge_cache,
             )
             runner_cache[cache_key] = runner
             return runner

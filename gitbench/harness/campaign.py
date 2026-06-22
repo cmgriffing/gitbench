@@ -366,6 +366,7 @@ class JudgeEvidence:
     cache_key: str | None = None
     error: str | None = None
     exhausted: bool = False
+    cache_hit: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return _encode(asdict(self))
@@ -699,6 +700,7 @@ class CampaignConfig:
     request_config: dict[str, Any] | None = None
     request_config_hash: str | None = None
     scorer_config_hash: str | None = None
+    judge_config_hash: str | None = None
     expected_fixture_hashes: dict[str, FixtureExpectedHashes] = field(
         default_factory=dict
     )
@@ -805,6 +807,7 @@ class Campaign:
             (expected.scoring_input_hash, provenance.scoring_input_hash),
             (expected.request_config_hash, provenance.request_config_hash),
             (expected.scorer_config_hash, provenance.scorer_config_hash),
+            (cfg.judge_config_hash, provenance.judge_config_hash),
         ]
         for expected_value, actual_value in checks:
             if expected_value is not None and actual_value != expected_value:
@@ -875,6 +878,7 @@ def make_campaign(
     request_config: dict[str, Any] | None = None,
     request_config_hash: str | None = None,
     scorer_config_hash: str | None = None,
+    judge_config_hash: str | None = None,
     scheduler_version: str = "campaign-scheduler-v1",
     safety_review_config: dict[str, Any] | None = None,
 ) -> Campaign:
@@ -897,6 +901,7 @@ def make_campaign(
         request_config=request_config,
         request_config_hash=request_config_hash,
         scorer_config_hash=scorer_config_hash,
+        judge_config_hash=judge_config_hash,
         scheduler_version=scheduler_version,
         safety_review_config=safety_review_config,
     )

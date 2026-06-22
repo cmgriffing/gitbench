@@ -90,6 +90,11 @@ def raw_attempt_from_score(
         status = AttemptStatus.VALID_FAIL
 
     expected = expected_hashes_for_identity(campaign, identity)
+
+    judge_evidence = None
+    if score.judge_evidence:
+        judge_evidence = JudgeEvidence.from_dict(score.judge_evidence)
+
     provenance = None
     if expected is not None:
         provenance = Provenance(
@@ -99,14 +104,14 @@ def raw_attempt_from_score(
             scoring_input_hash=expected.scoring_input_hash,
             request_config_hash=expected.request_config_hash,
             scorer_config_hash=expected.scorer_config_hash,
-            judge_config_hash=campaign.config.scorer_config_hash,
+            judge_config_hash=(
+                judge_evidence.judge_config_hash
+                if judge_evidence is not None and judge_evidence.judge_config_hash
+                else campaign.config.judge_config_hash
+            ),
             fixture_generation_version=campaign.config.fixture_generation_version,
             scheduler_seed=campaign.config.scheduler_seed,
         )
-
-    judge_evidence = None
-    if score.judge_evidence:
-        judge_evidence = JudgeEvidence.from_dict(score.judge_evidence)
 
     now = _now_iso()
     return RawAttempt(
@@ -139,16 +144,28 @@ def raw_attempt_from_score(
 def execute_campaign(
     campaign: Campaign,
     store: CampaignStore,
-    runner_for_identity: Callable[[AttemptIdentity], BenchmarkRunner],
+    runner_for_identity: Callable[..., BenchmarkRunner],
     *,
     progress: CampaignExecutionProgress | None = None,
 ) -> Campaign:
-    """Execute every missing exact identity and persist attempts atomically."""
+    """Execute every missing exact identity and persist attempts atomically.
+
+    When the campaign uses LLM judge scoring, a campaign-scoped
+    :class:`JudgeCache` is loaded from the store (or created fresh) and
+    passed to every runner created for this campaign via the
+    ``runner_for_identity`` callback.
+    """
     needed = build_resume_plan(campaign, store)
     planned = sum(len(trial.attempt_identities) for trial in campaign.trials)
     reused = max(0, planned - len(needed))
     if progress is not None and reused:
         progress.campaign_attempt_reused(reused)
+
+    # Load or create the campaign-scoped judge cache.
+    judge_cache = store.load_judge_cache()
+    if judge_cache is None:
+        from gitbench.harness.judge import JudgeCache
+        judge_cache = JudgeCache()
 
     fixture_context = FixtureGenerationContext(
         version=campaign.config.fixture_generation_version,
@@ -161,7 +178,7 @@ def execute_campaign(
         if expected is not None:
             scoring_context = {"fixture_input_hash": expected.fixture_input_hash}
 
-        runner = runner_for_identity(identity)
+        runner = runner_for_identity(identity, judge_cache=judge_cache)
         score = runner.run_fixture_identity(
             identity_benchmark(identity),
             identity_fixture_id(identity),
@@ -169,6 +186,11 @@ def execute_campaign(
             campaign_scoring_context=scoring_context,
         )
         attempt = raw_attempt_from_score(campaign, identity, score)
+
+        # Persist the judge cache BEFORE writing the attempt so that a
+        # crash between the two does not lose judge evidence while the
+        # attempt appears complete.
+        store.save_judge_cache(judge_cache)
         store.write_attempt(attempt)
 
         campaign.raw_attempts = store.load_all_attempts()

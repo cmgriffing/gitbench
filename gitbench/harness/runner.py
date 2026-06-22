@@ -8,7 +8,7 @@ from typing import Any, Protocol
 from gitbench.harness.benchmark import Benchmark
 from gitbench.harness.capacity import RequestAttemptGate, RequestBudgetCoordinator
 from gitbench.harness.campaign import hash_text
-from gitbench.harness.judge import JudgeClient
+from gitbench.harness.judge import JudgeCache, JudgeClient
 from gitbench.harness.model import (
     DEFAULT_MODEL_TIMEOUT,
     ModelInterface,
@@ -60,6 +60,7 @@ class BenchmarkRunner:
         judge_config: dict | None = None,
         model_timeout: int = DEFAULT_MODEL_TIMEOUT,
         attempt_gate: RequestAttemptGate | None = None,
+        judge_cache: JudgeCache | None = None,
     ) -> None:
         """Initialise the runner.
 
@@ -75,6 +76,8 @@ class BenchmarkRunner:
                 (default: 240).
             attempt_gate: Optional request-attempt gate passed to judge
                 model clients for capacity coordination.
+            judge_cache: Optional campaign-scoped ``JudgeCache`` for reusing
+                judge decisions across compatible runners in one campaign.
         """
         self._registry = registry
         self._model_client = model_client
@@ -92,7 +95,7 @@ class BenchmarkRunner:
 
             judge_profile = resolve_profile(judge_config["_config"], judge_config["profile"])
             judge_model_clients = self._create_judge_model_client(judge_profile)
-            self._judge_client = JudgeClient(judge_model_clients)
+            self._judge_client = JudgeClient(judge_model_clients, cache=judge_cache)
 
         # Construct one judge-aware Scorer when a judge is configured;
         # scoring-type dispatch alone decides whether the judge is called.

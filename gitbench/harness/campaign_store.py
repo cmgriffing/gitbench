@@ -25,6 +25,43 @@ from gitbench.harness.campaign import (
     hash_scorer_config,
 )
 from gitbench.harness.scheduler import SCHEDULER_VERSION
+from gitbench.version import CAMPAIGN_SCHEMA_VERSION
+
+
+LEGACY_JUDGE_CAMPAIGN_ERROR = (
+    "Campaign '{campaign_id}' uses LLM judge scoring but its manifest does "
+    "not contain a decision-complete judge configuration hash. "
+    "This campaign was created before dedicated judge identity was required. "
+    "Automatic resume is rejected because cached judge decisions cannot be "
+    "verified. Start a new campaign with the current schema (v{expected}) "
+    "or provide an explicit migration if one becomes available."
+)
+
+
+def is_judge_campaign(campaign: Campaign) -> bool:
+    """Return True when the campaign uses LLM judge scoring.
+
+    A campaign is considered a judge campaign when it has a ``judge_config``
+    in its configuration.  This is a coarse check; the actual fixture-level
+    scoring type is what determines whether the judge is called.
+    """
+    return campaign.config.judge_config is not None
+
+
+def validate_judge_identity_compatibility(campaign: Campaign) -> None:
+    """Reject resume for legacy judge campaigns lacking a dedicated judge hash.
+
+    Non-judge campaigns without judge configuration identity may resume
+    without issue.  Judge campaigns (those with ``judge_config``) must carry
+    a ``judge_config_hash`` so that cached decisions can be verified.
+    """
+    if is_judge_campaign(campaign) and not campaign.config.judge_config_hash:
+        raise ValueError(
+            LEGACY_JUDGE_CAMPAIGN_ERROR.format(
+                campaign_id=campaign.campaign_id,
+                expected=CAMPAIGN_SCHEMA_VERSION,
+            )
+        )
 
 
 def _identity_key(identity: AttemptIdentity) -> tuple[str, int, str, str, str, str, str]:
@@ -51,6 +88,7 @@ def validate_resume_compatibility(
     planned_trial_count: int | None = None,
     request_config: dict[str, Any] | None = None,
     scorer_config: dict[str, Any] | None = None,
+    judge_config_hash: str | None = None,
     fixture_generation_version: str | None = None,
     scheduler_seed: int | None = None,
     scheduler_version: str | None = None,
@@ -100,6 +138,10 @@ def validate_resume_compatibility(
                 cfg.scorer_config_hash,
             )
         )
+    if judge_config_hash is not None:
+        checks.append(
+            ("judge_config_hash", judge_config_hash, cfg.judge_config_hash)
+        )
 
     for field, requested, persisted in checks:
         if requested != persisted:
@@ -130,6 +172,8 @@ def build_resume_plan(campaign: Campaign, store: CampaignStore) -> list[AttemptI
             f"persisted {campaign.config.scheduler_version!r}, "
             f"supported {SCHEDULER_VERSION!r}"
         )
+
+    validate_judge_identity_compatibility(campaign)
 
     schedule = getattr(campaign, "_schedule", None)
     if schedule is None:
@@ -171,6 +215,7 @@ class CampaignStore:
         self.campaign_dir = self.base_dir / campaign_id
         self.manifest_path = self.campaign_dir / "campaign.json"
         self.envelopes_dir = self.campaign_dir / "envelopes"
+        self.cache_path = self.campaign_dir / "judge_cache.json"
 
     def ensure_dirs(self) -> None:
         """Create campaign directories if they do not exist."""
@@ -199,6 +244,60 @@ class CampaignStore:
             Path(tmp_path).unlink(missing_ok=True)
             raise
         return self.manifest_path
+
+    def save_judge_cache(self, cache: "JudgeCache") -> Path:
+        """Atomically write judge cache evidence for this campaign.
+
+        Serializes all cache entries (evidence keyed by fixture input hash,
+        target output hash, and judge config hash) to ``judge_cache.json``
+        under the campaign directory.
+        """
+        from gitbench.harness.judge import JudgeCache as _JC
+
+        self.ensure_dirs()
+        entries = cache.entries()
+        # Serialize keys as strings for JSON.
+        serializable = {
+            f"{k[0]}:{k[1]}:{k[2]}": v.to_dict()
+            for k, v in entries.items()
+        }
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=str(self.campaign_dir),
+            prefix=".judge_cache.json.tmp-",
+        )
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                json.dump(serializable, f, indent=2, allow_nan=False)
+            os.replace(tmp_path, self.cache_path)
+        except Exception:
+            Path(tmp_path).unlink(missing_ok=True)
+            raise
+        return self.cache_path
+
+    def load_judge_cache(self) -> "JudgeCache | None":
+        """Load persisted judge cache evidence for this campaign.
+
+        Returns ``None`` when no cache file exists.  Otherwise returns a
+        ``JudgeCache`` populated with the persisted evidence.
+        """
+        from gitbench.harness.judge import JudgeCache
+        from gitbench.harness.campaign import JudgeEvidence
+
+        if not self.cache_path.exists():
+            return None
+        try:
+            data = json.loads(self.cache_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
+        cache = JudgeCache()
+        for key_str, evidence_dict in data.items():
+            parts = key_str.split(":")
+            if len(parts) != 3:
+                continue
+            fixture_input_hash, target_output_hash, judge_config_hash = parts
+            evidence = JudgeEvidence.from_dict(evidence_dict)
+            cache.set(fixture_input_hash, target_output_hash, judge_config_hash, evidence)
+        return cache
 
     def _envelope_path(self, identity: AttemptIdentity) -> Path:
         """Return the envelope path for an attempt identity."""

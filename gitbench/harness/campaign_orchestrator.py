@@ -21,8 +21,44 @@ from gitbench.harness.campaign import (
     make_campaign,
 )
 from gitbench.harness.scheduler import CampaignSchedule, SCHEDULER_VERSION, build_schedule
+from gitbench.harness.judge import compute_judge_config_hash
 from gitbench.harness.types import Fixture
 from gitbench.utils.git import FixtureGenerationContext
+
+
+def compute_judge_config_hash_from_config(
+    judge_config: dict[str, Any] | None,
+) -> str | None:
+    """Compute the dedicated judge configuration hash from a judge config dict.
+
+    Resolves the judge profile and creates model client objects (without
+    network calls) to build the canonical identity and hash.
+
+    Returns ``None`` when ``judge_config`` is ``None``.
+    """
+    if judge_config is None:
+        return None
+
+    from gitbench.config import resolve_profile
+    from gitbench.cli import get_model_client
+
+    profile = resolve_profile(judge_config["_config"], judge_config["profile"])
+    models = profile.get("models", [])
+    if not models:
+        return None
+
+    clients = []
+    for model in models:
+        client = get_model_client(
+            model,
+            timeout=240,
+            retry_count=5,
+            base_url=profile.get("base_url"),
+            api_key=profile.get("api_key"),
+            provider=profile.get("provider"),
+        )
+        clients.append(client)
+    return compute_judge_config_hash(clients)
 
 
 def plan_campaign(
@@ -113,6 +149,7 @@ def plan_campaign(
         request_config=request_config,
         request_config_hash=hash_request_config(request_config),
         scorer_config_hash=hash_scorer_config(scorer_config),
+        judge_config_hash=compute_judge_config_hash_from_config(judge_config),
         safety_review_config=safety_review_config,
     )
     campaign.config.expected_fixture_hashes = expected_hashes
