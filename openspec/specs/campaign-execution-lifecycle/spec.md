@@ -3,6 +3,23 @@
 ## Purpose
 TBD - created by archiving change fix-campaign-execution-lifecycle. Update Purpose after archive.
 ## Requirements
+### Requirement: Evaluation framework failures are non-quality outcomes
+Failures in benchmark setup, fixture generation, scoring configuration, or scoring execution that prevent a valid comparison SHALL be recorded as infrastructure failures and excluded from model-quality denominators.
+
+#### Scenario: Benchmark setup signature failure
+- **WHEN** a benchmark cannot accept the fixture-generation inputs required by the runner
+- **THEN** the attempt SHALL be recorded as an infrastructure failure
+- **AND** it SHALL NOT count as a valid model failure
+
+#### Scenario: Unsupported scoring configuration reaches execution
+- **WHEN** a fixture scoring type has no valid generic or benchmark-specific evaluation path
+- **THEN** the attempt SHALL be recorded as an infrastructure failure with a diagnostic error
+- **AND** the campaign SHALL remain incomplete
+
+#### Scenario: Structured model response remains a quality failure
+- **WHEN** benchmark setup and scoring are available but the model response violates its structured-output contract
+- **THEN** the attempt SHALL remain a valid failed quality attempt
+
 ### Requirement: Campaign runs execute every planned identity
 When `gitbench run` is invoked with a campaign ID, the runner SHALL execute the campaign schedule rather than the legacy one-shot model/benchmark loop. Each selected fixture SHALL run once for every selected model, reasoning effort, output mode, and numbered trial.
 
@@ -74,6 +91,25 @@ Campaign aggregation SHALL preserve campaign, model, reasoning effort, output mo
 - **WHEN** the same base model is evaluated at `low` and `high` reasoning efforts
 - **THEN** model campaign summaries SHALL keep the two reasoning efforts distinct
 - **AND** raw-attempt lookup SHALL require enough identity fields to select exactly one attempt
+
+### Requirement: Raw attempts record actual judge identity
+Every campaign attempt evaluated by an LLM judge SHALL record the decision-complete judge configuration hash used for that evaluation. The judge hash SHALL be distinct from the generic scorer configuration hash.
+
+#### Scenario: Judged attempt is persisted
+- **WHEN** judge scoring produces a decision or exhausted evidence
+- **THEN** raw attempt provenance SHALL contain the judge configuration hash reported by the judge evidence
+- **AND** it SHALL not substitute the scorer configuration hash
+
+#### Scenario: Non-judge attempt is persisted
+- **WHEN** an attempt does not invoke an LLM judge
+- **THEN** its provenance MAY omit judge configuration identity
+
+### Requirement: Judge cache evidence is persisted before attempt completion
+A newly produced judge decision SHALL be durably stored in the campaign cache before the corresponding raw attempt is marked complete.
+
+#### Scenario: Process stops after judging
+- **WHEN** judge evaluation finishes and the process stops after cache persistence but before the campaign completes
+- **THEN** resume SHALL be able to reuse the persisted judge evidence
 
 ### Requirement: Campaign state reflects persisted attempts
 After campaign execution, interruption, resume, or repair, the store SHALL recompute trial summaries, fixture aggregates, resource summaries, completed counts, valid counts, excluded counts, and campaign state from persisted raw attempts.
