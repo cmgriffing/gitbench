@@ -291,22 +291,15 @@
     "quick-testing": {
       "model": [
         "nvidia/nemotron-3-nano-30b-a3b:none",
-        "nvidia/nemotron-3-nano-30b-a3b:low",
-        "nvidia/nemotron-3-nano-30b-a3b:medium",
+        "nvidia/nemotron-3-nano-30b-a3b:high",
 
         "mistralai/devstral-2512",
 
         "deepseek/deepseek-v4-flash:none",
-        "deepseek/deepseek-v4-flash:low",
-        "deepseek/deepseek-v4-flash:medium",
+        "deepseek/deepseek-v4-flash:high",
 
         "poolside/laguna-xs.2:none",
-        "poolside/laguna-xs.2:high",
-        "poolside/laguna-xs.2:xhigh",
-
-        "poolside/laguna-m.1:none",
-        "poolside/laguna-m.1:medium",
-        "poolside/laguna-m.1:xhigh"
+        "poolside/laguna-xs.2:high"
       ],
       "base_url": "https://openrouter.ai/api/v1",
       "api_key_env": "OPENROUTER_API_KEY"
