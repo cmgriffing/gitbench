@@ -3,5 +3,11 @@
     "api/**/*.ts": {
       "includeFiles": "data/gitbench.db"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/models/:model*/results",
+      "destination": "/api/models/[...model]/results"
+    }
+  ]
 }

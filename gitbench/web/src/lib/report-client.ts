@@ -171,10 +171,8 @@ export function loadModelResults(
   for (const [key, value] of Object.entries(filters)) {
     if (value) params[key] = value;
   }
-  const suffix = new URLSearchParams(params).toString();
-  const query = suffix ? `?${suffix}` : "";
   const path = model.split("/").map(encodeURIComponent).join("/");
-  return getJson(loadCampaignAwareData(`/api/models/${path}/results${query}`));
+  return getJson(loadCampaignAwareData(`/api/models/${path}/results`, params));
 }
 
 export function loadFixture(
@@ -200,11 +198,5 @@ export function loadFixtureAttempts(
         fixture
       )}/attempts`
     )
-  );
-}
-
-export function loadHistory(): Promise<Pick<GitBenchData, "runs_meta">> {
-  return getJson<Pick<GitBenchData, "runs_meta">>(
-    loadCampaignAwareData("/api/history")
   );
 }
