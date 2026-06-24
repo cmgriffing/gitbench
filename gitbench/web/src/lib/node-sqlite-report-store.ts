@@ -9,6 +9,7 @@ import type {
   FixtureDetail,
   ModelResultsFilters,
   RawAttempt,
+  ReportQueryOptions,
   ReportStore,
 } from "./report-store.ts";
 import type {
@@ -47,7 +48,12 @@ function modelModeKey(modelName: string, outputMode: string): string {
 export class NodeSqliteReportStore implements ReportStore {
   constructor(private readonly db: DatabaseSync) {}
 
-  getSummary(): GitBenchData {
+  getSummary(options: ReportQueryOptions = {}): GitBenchData {
+    if (options.campaign_id) {
+      const campaignSummary = this.getCampaignSummary(options.campaign_id);
+      if (campaignSummary) return campaignSummary;
+    }
+
     const models = this.getModels();
     const benchmarks = this.db
       .prepare("SELECT name FROM benchmarks ORDER BY name")
@@ -201,6 +207,7 @@ export class NodeSqliteReportStore implements ReportStore {
     const [modelName, outputMode] = this.resolveModelKey(model);
     const requestedOutputMode = filters.output_mode ?? outputMode ?? "text";
     if (filters.campaign_id) {
+      if (!modelName) return null;
       const campaignRows = this.db
         .prepare(
           `
@@ -217,15 +224,15 @@ export class NodeSqliteReportStore implements ReportStore {
         .all(
           ...[
             filters.campaign_id,
-            model,
+            modelName,
             requestedOutputMode,
             ...(filters.benchmark ? [filters.benchmark] : []),
           ]
         ) as Record<string, unknown>[];
       if (campaignRows.length === 0) return null;
       return {
-        model: modelModeKey(model, requestedOutputMode),
-        results: groupResultsByBenchmark(campaignRows, true),
+        model: modelModeKey(modelName, requestedOutputMode),
+        results: groupResultsByBenchmark(campaignRows, false),
       };
     }
     if (!modelName) return null;
@@ -265,7 +272,18 @@ export class NodeSqliteReportStore implements ReportStore {
     };
   }
 
-  getBenchmark(benchmark: string): BenchmarkDetail | null {
+  getBenchmark(
+    benchmark: string,
+    options: ReportQueryOptions = {}
+  ): BenchmarkDetail | null {
+    if (options.campaign_id) {
+      const campaignBenchmark = this.getCampaignBenchmark(
+        benchmark,
+        options.campaign_id
+      );
+      if (campaignBenchmark) return campaignBenchmark;
+    }
+
     if (!this.benchmarkExists(benchmark)) return null;
     const leaderboard = (
       this.db
@@ -308,7 +326,20 @@ export class NodeSqliteReportStore implements ReportStore {
     };
   }
 
-  getFixture(benchmark: string, fixtureId: string): FixtureDetail | null {
+  getFixture(
+    benchmark: string,
+    fixtureId: string,
+    options: ReportQueryOptions = {}
+  ): FixtureDetail | null {
+    if (options.campaign_id) {
+      const campaignFixture = this.getCampaignFixture(
+        benchmark,
+        fixtureId,
+        options.campaign_id
+      );
+      if (campaignFixture) return campaignFixture;
+    }
+
     const fixture = this.getFixtureInfo(benchmark, fixtureId);
     if (!fixture) return null;
     const outputs = (
@@ -324,9 +355,500 @@ export class NodeSqliteReportStore implements ReportStore {
         .all(benchmark, fixtureId) as Record<string, unknown>[]
     ).map((row) => ({
       model: modelModeKey(String(row.model_name), String(row.output_mode)),
-      ...fixtureResultFromRow(row, true),
+      ...fixtureResultFromRow(row, true, { allowMissingSafetyState: true }),
     }));
     return { fixture, outputs };
+  }
+
+  private getCampaignSummary(campaignId: string): GitBenchData | null {
+    if (!this.getCampaign(campaignId)) return null;
+
+    const models = this.getCampaignModels(campaignId);
+    const modelKeys = new Set(
+      models.map((model) =>
+        modelModeKey(model.name, model.output_mode ?? "text")
+      )
+    );
+
+    return {
+      models,
+      benchmarks: this.getCampaignBenchmarks(campaignId),
+      model_summaries: this.getCampaignModelSummaries(campaignId),
+      model_runtimes: this.getCampaignModelRuntimes(campaignId),
+      model_token_summaries: this.getCampaignModelTokenSummaries(campaignId),
+      matrix: this.getCampaignMatrix(campaignId, modelKeys),
+      fixtures: {},
+      fixture_index: {},
+      runs_meta: this.getHistory(),
+      base_model_groups: this.getBaseModelGroupsForModelKeys(modelKeys),
+    };
+  }
+
+  private getCampaignModels(campaignId: string): ModelInfo[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT DISTINCT m.name, m.provider, m.base_model AS baseModel,
+               m.reasoning_level AS reasoningLevel, m.output_mode
+        FROM campaign_model_summaries cms
+        JOIN models m
+          ON m.name = cms.model_name
+         AND m.output_mode = cms.output_mode
+        WHERE cms.campaign_id = ?
+        ORDER BY m.name, m.output_mode
+        `
+      )
+      .all(campaignId) as Record<string, unknown>[];
+
+    if (rows.length > 0) return rows.map(modelInfoFromRow);
+
+    const campaignRow = this.getCampaignRow(campaignId);
+    if (!campaignRow) return [];
+    const modelIds = new Set(parseJsonArray(campaignRow.model_ids_json));
+    const outputModes = new Set(parseJsonArray(campaignRow.output_modes_json));
+    return this.getModels().filter(
+      (model) =>
+        modelIds.has(model.name) &&
+        (outputModes.size === 0 || outputModes.has(model.output_mode ?? "text"))
+    );
+  }
+
+  private getCampaignBenchmarks(campaignId: string): string[] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT DISTINCT benchmark_name
+        FROM campaign_benchmark_summaries
+        WHERE campaign_id = ?
+        ORDER BY benchmark_name
+        `
+      )
+      .all(campaignId) as Record<string, unknown>[];
+
+    if (rows.length > 0) return rows.map((row) => String(row.benchmark_name));
+
+    const campaignRow = this.getCampaignRow(campaignId);
+    return campaignRow ? parseJsonArray(campaignRow.benchmark_ids_json).sort() : [];
+  }
+
+  private getCampaignModelSummaries(
+    campaignId: string
+  ): GitBenchData["model_summaries"] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT model_name, output_mode, completed_trials, valid_attempts,
+               passing_attempts, mean_success_rate, resource_summary_json
+        FROM campaign_model_summaries
+        WHERE campaign_id = ?
+        `
+      )
+      .all(campaignId) as Record<string, unknown>[];
+
+    if (rows.length === 0) {
+      const attemptRows = this.db
+        .prepare(
+          `
+          SELECT model_name, output_mode,
+                 COUNT(DISTINCT trial_index) AS total_runs,
+                 COUNT(DISTINCT benchmark_name || char(31) || fixture_id) AS total_fixtures,
+                 COUNT(DISTINCT CASE
+                   WHEN passed = 1 THEN benchmark_name || char(31) || fixture_id
+                 END) AS total_passed,
+                 SUM(CASE WHEN status IN ('valid_pass', 'valid_fail') THEN 1 ELSE 0 END) AS valid_attempts,
+                 SUM(CASE WHEN status = 'valid_pass' THEN 1 ELSE 0 END) AS passing_attempts,
+                 SUM(cost_usd) AS total_cost_usd,
+                 AVG(cost_usd) AS avg_cost_usd
+          FROM raw_attempts
+          WHERE campaign_id = ?
+          GROUP BY model_name, output_mode
+          `
+        )
+        .all(campaignId) as Record<string, unknown>[];
+
+      return Object.fromEntries(
+        attemptRows.map((row) => {
+          const validAttempts = Number(row.valid_attempts ?? 0);
+          const passingAttempts = Number(row.passing_attempts ?? 0);
+          return [
+            modelModeKey(String(row.model_name), String(row.output_mode)),
+            {
+              total_runs: Number(row.total_runs ?? 0),
+              total_fixtures: Number(row.total_fixtures ?? 0),
+              total_passed: Number(row.total_passed ?? 0),
+              pass_at_k:
+                validAttempts > 0 ? passingAttempts / validAttempts : 0,
+              total_cost_usd: nullableNumber(row.total_cost_usd),
+              avg_cost_usd: nullableNumber(row.avg_cost_usd),
+              total_valid_attempts: validAttempts,
+              total_passing_attempts: passingAttempts,
+            },
+          ];
+        })
+      ) as GitBenchData["model_summaries"];
+    }
+
+    const aggregateRows = this.db
+      .prepare(
+        `
+        SELECT model_name, output_mode,
+               COUNT(DISTINCT benchmark_name || char(31) || fixture_id) AS total_fixtures,
+               SUM(CASE WHEN reliability_classification = 'stable_pass' THEN 1 ELSE 0 END) AS stable_pass_fixtures
+        FROM fixture_aggregates
+        WHERE campaign_id = ? AND model_name <> ''
+        GROUP BY model_name, output_mode
+        `
+      )
+      .all(campaignId) as Record<string, unknown>[];
+    const fixtureStats = new Map(
+      aggregateRows.map((row) => [
+        modelModeKey(String(row.model_name), String(row.output_mode)),
+        {
+          total_fixtures: Number(row.total_fixtures ?? 0),
+          stable_pass_fixtures: Number(row.stable_pass_fixtures ?? 0),
+        },
+      ])
+    );
+    const rawFixtureRows = this.db
+      .prepare(
+        `
+        SELECT model_name, output_mode,
+               COUNT(DISTINCT benchmark_name || char(31) || fixture_id) AS total_fixtures,
+               COUNT(DISTINCT CASE
+                 WHEN passed = 1 THEN benchmark_name || char(31) || fixture_id
+               END) AS stable_pass_fixtures
+        FROM raw_attempts
+        WHERE campaign_id = ?
+        GROUP BY model_name, output_mode
+        `
+      )
+      .all(campaignId) as Record<string, unknown>[];
+    const rawFixtureStats = new Map(
+      rawFixtureRows.map((row) => [
+        modelModeKey(String(row.model_name), String(row.output_mode)),
+        {
+          total_fixtures: Number(row.total_fixtures ?? 0),
+          stable_pass_fixtures: Number(row.stable_pass_fixtures ?? 0),
+        },
+      ])
+    );
+
+    return Object.fromEntries(
+      rows.map((row) => {
+        const key = modelModeKey(String(row.model_name), String(row.output_mode));
+        const resource = parseJsonObject(row.resource_summary_json);
+        const stats = fixtureStats.get(key) ?? rawFixtureStats.get(key);
+        return [
+          key,
+          {
+            total_runs: Number(row.completed_trials ?? 0),
+            total_fixtures: stats?.total_fixtures ?? 0,
+            total_passed: stats?.stable_pass_fixtures ?? 0,
+            pass_at_k: Number(row.mean_success_rate ?? 0),
+            total_cost_usd: nullableNumber(resource.total_cost_usd),
+            avg_cost_usd: nullableNumber(
+              resource.mean_cost_per_complete_trial_usd
+            ),
+            total_valid_attempts: Number(row.valid_attempts ?? 0),
+            total_passing_attempts: Number(row.passing_attempts ?? 0),
+          },
+        ];
+      })
+    ) as GitBenchData["model_summaries"];
+  }
+
+  private getCampaignModelRuntimes(
+    campaignId: string
+  ): GitBenchData["model_runtimes"] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT model_name, output_mode,
+               COALESCE(SUM(api_duration_ms), 0) AS total_ms,
+               COALESCE(AVG(api_duration_ms), 0) AS avg_ms,
+               COALESCE(MIN(api_duration_ms), 0) AS min_ms,
+               COALESCE(MAX(api_duration_ms), 0) AS max_ms,
+               COUNT(api_duration_ms) AS fixture_count
+        FROM raw_attempts
+        WHERE campaign_id = ?
+        GROUP BY model_name, output_mode
+        `
+      )
+      .all(campaignId) as Record<string, unknown>[];
+
+    return Object.fromEntries(
+      rows.map((row) => [
+        modelModeKey(String(row.model_name), String(row.output_mode)),
+        {
+          total_ms: Number(row.total_ms),
+          avg_ms: Number(row.avg_ms),
+          min_ms: Number(row.min_ms),
+          max_ms: Number(row.max_ms),
+          fixture_count: Number(row.fixture_count),
+        },
+      ])
+    ) as GitBenchData["model_runtimes"];
+  }
+
+  private getCampaignModelTokenSummaries(
+    campaignId: string
+  ): GitBenchData["model_token_summaries"] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT model_name, output_mode,
+               COALESCE(SUM(input_tokens), 0) AS input_tokens,
+               COALESCE(SUM(output_tokens), 0) AS output_tokens,
+               COALESCE(SUM(total_tokens), 0) AS total_tokens,
+               CASE
+                 WHEN COUNT(reasoning_tokens) = 0 THEN NULL
+                 ELSE SUM(reasoning_tokens)
+               END AS reasoning_tokens
+        FROM raw_attempts
+        WHERE campaign_id = ?
+        GROUP BY model_name, output_mode
+        `
+      )
+      .all(campaignId) as Record<string, unknown>[];
+
+    return Object.fromEntries(
+      rows.map((row) => [
+        modelModeKey(String(row.model_name), String(row.output_mode)),
+        {
+          input_tokens: Number(row.input_tokens),
+          output_tokens: Number(row.output_tokens),
+          total_tokens: Number(row.total_tokens),
+          reasoning_tokens: nullableNumber(row.reasoning_tokens),
+        },
+      ])
+    ) as GitBenchData["model_token_summaries"];
+  }
+
+  private getCampaignMatrix(
+    campaignId: string,
+    modelKeys: Set<string>
+  ): GitBenchData["matrix"] {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT model_name, output_mode, benchmark_name,
+               SUM(valid_attempts) AS total,
+               SUM(passing_attempts) AS passed,
+               CASE
+                 WHEN SUM(valid_attempts) > 0
+                   THEN CAST(SUM(passing_attempts) AS REAL) / SUM(valid_attempts)
+                 ELSE 0
+               END AS pass_at_k
+        FROM fixture_aggregates
+        WHERE campaign_id = ? AND model_name <> ''
+        GROUP BY model_name, output_mode, benchmark_name
+        `
+      )
+      .all(campaignId) as Record<string, unknown>[];
+
+    const matrix: GitBenchData["matrix"] = {};
+    for (const row of rows) {
+      const key = modelModeKey(String(row.model_name), String(row.output_mode));
+      if (modelKeys.size > 0 && !modelKeys.has(key)) continue;
+      const benchmark = String(row.benchmark_name);
+      matrix[key] = matrix[key] ?? {};
+      matrix[key][benchmark] = {
+        pass_at_k: Number(row.pass_at_k),
+        total: Number(row.total),
+        passed: Number(row.passed),
+        avg_similarity: 0,
+      };
+    }
+
+    if (Object.keys(matrix).length === 0) {
+      for (const row of this.db
+        .prepare(
+          `
+          SELECT model_name, output_mode, benchmark_name,
+                 SUM(CASE WHEN status IN ('valid_pass', 'valid_fail') THEN 1 ELSE 0 END) AS total,
+                 SUM(CASE WHEN status = 'valid_pass' THEN 1 ELSE 0 END) AS passed
+          FROM raw_attempts
+          WHERE campaign_id = ?
+          GROUP BY model_name, output_mode, benchmark_name
+          `
+        )
+        .all(campaignId) as Record<string, unknown>[]) {
+        const key = modelModeKey(
+          String(row.model_name),
+          String(row.output_mode)
+        );
+        if (modelKeys.size > 0 && !modelKeys.has(key)) continue;
+        const total = Number(row.total ?? 0);
+        const passed = Number(row.passed ?? 0);
+        const benchmark = String(row.benchmark_name);
+        matrix[key] = matrix[key] ?? {};
+        matrix[key][benchmark] = {
+          pass_at_k: total > 0 ? passed / total : 0,
+          total,
+          passed,
+          avg_similarity: 0,
+        };
+      }
+    }
+
+    if (Object.keys(matrix).length === 0 && modelKeys.size === 1) {
+      const onlyModel = Array.from(modelKeys)[0];
+      matrix[onlyModel] = {};
+      for (const row of this.db
+        .prepare(
+          `
+          SELECT benchmark_name, valid_attempts AS total,
+                 passing_attempts AS passed, mean_success_rate AS pass_at_k
+          FROM campaign_benchmark_summaries
+          WHERE campaign_id = ?
+          `
+        )
+        .all(campaignId) as Record<string, unknown>[]) {
+        matrix[onlyModel][String(row.benchmark_name)] = {
+          pass_at_k: Number(row.pass_at_k ?? 0),
+          total: Number(row.total ?? 0),
+          passed: Number(row.passed ?? 0),
+          avg_similarity: 0,
+        };
+      }
+    }
+
+    return matrix;
+  }
+
+  private getCampaignBenchmark(
+    benchmark: string,
+    campaignId: string
+  ): BenchmarkDetail | null {
+    if (!this.benchmarkExists(benchmark)) return null;
+
+    let leaderboard = (
+      this.db
+        .prepare(
+          `
+          SELECT model_name, output_mode,
+                 SUM(valid_attempts) AS total,
+                 SUM(passing_attempts) AS passed,
+                 CASE
+                   WHEN SUM(valid_attempts) > 0
+                     THEN CAST(SUM(passing_attempts) AS REAL) / SUM(valid_attempts)
+                   ELSE 0
+                 END AS pass_at_k
+          FROM fixture_aggregates
+          WHERE campaign_id = ? AND benchmark_name = ? AND model_name <> ''
+          GROUP BY model_name, output_mode
+          ORDER BY pass_at_k DESC, model_name, output_mode
+          `
+        )
+        .all(campaignId, benchmark) as Record<string, unknown>[]
+    ).map((row) => ({
+      model: modelModeKey(String(row.model_name), String(row.output_mode)),
+      pass_at_k: Number(row.pass_at_k),
+      total: Number(row.total),
+      passed: Number(row.passed),
+      avg_similarity: 0,
+    }));
+
+    if (leaderboard.length === 0) {
+      leaderboard = (
+        this.db
+          .prepare(
+            `
+            SELECT model_name, output_mode,
+                   SUM(CASE WHEN status IN ('valid_pass', 'valid_fail') THEN 1 ELSE 0 END) AS total,
+                   SUM(CASE WHEN status = 'valid_pass' THEN 1 ELSE 0 END) AS passed
+            FROM raw_attempts
+            WHERE campaign_id = ? AND benchmark_name = ?
+            GROUP BY model_name, output_mode
+            `
+          )
+          .all(campaignId, benchmark) as Record<string, unknown>[]
+      )
+        .map((row) => {
+          const total = Number(row.total ?? 0);
+          const passed = Number(row.passed ?? 0);
+          return {
+            model: modelModeKey(String(row.model_name), String(row.output_mode)),
+            pass_at_k: total > 0 ? passed / total : 0,
+            total,
+            passed,
+            avg_similarity: 0,
+          };
+        })
+        .sort(
+          (a, b) =>
+            b.pass_at_k - a.pass_at_k || a.model.localeCompare(b.model)
+        );
+    }
+
+    return {
+      benchmark,
+      tag_counts: this.getTagCounts(benchmark),
+      leaderboard,
+      fixtures: this.getFixtureIndex(benchmark),
+      results: this.getCampaignFixtureResults(campaignId, benchmark),
+    };
+  }
+
+  private getCampaignFixture(
+    benchmark: string,
+    fixtureId: string,
+    campaignId: string
+  ): FixtureDetail | null {
+    const fixture = this.getFixtureInfo(benchmark, fixtureId);
+    if (!fixture) return null;
+
+    const includeOutput = this.isCampaignPublicationAllowed(campaignId);
+    const outputs = (
+      this.db
+        .prepare(
+          `
+          SELECT ra.*, NULL AS duration_ms, NULL AS purpose, NULL AS difficulty,
+                 '[]' AS tags_json, NULL AS parsed_payload,
+                 NULL AS raw_structured_output, NULL AS structured_error
+          FROM raw_attempts ra
+          WHERE ra.campaign_id = ? AND ra.benchmark_name = ? AND ra.fixture_id = ?
+          ORDER BY ra.model_name, ra.output_mode, ra.trial_index
+          `
+        )
+        .all(campaignId, benchmark, fixtureId) as Record<string, unknown>[]
+    ).map((row) => ({
+      model: modelModeKey(String(row.model_name), String(row.output_mode)),
+      ...fixtureResultFromRow(row, includeOutput),
+    }));
+
+    return { fixture, outputs };
+  }
+
+  private getCampaignFixtureResults(
+    campaignId: string,
+    benchmark: string
+  ): Record<string, Record<string, FixtureResult[]>> {
+    const rows = this.db
+      .prepare(
+        `
+        SELECT ra.*, NULL AS duration_ms, NULL AS purpose, NULL AS difficulty,
+               '[]' AS tags_json, NULL AS parsed_payload,
+               NULL AS raw_structured_output, NULL AS structured_error
+        FROM raw_attempts ra
+        WHERE ra.campaign_id = ? AND ra.benchmark_name = ?
+        ORDER BY ra.model_name, ra.output_mode, ra.fixture_id, ra.trial_index
+        `
+      )
+      .all(campaignId, benchmark) as Record<string, unknown>[];
+
+    const grouped: Record<string, Record<string, FixtureResult[]>> = {};
+    for (const row of rows) {
+      const model = modelModeKey(
+        String(row.model_name),
+        String(row.output_mode)
+      );
+      const bench = String(row.benchmark_name);
+      grouped[model] = grouped[model] ?? {};
+      grouped[model][bench] = grouped[model][bench] ?? [];
+      grouped[model][bench].push(fixtureResultFromRow(row, false));
+    }
+    return grouped;
   }
 
   getHistory(): GitBenchData["runs_meta"] {
@@ -390,7 +912,7 @@ export class NodeSqliteReportStore implements ReportStore {
                  END,
                  NULL
                ) AS mean_success_rate,
-               ps.pending_count
+               ps.pending_count, ps.blocked_count
         FROM campaigns c
         LEFT JOIN (
           SELECT campaign_id, COUNT(*) AS completed_trials
@@ -412,6 +934,7 @@ export class NodeSqliteReportStore implements ReportStore {
       const legacy = Boolean(row.legacy);
       const meanSuccessRate = nullableNumber(row.mean_success_rate);
       const pendingCount = Number(row.pending_count ?? 0);
+      const blockedCount = Number(row.blocked_count ?? 0);
       return {
         campaign_id: String(row.campaign_id),
         created_at: String(row.created_at),
@@ -434,6 +957,7 @@ export class NodeSqliteReportStore implements ReportStore {
           state === "complete" &&
           publicationState === "published" &&
           pendingCount === 0 &&
+          blockedCount === 0 &&
           !legacy,
       };
     });
@@ -441,11 +965,12 @@ export class NodeSqliteReportStore implements ReportStore {
 
   getDefaultCampaign(filters: CampaignFilters = {}): CampaignListItem | null {
     const candidates = this.getCampaigns(filters);
-    // Prefer the latest completed, publishable, non-legacy campaign.
+    // Prefer the latest reportable campaign, then fall back by completion state.
     const ranked = candidates.sort((a, b) => {
       const score = (c: CampaignListItem) =>
-        (c.state === "complete" ? 2 : 0) +
-        (c.publication_state === "published" ? 1 : 0) +
+        (c.publishable ? 8 : 0) +
+        (c.state === "complete" ? 4 : 0) +
+        (c.publication_state === "published" ? 2 : 0) +
         (c.legacy ? 0 : 1);
       return (
         score(b) - score(a) ||
@@ -712,6 +1237,32 @@ export class NodeSqliteReportStore implements ReportStore {
     };
   }
 
+  private getTagCounts(benchmark: string): Record<string, number> {
+    return Object.fromEntries(
+      (
+        this.db
+          .prepare(
+            `
+            SELECT tag, COUNT(*) AS count
+            FROM fixture_tags
+            WHERE benchmark_name = ?
+            GROUP BY tag
+            ORDER BY tag
+            `
+          )
+          .all(benchmark) as Record<string, number | string>[]
+      ).map((row) => [String(row.tag), Number(row.count)])
+    );
+  }
+
+  private getCampaignRow(campaignId: string): Record<string, unknown> | null {
+    return (
+      (this.db
+        .prepare("SELECT * FROM campaigns WHERE campaign_id = ?")
+        .get(campaignId) as Record<string, unknown> | undefined) ?? null
+    );
+  }
+
   private getBaseModelGroups(): BaseModelGroup[] {
     const groups = this.db
       .prepare(
@@ -747,6 +1298,18 @@ export class NodeSqliteReportStore implements ReportStore {
         total_cost_usd: nullableNumber(level.total_cost_usd),
       })),
     }));
+  }
+
+  private getBaseModelGroupsForModelKeys(
+    modelKeys: Set<string>
+  ): BaseModelGroup[] {
+    if (modelKeys.size === 0) return [];
+    return this.getBaseModelGroups()
+      .map((group) => ({
+        ...group,
+        levels: group.levels.filter((level) => modelKeys.has(level.modelName)),
+      }))
+      .filter((group) => group.levels.length > 0);
   }
 
   /** Resolve a composite model key back to (model_name, output_mode). */
@@ -857,10 +1420,31 @@ function nullableNumber(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
 }
 
+function modelInfoFromRow(row: Record<string, unknown>): ModelInfo {
+  return {
+    name: String(row.name),
+    provider: String(row.provider),
+    baseModel: String(row.baseModel),
+    reasoningLevel:
+      row.reasoningLevel === null || row.reasoningLevel === undefined
+        ? null
+        : String(row.reasoningLevel),
+    output_mode: String(row.output_mode),
+  };
+}
+
 function parseJsonArray(value: unknown): string[] {
   if (typeof value !== "string" || !value) return [];
   const parsed = JSON.parse(value);
   return Array.isArray(parsed) ? parsed : [];
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string" || !value) return {};
+  const parsed = JSON.parse(value);
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : {};
 }
 
 function cellFromRow(row: Record<string, unknown>): CellData {
@@ -922,12 +1506,15 @@ function rawAttemptFromRow(
 
 function fixtureResultFromRow(
   row: Record<string, unknown>,
-  includeModelOutput: boolean
+  includeModelOutput: boolean,
+  options: { allowMissingSafetyState?: boolean } = {}
 ): FixtureResult {
   const safetyState =
     typeof row.safety_state === "string" ? row.safety_state : null;
   const canExposeOutput =
-    safetyState === null || safetyState === "reviewed" || safetyState === "published";
+    safetyState === "reviewed" ||
+    safetyState === "published" ||
+    (options.allowMissingSafetyState === true && safetyState === null);
   return {
     fixture_id: String(row.fixture_id),
     passed: Boolean(row.passed),

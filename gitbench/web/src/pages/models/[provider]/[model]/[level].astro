@@ -219,6 +219,18 @@ for (const fid in data.fixture_index) {
 
 const hasReasoningLevel = level && level !== "default";
 
+function formatModelSummary(
+  summary: GitBenchData["model_summaries"][string]
+): string {
+  if (
+    summary.total_valid_attempts !== undefined &&
+    summary.total_passing_attempts !== undefined
+  ) {
+    return `${summary.total_passing_attempts} / ${summary.total_valid_attempts} valid attempts · ${summary.total_fixtures} fixtures · ${summary.total_runs} trial round(s)`;
+  }
+  return `${summary.total_passed} / ${summary.total_fixtures} fixtures · ${summary.total_runs} run(s)`;
+}
+
 interface HeaderStats {
   summary: typeof summary;
   passRate: number;
@@ -374,12 +386,7 @@ const aggregateTokenLabel = primaryStats.aggregateTokenLabel;
               {textStats.passRate}%
             </Badge>
             <span class="font-mono text-xs text-(--color-text-dim)">
-              {textStats.summary.total_passed} / {textStats.summary.total_fixtures} fixtures
-            </span>
-            <span
-              class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60"
-            >
-              {textStats.summary.total_runs} run(s)
+              {formatModelSummary(textStats.summary)}
             </span>
           </div>
           <div
@@ -410,12 +417,7 @@ const aggregateTokenLabel = primaryStats.aggregateTokenLabel;
               {jsonStats.passRate}%
             </Badge>
             <span class="font-mono text-xs text-(--color-text-dim)">
-              {jsonStats.summary.total_passed} / {jsonStats.summary.total_fixtures} fixtures
-            </span>
-            <span
-              class="font-mono text-[0.68rem] text-(--color-text-dim) opacity-60"
-            >
-              {jsonStats.summary.total_runs} run(s)
+              {formatModelSummary(jsonStats.summary)}
             </span>
           </div>
           <div

@@ -11,6 +11,8 @@ import { deriveModelGroups } from "../src/components/charts/model-groups.ts";
 import modelResultsHandler from "../api/models/[...model]/results.ts";
 import fixtureAttemptsHandler from "../api/fixtures/[benchmark]/[fixture]/attempts.ts";
 import campaignsHandler from "../api/campaigns/index.ts";
+import summaryHandler from "../api/summary.ts";
+import chartRouteHandler from "../api/charts/[chart].ts";
 
 import { clearReportStoreCache } from "../src/lib/node-sqlite-report-store.ts";
 
@@ -589,12 +591,13 @@ function seedCampaign(db) {
     INSERT INTO raw_attempts (
       campaign_id, trial_index, model_name, reasoning_level, output_mode,
       benchmark_name, fixture_id, status, passed, similarity, error,
-      input_tokens, output_tokens, total_tokens, cost_usd, api_duration_ms
+      input_tokens, output_tokens, total_tokens, cost_usd, api_duration_ms,
+      model_output
     )
     VALUES (
       'cmp-test', 2, 'openai/gpt-test:high', 'high', 'text',
       'commit_messages', 'commit_messages/f001', 'valid_fail', 0, 0.3, 'bad',
-      10, 5, 15, 0.01, 100.0
+      10, 5, 15, 0.01, 100.0, 'unreviewed output'
     );
     INSERT INTO fixture_aggregates (
       campaign_id, benchmark_name, fixture_id, planned_trials,
@@ -614,6 +617,16 @@ function seedCampaign(db) {
     VALUES (
       'cmp-test', 'commit_messages', 2, 2, 2, 1, 0, 0.5, '{"1": true}', 0, NULL
     );
+    INSERT INTO campaign_model_summaries (
+      campaign_id, model_name, reasoning_level, output_mode, planned_trials,
+      completed_trials, valid_attempts, passing_attempts, excluded_attempts,
+      mean_success_rate, pass_any_at_n_json, incomplete, resource_summary_json
+    )
+    VALUES (
+      'cmp-test', 'openai/gpt-test:high', 'high', 'text', 2, 2, 2, 1, 0,
+      0.5, '{"1": true}', 0,
+      '{"total_cost_usd":0.02,"mean_cost_per_complete_trial_usd":0.01}'
+    );
     INSERT INTO resource_summaries (
       id, campaign_id, scope, total_cost_usd, total_input_tokens,
       total_output_tokens, total_tokens, partial_pricing
@@ -624,6 +637,53 @@ function seedCampaign(db) {
   `);
 }
 
+function seedCampaignDefaults(db) {
+  seedTextOnly(db);
+  db.exec(`
+    INSERT INTO campaigns (
+      campaign_id, created_at, config_hash, state, planned_attempts,
+      completed_attempts, valid_attempts, passing_attempts, excluded_attempts,
+      publication_state, legacy, benchmark_ids_json, model_ids_json,
+      output_modes_json, planned_trial_count
+    )
+    VALUES
+      (
+        'cmp-older', '2026-06-01T00:00:00Z', 'abc', 'complete', 1, 1, 1, 1, 0,
+        'published', 0, '["commit_messages"]', '["openai/gpt-test:high"]',
+        '["text"]', 1
+      ),
+      (
+        'cmp-latest', '2026-06-02T00:00:00Z', 'abc', 'complete', 1, 1, 1, 1, 0,
+        'published', 0, '["commit_messages"]', '["openai/gpt-test:high"]',
+        '["text"]', 1
+      ),
+      (
+        'cmp-incomplete', '2026-06-03T00:00:00Z', 'abc', 'running', 1, 0, 0, 0, 0,
+        'published', 0, '["commit_messages"]', '["openai/gpt-test:high"]',
+        '["text"]', 1
+      ),
+      (
+        'cmp-legacy', '2026-06-04T00:00:00Z', 'abc', 'complete', 1, 1, 1, 1, 0,
+        'published', 1, '["commit_messages"]', '["openai/gpt-test:high"]',
+        '["text"]', 1
+      ),
+      (
+        'cmp-blocked', '2026-06-05T00:00:00Z', 'abc', 'complete', 1, 1, 1, 1, 0,
+        'published', 0, '["commit_messages"]', '["openai/gpt-test:high"]',
+        '["text"]', 1
+      );
+    INSERT INTO publication_states (
+      campaign_id, reviewed_count, sanitized_count, blocked_count, pending_count
+    )
+    VALUES
+      ('cmp-older', 1, 0, 0, 0),
+      ('cmp-latest', 1, 0, 0, 0),
+      ('cmp-incomplete', 0, 0, 0, 0),
+      ('cmp-legacy', 1, 0, 0, 0),
+      ('cmp-blocked', 1, 0, 1, 0);
+  `);
+}
+
 test("campaign store: getCampaign returns a single campaign", () => {
   withStore((store) => {
     const campaign = store.getCampaign("cmp-test");
@@ -631,6 +691,82 @@ test("campaign store: getCampaign returns a single campaign", () => {
     assert.equal(campaign.campaign_id, "cmp-test");
     assert.equal(campaign.incomplete, false);
     assert.equal(campaign.publishable, true);
+  }, { seedFn: seedCampaign });
+});
+
+test("campaign store: default campaign prefers latest publishable non-legacy complete run", () => {
+  withStore((store) => {
+    const campaign = store.getDefaultCampaign();
+    assert.ok(campaign);
+    assert.equal(campaign.campaign_id, "cmp-latest");
+  }, { seedFn: seedCampaignDefaults });
+});
+
+test("campaign store: campaign summary exposes default evaluation metrics", () => {
+  withStore((store) => {
+    const summary = store.getSummary({ campaign_id: "cmp-test" });
+    const modelSummary = summary.model_summaries["openai/gpt-test:high"];
+    assert.ok(modelSummary);
+    assert.equal(modelSummary.pass_at_k, 0.5);
+    assert.equal(modelSummary.total_fixtures, 1);
+    assert.equal(modelSummary.total_valid_attempts, 2);
+    assert.equal(modelSummary.total_passing_attempts, 1);
+    assert.equal(modelSummary.total_cost_usd, 0.02);
+    assert.equal(
+      summary.matrix["openai/gpt-test:high"].commit_messages.pass_at_k,
+      0.5,
+    );
+  }, { seedFn: seedCampaign });
+});
+
+test("summary endpoint defaults to latest campaign when campaign rows exist", () => {
+  withStore(() => {
+    const response = callHandler(summaryHandler, {});
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.campaign_id, "cmp-test");
+    assert.equal(
+      response.body.model_summaries["openai/gpt-test:high"].pass_at_k,
+      0.5,
+    );
+  }, { seedFn: seedCampaign });
+});
+
+test("summary endpoint keeps aggregate fallback when no campaign rows exist", () => {
+  withStore(() => {
+    const response = callHandler(summaryHandler, {});
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.campaign_id, null);
+    assert.equal(
+      response.body.model_summaries["openai/gpt-test:high"].pass_at_k,
+      1.0,
+    );
+  }, { seedFn: seedTextOnly });
+});
+
+test("chart endpoint uses explicit compatible campaign data", () => {
+  withStore(() => {
+    const response = callHandler(chartRouteHandler, {
+      chart: "pass-rate",
+      campaign: "cmp-test",
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.campaign_id, "cmp-test");
+    assert.equal(
+      response.body.model_summaries["openai/gpt-test:high"].pass_at_k,
+      0.5,
+    );
+  }, { seedFn: seedCampaign });
+});
+
+test("incompatible explicit campaign query falls back without scoped metadata", () => {
+  withStore(() => {
+    const response = callHandler(summaryHandler, {
+      campaign: "cmp-test",
+      output_mode: "json_schema",
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.body.campaign_id, null);
+    assert.equal(response.body.campaign_metadata, null);
   }, { seedFn: seedCampaign });
 });
 
@@ -653,6 +789,20 @@ test("campaign store: raw attempts include output when requested", () => {
   withStore((store) => {
     const attempts = store.getRawAttempts("cmp-test", { includeOutput: true });
     assert.equal(attempts[0].model_output, "secret output");
+    assert.equal(attempts[1].model_output, undefined);
+  }, { seedFn: seedCampaign });
+});
+
+test("campaign store: campaign fixture omits unreviewed model output", () => {
+  withStore((store) => {
+    const fixture = store.getFixture("commit_messages", "commit_messages/f001", {
+      campaign_id: "cmp-test",
+    });
+    assert.ok(fixture);
+    assert.deepEqual(
+      fixture.outputs.map((output) => output.model_output),
+      ["secret output", ""],
+    );
   }, { seedFn: seedCampaign });
 });
 

@@ -4,7 +4,7 @@ import TimeSeriesChart from "@/components/charts/TimeSeriesChart";
 import { CampaignHistory } from "@/components/CampaignHistory";
 ---
 
-<Layout title="Campaign History">
+<Layout title="History">
   <section class="mb-10">
     <div class="section-label"><span>Pass Rate Over Time</span></div>
     <TimeSeriesChart client:load />
@@ -12,10 +12,11 @@ import { CampaignHistory } from "@/components/CampaignHistory";
 
   <section>
     <div class="info-tip">
-      <div class="section-label"><span>Campaign Log</span></div>
+      <div class="section-label"><span>Evaluation Timeline</span></div>
       <p class="info-blurb">
-        One primary row per evaluation campaign. Δ is shown only when the
-        previous campaign has the same configuration hash.
+        One primary row per stored evaluation run when campaign records are
+        available. Δ is shown only when the previous row has the same
+        configuration hash.
       </p>
     </div>
     <CampaignHistory client:load />

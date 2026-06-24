@@ -158,7 +158,7 @@ export function ModelReliabilitySummary({
   if (benchmarks.length === 0) {
     return (
       <div className="text-sm text-(--color-text-mid)">
-        No campaign data available for this model and output mode.
+        No repeated-trial data available for this model and output mode.
       </div>
     );
   }

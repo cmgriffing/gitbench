@@ -32,6 +32,18 @@ const textLevels = group.levels.filter((l) => {
 const jsonLevels = group.levels.filter((l) => {
   return l.modelName.endsWith("__json_schema");
 });
+
+function formatModelSummary(
+  summary: GitBenchData["model_summaries"][string]
+): string {
+  if (
+    summary.total_valid_attempts !== undefined &&
+    summary.total_passing_attempts !== undefined
+  ) {
+    return `${summary.total_passing_attempts} / ${summary.total_valid_attempts} valid attempts · ${summary.total_fixtures} fixtures · ${summary.total_runs} trial round(s)`;
+  }
+  return `${summary.total_passed} / ${summary.total_fixtures} fixtures · ${summary.total_runs} run(s)`;
+}
 ---
 
 <Layout title={`${providerName} / ${baseModel}`}>
@@ -90,8 +102,7 @@ const jsonLevels = group.levels.filter((l) => {
                       </div>
                       {summary && (
                         <div class="font-mono text-[0.65rem] text-(--color-text-dim)">
-                          {summary.total_passed} / {summary.total_fixtures} fixtures ·{" "}
-                          {summary.total_runs} run(s)
+                          {formatModelSummary(summary)}
                           {summary.total_cost_usd != null && (
                             <span class="block mt-1 opacity-70">
                               Total cost: ${summary.total_cost_usd.toFixed(6)}
@@ -162,8 +173,7 @@ const jsonLevels = group.levels.filter((l) => {
                       </div>
                       {summary && (
                         <div class="font-mono text-[0.65rem] text-(--color-text-dim)">
-                          {summary.total_passed} / {summary.total_fixtures} fixtures ·{" "}
-                          {summary.total_runs} run(s)
+                          {formatModelSummary(summary)}
                           {summary.total_cost_usd != null && (
                             <span class="block mt-1 opacity-70">
                               Total cost: ${summary.total_cost_usd.toFixed(6)}

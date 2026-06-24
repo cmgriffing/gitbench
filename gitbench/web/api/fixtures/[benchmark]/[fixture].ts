@@ -4,7 +4,7 @@ import { json, rejectUnsupportedQuery, resolveCampaignFromQuery } from "../../..
 export default function handler(req: any, res: any) {
   const unsupported = rejectUnsupportedQuery(
     req.query,
-    new Set(["benchmark", "fixture"]),
+    new Set(["benchmark", "fixture", "campaign"]),
   );
   if (unsupported) {
     json(res, 400, { error: `Unsupported query parameter: ${unsupported}` });
@@ -18,7 +18,7 @@ export default function handler(req: any, res: any) {
     campaign_id: req.query?.campaign,
     benchmark,
   });
-  const result = store.getFixture(benchmark, fixture);
+  const result = store.getFixture(benchmark, fixture, { campaign_id });
   if (!result) {
     json(res, 404, { error: `Fixture not found: ${benchmark}/${fixture}` });
     return;

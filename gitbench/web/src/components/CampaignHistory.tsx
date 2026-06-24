@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadCampaigns } from "@/lib/report-client";
 import type { CampaignListItem } from "@/lib/report-store";
+import type { RunMeta } from "@/lib/types";
+import { loadData } from "@/lib/load-data";
 import { Badge } from "@/components/ui/badge";
 
 function formatDate(iso: string): string {
@@ -26,15 +28,30 @@ function statusClasses(campaign: CampaignListItem): string {
 
 export function CampaignHistory() {
   const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
+  const [runs, setRuns] = useState<RunMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadCampaigns()
-      .then((data) => setCampaigns(data.campaigns))
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : String(err))
-      )
+    Promise.allSettled([loadCampaigns(), loadData()])
+      .then(([campaignResult, reportResult]) => {
+        if (campaignResult.status === "fulfilled") {
+          setCampaigns(campaignResult.value.campaigns);
+        } else {
+          setCampaigns([]);
+        }
+
+        if (reportResult.status === "fulfilled") {
+          setRuns(reportResult.value.runs_meta ?? []);
+          setError(null);
+        } else {
+          setError(
+            reportResult.reason instanceof Error
+              ? reportResult.reason.message
+              : String(reportResult.reason)
+          );
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -74,9 +91,59 @@ export function CampaignHistory() {
     return <div className="text-sm text-red-500">History unavailable</div>;
   }
   if (campaigns.length === 0) {
+    if (runs.length === 0) {
+      return (
+        <div className="text-sm text-(--color-text-mid)">
+          No evaluation history records.
+        </div>
+      );
+    }
     return (
-      <div className="text-sm text-(--color-text-mid)">
-        No campaigns on record.
+      <div className="card overflow-x-auto p-5">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Date</th>
+              <th>Output mode</th>
+              <th>Profile</th>
+              <th>Suite</th>
+              <th>Git SHA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...runs]
+              .sort(
+                (a, b) =>
+                  new Date(a.timestamp).getTime() -
+                  new Date(b.timestamp).getTime()
+              )
+              .map((run) => (
+                <tr
+                  key={`${run.timestamp}-${run.model}-${run.output_mode}`}
+                >
+                  <td className="font-mono text-xs text-(--color-text-mid)">
+                    {run.model}
+                  </td>
+                  <td className="font-mono text-[0.68rem] text-(--color-text-dim)">
+                    {formatDate(run.timestamp)}
+                  </td>
+                  <td className="font-mono text-[0.68rem] text-(--color-text-dim)">
+                    {run.output_mode}
+                  </td>
+                  <td className="font-mono text-[0.68rem] text-(--color-text-dim)">
+                    {run.profile}
+                  </td>
+                  <td className="font-mono text-[0.68rem] text-(--color-text-dim)">
+                    {run.benchmark_suite_version}
+                  </td>
+                  <td className="font-mono text-[0.68rem] text-(--color-text-dim)">
+                    {run.git_sha}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
       </div>
     );
   }

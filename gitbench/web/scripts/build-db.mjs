@@ -65,35 +65,8 @@ function normalizeData(data) {
   data.fixture_index ??= {};
   data.runs_meta ??= [];
   data.base_model_groups ??= [];
+  data.campaigns ??= [];
 
-  const benchmarks = new Set(data.benchmarks);
-  for (const byBenchmark of Object.values(data.fixtures)) {
-    for (const benchmark of Object.keys(byBenchmark ?? {})) benchmarks.add(benchmark);
-  }
-  data.benchmarks = [...benchmarks].sort();
-
-  for (const byBenchmark of Object.values(data.fixtures)) {
-    for (const [benchmark, results] of Object.entries(byBenchmark ?? {})) {
-      for (const result of results ?? []) {
-        const fixtureId = result.fixture_id ?? "";
-        const key = `${benchmark}/${fixtureId}`;
-        if (!fixtureId || data.fixture_index[key]) continue;
-        data.fixture_index[key] = {
-          id: fixtureId,
-          benchmark,
-          prompt: "",
-          expected: "",
-          description: "",
-          setup: [],
-          purpose: result.purpose ?? "",
-          difficulty: result.difficulty ?? "",
-          tags: result.tags ?? [],
-        };
-      }
-    }
-  }
-
-  // Normalize models: strip __json_schema suffix and set output_mode
   for (const model of data.models) {
     if (model.name && model.name.endsWith("__json_schema")) {
       model.output_mode = "json_schema";
@@ -102,6 +75,96 @@ function normalizeData(data) {
       model.output_mode = "text";
     }
   }
+
+  const modelKeys = new Set(
+    data.models.map((model) => `${model.name}\u001f${model.output_mode ?? "text"}`),
+  );
+  const addModel = (modelName, outputMode) => {
+    const derived = deriveModelMode(modelName ?? "");
+    const name = derived.model_name;
+    const mode = outputMode ?? derived.output_mode;
+    if (!name) return;
+    const key = `${name}\u001f${mode}`;
+    if (modelKeys.has(key)) return;
+    data.models.push(inferModelInfo(name, mode));
+    modelKeys.add(key);
+  };
+
+  const benchmarks = new Set(data.benchmarks);
+  const ensureFixture = (benchmark, fixtureId) => {
+    if (!benchmark || !fixtureId) return;
+    benchmarks.add(benchmark);
+    const key = fixtureId.includes("/") ? fixtureId : `${benchmark}/${fixtureId}`;
+    if (data.fixture_index[key]) return;
+    data.fixture_index[key] = {
+      id: fixtureId,
+      benchmark,
+      prompt: "",
+      expected: "",
+      description: "",
+      setup: [],
+      purpose: "",
+      difficulty: "",
+      tags: [],
+    };
+  };
+
+  for (const byBenchmark of Object.values(data.fixtures)) {
+    for (const benchmark of Object.keys(byBenchmark ?? {})) benchmarks.add(benchmark);
+  }
+
+  for (const byBenchmark of Object.values(data.fixtures)) {
+    for (const [benchmark, results] of Object.entries(byBenchmark ?? {})) {
+      for (const result of results ?? []) {
+        const fixtureId = result.fixture_id ?? "";
+        ensureFixture(benchmark, fixtureId);
+        const key = fixtureId.includes("/") ? fixtureId : `${benchmark}/${fixtureId}`;
+        const fixture = data.fixture_index[key];
+        if (fixture) {
+          fixture.purpose ||= result.purpose ?? "";
+          fixture.difficulty ||= result.difficulty ?? "";
+          if (
+            Array.isArray(result.tags) &&
+            result.tags.length > 0 &&
+            (!Array.isArray(fixture.tags) || fixture.tags.length === 0)
+          ) {
+            fixture.tags = result.tags;
+          }
+        }
+      }
+    }
+  }
+
+  for (const campaign of data.campaigns) {
+    const outputModes =
+      Array.isArray(campaign.output_modes) && campaign.output_modes.length > 0
+        ? campaign.output_modes
+        : ["text"];
+    for (const benchmark of campaign.benchmark_ids ?? []) benchmarks.add(benchmark);
+    for (const modelId of campaign.model_ids ?? []) {
+      for (const outputMode of outputModes) addModel(modelId, outputMode);
+    }
+    for (const attempt of campaign.raw_attempts ?? []) {
+      const identity = attempt.identity ?? {};
+      const fixtureId = identity.fixture_id ?? "";
+      const benchmark = identity.benchmark ?? benchmarkFromFixtureId(fixtureId);
+      ensureFixture(benchmark, fixtureId);
+      addModel(identity.model_id, identity.output_mode ?? "text");
+    }
+    for (const aggregate of campaign.fixture_aggregates ?? []) {
+      const fixtureId = aggregate.fixture_id ?? "";
+      const benchmark = aggregate.benchmark ?? benchmarkFromFixtureId(fixtureId);
+      ensureFixture(benchmark, fixtureId);
+      addModel(aggregate.model_id, aggregate.output_mode ?? "text");
+    }
+    for (const summary of campaign.model_summaries ?? []) {
+      addModel(summary.model_id, summary.output_mode ?? "text");
+    }
+    for (const summary of campaign.benchmark_summaries ?? []) {
+      if (summary.benchmark) benchmarks.add(summary.benchmark);
+    }
+  }
+  data.benchmarks = [...benchmarks].sort();
 
   return data;
 }
@@ -302,6 +365,8 @@ function insertReportData(db, data) {
       }
     }
 
+    insertCampaignData(db, data);
+
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -316,6 +381,295 @@ function insertMany(db, sql, rows) {
   }
 }
 
+function insertCampaignData(db, data) {
+  for (const campaign of data.campaigns ?? []) {
+    const campaignId = campaign.campaign_id ?? "";
+    db.prepare(
+      `INSERT INTO campaigns (
+         campaign_id, created_at, config_hash, state,
+         planned_attempts, completed_attempts, valid_attempts,
+         passing_attempts, excluded_attempts, publication_state,
+         legacy, benchmark_ids_json, model_ids_json, output_modes_json,
+         planned_trial_count
+       )
+       VALUES (
+         :campaign_id, :created_at, :config_hash, :state,
+         :planned_attempts, :completed_attempts, :valid_attempts,
+         :passing_attempts, :excluded_attempts, :publication_state,
+         :legacy, :benchmark_ids_json, :model_ids_json, :output_modes_json,
+         :planned_trial_count
+       )`,
+    ).run({
+      campaign_id: campaignId,
+      created_at: campaign.created_at ?? "",
+      config_hash: campaign.config_hash ?? "",
+      state: campaign.state ?? "incomplete",
+      planned_attempts: campaign.planned_attempts ?? 0,
+      completed_attempts: campaign.completed_attempts ?? 0,
+      valid_attempts: campaign.valid_attempts ?? 0,
+      passing_attempts: campaign.passing_attempts ?? 0,
+      excluded_attempts: campaign.excluded_attempts ?? 0,
+      publication_state: campaign.publication_state ?? "draft",
+      legacy: campaign.legacy ? 1 : 0,
+      benchmark_ids_json: jsonArray(campaign.benchmark_ids),
+      model_ids_json: jsonArray(campaign.model_ids),
+      output_modes_json: jsonArray(campaign.output_modes),
+      planned_trial_count: campaign.planned_trial_count ?? 1,
+    });
+
+    insertMany(
+      db,
+      `INSERT INTO trials (
+         campaign_id, trial_index, planned_attempts, completed_attempts,
+         valid_attempts, passing_attempts, excluded_attempts, complete
+       )
+       VALUES (
+         :campaign_id, :trial_index, :planned_attempts, :completed_attempts,
+         :valid_attempts, :passing_attempts, :excluded_attempts, :complete
+       )`,
+      (campaign.trials ?? []).map((trial) => ({
+        campaign_id: campaignId,
+        trial_index: trial.trial_index ?? 0,
+        planned_attempts: trial.planned_attempts ?? 0,
+        completed_attempts: trial.completed_attempts ?? 0,
+        valid_attempts: trial.valid_attempts ?? 0,
+        passing_attempts: trial.passing_attempts ?? 0,
+        excluded_attempts: trial.excluded_attempts ?? 0,
+        complete: trial.complete ? 1 : 0,
+      })),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO raw_attempts (
+         campaign_id, trial_index, model_name, reasoning_level,
+         output_mode, benchmark_name, fixture_id, status, passed,
+         similarity, error, model_output, input_tokens, output_tokens,
+         total_tokens, reasoning_tokens, cost_usd, api_duration_ms,
+         request_telemetry_json, provider_route_metadata_json,
+         judge_evidence_json, safety_state, safety_cost_usd,
+         provenance_json
+       )
+       VALUES (
+         :campaign_id, :trial_index, :model_name, :reasoning_level,
+         :output_mode, :benchmark_name, :fixture_id, :status, :passed,
+         :similarity, :error, :model_output, :input_tokens, :output_tokens,
+         :total_tokens, :reasoning_tokens, :cost_usd, :api_duration_ms,
+         :request_telemetry_json, :provider_route_metadata_json,
+         :judge_evidence_json, :safety_state, :safety_cost_usd,
+         :provenance_json
+       )`,
+      (campaign.raw_attempts ?? []).map((attempt) => {
+        const identity = attempt.identity ?? {};
+        const fixtureId = identity.fixture_id ?? "";
+        return {
+          campaign_id: campaignId,
+          trial_index: identity.trial_index ?? 0,
+          model_name: identity.model_id ?? "",
+          reasoning_level: identity.reasoning_effort ?? null,
+          output_mode: identity.output_mode ?? "text",
+          benchmark_name: identity.benchmark ?? benchmarkFromFixtureId(fixtureId),
+          fixture_id: fixtureId,
+          status: attempt.status ?? "pending",
+          passed: attempt.passed == null ? null : attempt.passed ? 1 : 0,
+          similarity: attempt.similarity ?? null,
+          error: attempt.error ?? null,
+          model_output: attempt.model_output ?? "",
+          input_tokens: attempt.input_tokens ?? null,
+          output_tokens: attempt.output_tokens ?? null,
+          total_tokens: attempt.total_tokens ?? null,
+          reasoning_tokens: attempt.reasoning_tokens ?? null,
+          cost_usd: attempt.cost_usd ?? null,
+          api_duration_ms: attempt.api_duration_ms ?? null,
+          request_telemetry_json: jsonValue(attempt.request_telemetry),
+          provider_route_metadata_json: jsonValue(attempt.provider_route_metadata),
+          judge_evidence_json: jsonValue(attempt.judge_evidence),
+          safety_state: attempt.safety_state ?? null,
+          safety_cost_usd: attempt.safety_cost_usd ?? null,
+          provenance_json: jsonValue(attempt.provenance),
+        };
+      }),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO fixture_aggregates (
+         campaign_id, benchmark_name, fixture_id, model_name,
+         reasoning_level, output_mode, planned_trials,
+         completed_trials, valid_attempts, passing_attempts,
+         failing_attempts, excluded_attempts, mean_success_rate,
+         pass_any_at_n_json, reliability_classification, incomplete
+       )
+       VALUES (
+         :campaign_id, :benchmark_name, :fixture_id, :model_name,
+         :reasoning_level, :output_mode, :planned_trials,
+         :completed_trials, :valid_attempts, :passing_attempts,
+         :failing_attempts, :excluded_attempts, :mean_success_rate,
+         :pass_any_at_n_json, :reliability_classification, :incomplete
+       )`,
+      (campaign.fixture_aggregates ?? []).map((aggregate) => {
+        const fixtureId = aggregate.fixture_id ?? "";
+        return {
+          campaign_id: campaignId,
+          benchmark_name: aggregate.benchmark ?? benchmarkFromFixtureId(fixtureId),
+          fixture_id: fixtureId,
+          model_name: aggregate.model_id ?? "",
+          reasoning_level: aggregate.reasoning_effort ?? "",
+          output_mode: aggregate.output_mode ?? "text",
+          planned_trials: aggregate.planned_trials ?? 0,
+          completed_trials: aggregate.completed_trials ?? 0,
+          valid_attempts: aggregate.valid_attempts ?? 0,
+          passing_attempts: aggregate.passing_attempts ?? 0,
+          failing_attempts: aggregate.failing_attempts ?? 0,
+          excluded_attempts: aggregate.excluded_attempts ?? 0,
+          mean_success_rate: aggregate.mean_success_rate ?? null,
+          pass_any_at_n_json: jsonValue(aggregate.pass_any_at_n ?? {}),
+          reliability_classification: aggregate.reliability_classification ?? null,
+          incomplete: aggregate.incomplete ? 1 : 0,
+        };
+      }),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO campaign_model_summaries (
+         campaign_id, model_name, reasoning_level, output_mode, planned_trials,
+         completed_trials, valid_attempts, passing_attempts,
+         excluded_attempts, mean_success_rate, pass_any_at_n_json,
+         incomplete, resource_summary_json
+       )
+       VALUES (
+         :campaign_id, :model_name, :reasoning_level, :output_mode, :planned_trials,
+         :completed_trials, :valid_attempts, :passing_attempts,
+         :excluded_attempts, :mean_success_rate, :pass_any_at_n_json,
+         :incomplete, :resource_summary_json
+       )`,
+      (campaign.model_summaries ?? []).map((summary) => ({
+        campaign_id: campaignId,
+        model_name: summary.model_id ?? "",
+        reasoning_level: summary.reasoning_effort ?? "",
+        output_mode: summary.output_mode ?? "text",
+        planned_trials: summary.planned_trials ?? 0,
+        completed_trials: summary.completed_trials ?? 0,
+        valid_attempts: summary.valid_attempts ?? 0,
+        passing_attempts: summary.passing_attempts ?? 0,
+        excluded_attempts: summary.excluded_attempts ?? 0,
+        mean_success_rate: summary.mean_success_rate ?? null,
+        pass_any_at_n_json: jsonValue(summary.pass_any_at_n ?? {}),
+        incomplete: summary.incomplete ? 1 : 0,
+        resource_summary_json: jsonValue(summary.resource_summary),
+      })),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO campaign_benchmark_summaries (
+         campaign_id, benchmark_name, planned_trials,
+         completed_trials, valid_attempts, passing_attempts,
+         excluded_attempts, mean_success_rate, pass_any_at_n_json,
+         incomplete, resource_summary_json
+       )
+       VALUES (
+         :campaign_id, :benchmark_name, :planned_trials,
+         :completed_trials, :valid_attempts, :passing_attempts,
+         :excluded_attempts, :mean_success_rate, :pass_any_at_n_json,
+         :incomplete, :resource_summary_json
+       )`,
+      (campaign.benchmark_summaries ?? []).map((summary) => ({
+        campaign_id: campaignId,
+        benchmark_name: summary.benchmark ?? "",
+        planned_trials: summary.planned_trials ?? 0,
+        completed_trials: summary.completed_trials ?? 0,
+        valid_attempts: summary.valid_attempts ?? 0,
+        passing_attempts: summary.passing_attempts ?? 0,
+        excluded_attempts: summary.excluded_attempts ?? 0,
+        mean_success_rate: summary.mean_success_rate ?? null,
+        pass_any_at_n_json: jsonValue(summary.pass_any_at_n ?? {}),
+        incomplete: summary.incomplete ? 1 : 0,
+        resource_summary_json: jsonValue(summary.resource_summary),
+      })),
+    );
+
+    insertMany(
+      db,
+      `INSERT INTO resource_summaries (
+         campaign_id, scope, total_cost_usd, total_input_tokens,
+         total_output_tokens, total_tokens, total_reasoning_tokens,
+         total_api_duration_ms, total_wall_duration_ms,
+         mean_cost_per_complete_trial_usd, mean_tokens_per_complete_trial,
+         mean_api_duration_per_complete_trial_ms, partial_pricing
+       )
+       VALUES (
+         :campaign_id, :scope, :total_cost_usd, :total_input_tokens,
+         :total_output_tokens, :total_tokens, :total_reasoning_tokens,
+         :total_api_duration_ms, :total_wall_duration_ms,
+         :mean_cost_per_complete_trial_usd, :mean_tokens_per_complete_trial,
+         :mean_api_duration_per_complete_trial_ms, :partial_pricing
+       )`,
+      (campaign.resource_summaries ?? []).map((summary) => ({
+        campaign_id: campaignId,
+        scope: summary.scope ?? "campaign",
+        total_cost_usd: summary.total_cost_usd ?? null,
+        total_input_tokens: summary.total_input_tokens ?? null,
+        total_output_tokens: summary.total_output_tokens ?? null,
+        total_tokens: summary.total_tokens ?? null,
+        total_reasoning_tokens: summary.total_reasoning_tokens ?? null,
+        total_api_duration_ms: summary.total_api_duration_ms ?? null,
+        total_wall_duration_ms: summary.total_wall_duration_ms ?? null,
+        mean_cost_per_complete_trial_usd:
+          summary.mean_cost_per_complete_trial_usd ?? null,
+        mean_tokens_per_complete_trial: summary.mean_tokens_per_complete_trial ?? null,
+        mean_api_duration_per_complete_trial_ms:
+          summary.mean_api_duration_per_complete_trial_ms ?? null,
+        partial_pricing: summary.partial_pricing ? 1 : 0,
+      })),
+    );
+
+    const safetySummary = campaign.safety_summary ?? {};
+    db.prepare(
+      `INSERT INTO publication_states (
+         campaign_id, reviewed_count, sanitized_count, blocked_count, pending_count
+       )
+       VALUES (
+         :campaign_id, :reviewed_count, :sanitized_count, :blocked_count, :pending_count
+       )`,
+    ).run({
+      campaign_id: campaignId,
+      reviewed_count: safetySummary.reviewed ?? 0,
+      sanitized_count: safetySummary.sanitized ?? 0,
+      blocked_count: safetySummary.blocked ?? 0,
+      pending_count: safetySummary.pending ?? 0,
+    });
+  }
+}
+
 function jsonArray(value) {
   return JSON.stringify(Array.isArray(value) ? value : [], null, 0);
+}
+
+function jsonValue(value) {
+  return JSON.stringify(value ?? null, null, 0);
+}
+
+function benchmarkFromFixtureId(fixtureId) {
+  return typeof fixtureId === "string" && fixtureId.includes("/")
+    ? fixtureId.split("/")[0]
+    : "";
+}
+
+function inferModelInfo(modelName, outputMode) {
+  const slashIndex = modelName.indexOf("/");
+  const provider = slashIndex > 0 ? modelName.slice(0, slashIndex) : "";
+  const modelPart = slashIndex > 0 ? modelName.slice(slashIndex + 1) : modelName;
+  const levelIndex = modelPart.lastIndexOf(":");
+  const baseModel =
+    levelIndex > 0 ? modelPart.slice(0, levelIndex) : modelPart || modelName;
+  const reasoningLevel = levelIndex > 0 ? modelPart.slice(levelIndex + 1) : null;
+  return {
+    name: modelName,
+    provider,
+    baseModel,
+    reasoningLevel,
+    output_mode: outputMode,
+  };
 }

@@ -176,19 +176,19 @@ export function FixtureCampaignDetail({
   if (loading) {
     return (
       <div className="text-sm text-(--color-text-mid)">
-        Loading campaign evidence…
+        Loading raw attempt evidence…
       </div>
     );
   }
   if (error) {
     return (
-      <div className="text-sm text-red-500">Campaign evidence unavailable</div>
+      <div className="text-sm text-red-500">Raw attempt evidence unavailable</div>
     );
   }
   if (!data || data.groups.length === 0) {
     return (
       <div className="text-sm text-(--color-text-mid)">
-        No campaign attempts recorded for this fixture.
+        No repeated-trial attempts recorded for this fixture.
       </div>
     );
   }

@@ -28,6 +28,8 @@ export interface ModelSummary {
   pass_at_k: number;
   total_cost_usd: number | null;
   avg_cost_usd: number | null;
+  total_valid_attempts?: number;
+  total_passing_attempts?: number;
 }
 
 export interface CellData {

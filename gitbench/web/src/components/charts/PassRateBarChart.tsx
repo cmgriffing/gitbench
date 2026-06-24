@@ -142,7 +142,7 @@ export default function PassRateBarChart({
                   marginTop: 4,
                 }}
               >
-                Campaign {data.campaign_metadata.campaign_id}:{" "}
+                Latest evaluation:{" "}
                 {data.campaign_metadata.completed_trials}/
                 {data.campaign_metadata.planned_trials} trials. Repeated-trial
                 variability is shown in fixture detail.

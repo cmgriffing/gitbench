@@ -20,8 +20,9 @@ export function chartHandler(req: any, res: any, chart: ChartKey): void {
     campaign_id: req.query?.campaign,
     benchmark,
   });
+  const summary = store.getSummary({ campaign_id });
   json(res, 200, {
-    ...chartData(chart, store.getSummary(), benchmark),
+    ...chartData(chart, summary, benchmark),
     campaign_id,
     campaign_metadata,
   });

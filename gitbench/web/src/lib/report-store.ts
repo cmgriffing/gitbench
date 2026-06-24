@@ -29,6 +29,10 @@ export interface CampaignFilters {
   output_mode?: string;
 }
 
+export interface ReportQueryOptions {
+  campaign_id?: string | null;
+}
+
 export interface RawAttempt {
   trial_index: number;
   model_name: string;
@@ -102,14 +106,21 @@ export interface FixtureAttempts {
 }
 
 export interface ReportStore {
-  getSummary(): GitBenchData;
+  getSummary(options?: ReportQueryOptions): GitBenchData;
   getModels(): GitBenchData["models"];
   getModelResults(
     model: string,
     filters?: ModelResultsFilters
   ): { model: string; results: Record<string, FixtureResult[]> } | null;
-  getBenchmark(benchmark: string): BenchmarkDetail | null;
-  getFixture(benchmark: string, fixtureId: string): FixtureDetail | null;
+  getBenchmark(
+    benchmark: string,
+    options?: ReportQueryOptions
+  ): BenchmarkDetail | null;
+  getFixture(
+    benchmark: string,
+    fixtureId: string,
+    options?: ReportQueryOptions
+  ): FixtureDetail | null;
   getHistory(): GitBenchData["runs_meta"];
   // Campaign-aware queries
   getCampaigns(filters?: CampaignFilters): CampaignListItem[];
