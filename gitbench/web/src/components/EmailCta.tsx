@@ -48,8 +48,12 @@ export default function EmailCta() {
       }
 
       setSubmittedEmail(body.email ?? trimmedEmail);
-    } catch {
-      setError("Something went wrong. Please try again.");
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
     } finally {
       setIsSubmitting(false);
     }
