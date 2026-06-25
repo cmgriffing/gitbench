@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { fileURLToPath } from "node:url";
 import type {
   BenchmarkDetail,
   CampaignFilters,
@@ -23,6 +25,16 @@ import type {
 
 let cachedDb: DatabaseSync | null = null;
 let cachedStore: NodeSqliteReportStore | null = null;
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+
+function defaultReportDbPath(): string {
+  const candidates = [
+    path.resolve(moduleDir, "../../data/gitbench.db"),
+    path.resolve(process.cwd(), "data", "gitbench.db"),
+    path.resolve(moduleDir, "../../../data/gitbench.db"),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+}
 
 export function clearReportStoreCache(): void {
   cachedDb = null;
@@ -31,9 +43,7 @@ export function clearReportStoreCache(): void {
 
 export function getReportStore(): ReportStore {
   if (!cachedStore) {
-    const dbPath =
-      process.env.GITBENCH_REPORT_DB ??
-      path.resolve(process.cwd(), "data", "gitbench.db");
+    const dbPath = process.env.GITBENCH_REPORT_DB ?? defaultReportDbPath();
     cachedDb = cachedDb ?? new DatabaseSync(dbPath, { readOnly: true });
     cachedStore = new NodeSqliteReportStore(cachedDb);
   }
