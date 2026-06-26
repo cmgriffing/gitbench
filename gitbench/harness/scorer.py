@@ -163,6 +163,8 @@ def _check_assertion(assertion: dict[str, Any], repo_path: str, model_output: st
             text=True,
         )
         output = result.stdout + result.stderr
+        if "exact" in assertion:
+            return output.strip() == assertion["exact"]
         if "contains" in assertion:
             return assertion["contains"] in output
         if "not_contains" in assertion:

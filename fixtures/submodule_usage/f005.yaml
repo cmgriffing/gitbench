@@ -32,7 +32,13 @@ scoring:
       contains: .gitmodules
     - type: git_output
       command: git ls-tree HEAD lib
-      contains: lib
+      contains: 160000 commit
+    - type: git_output
+      command: git config -f .gitmodules --get submodule.lib.path
+      exact: lib
+    - type: git_output
+      command: git config -f .gitmodules --get submodule.lib.url
+      exact: ../lib-bare
 output_schema: command_list
 purpose: Tests ability to add a submodule and commit the change. Evaluates end-to-end
   submodule-addition workflow.
