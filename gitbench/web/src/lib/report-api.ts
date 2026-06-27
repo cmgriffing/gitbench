@@ -1,4 +1,8 @@
-import type { CampaignFilters, ReportStore } from "./report-store.ts";
+import type {
+  CampaignFilters,
+  CampaignListItem,
+  ReportStore,
+} from "./report-store.ts";
 
 const allowedModelResultFilters = new Set(["benchmark", "difficulty", "tag"]);
 
@@ -32,7 +36,7 @@ export interface CampaignQuery {
 export function resolveCampaignFromQuery(
   store: ReportStore,
   query: CampaignQuery
-): { campaign_id: string | null; campaign_metadata: unknown | null } {
+): { campaign_id: string | null; campaign_metadata: CampaignListItem | null } {
   const filters = {
     benchmark: query.benchmark,
     model: query.model,

@@ -22,17 +22,17 @@ function isActive(path: string) {
   return currentPath.startsWith(path);
 }
 
-const links = (
-  [
-    { href: "/", label: "Overview", icon: LayoutDashboard },
-    { href: "/models", label: "Models", icon: Cpu },
-    { href: "/benchmarks", label: "Benchmarks", icon: BarChart3 },
-    { href: "/explore", label: "Explore", icon: Search },
-    { href: "/compare", label: "Compare", icon: GitCompare },
-    showHistory ? { href: "/history", label: "History", icon: History } : null,
-    { href: "/methodology", label: "Methodology", icon: BookOpen },
-  ] as const
-).filter(Boolean);
+const links = [
+  { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/models", label: "Models", icon: Cpu },
+  { href: "/benchmarks", label: "Benchmarks", icon: BarChart3 },
+  { href: "/explore", label: "Explore", icon: Search },
+  { href: "/compare", label: "Compare", icon: GitCompare },
+  ...(showHistory
+    ? [{ href: "/history", label: "History", icon: History }]
+    : []),
+  { href: "/methodology", label: "Methodology", icon: BookOpen },
+] as const;
 ---
 
 <aside class="app-sidebar">
@@ -69,7 +69,7 @@ const links = (
           href={link.href}
           class={`sidebar-link${isActive(link.href) ? " active" : ""}`}
         >
-          <link.icon size={18} strokeWidth={2} class="icon" />
+          <link.icon size={18} strokeWidth={2} className="icon" />
           <span>{link.label}</span>
         </a>
       ))

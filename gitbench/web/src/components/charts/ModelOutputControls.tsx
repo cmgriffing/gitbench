@@ -9,7 +9,7 @@ interface ModelOutputControlsProps {
   onSelectedGroupsChange: (groups: string[]) => void;
   outputMode: OutputMode;
   onOutputModeChange: (mode: OutputMode) => void;
-  availableOutputModes: OutputMode[];
+  availableOutputModes: Set<string>;
 }
 
 export default function ModelOutputControls({

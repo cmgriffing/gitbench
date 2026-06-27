@@ -38,7 +38,6 @@ export interface MetricEffort extends ModelGroupEffort {
   reasoningTokens?: number | null;
   avgMs?: number;
   fixtureCount?: number;
-  reasoningLevel?: string | null;
 }
 
 export interface GroupedMetricModeSummary {

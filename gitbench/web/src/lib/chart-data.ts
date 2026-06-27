@@ -8,6 +8,13 @@ export type ChartKey =
   | "quadrant"
   | "heatmap";
 
+export interface HeatmapChartData {
+  models: GitBenchData["models"];
+  benchmarks: GitBenchData["benchmarks"];
+  base_model_groups: GitBenchData["base_model_groups"];
+  matrix: Record<string, ([number, number, number] | null)[]>;
+}
+
 function emptyData(summary: GitBenchData): GitBenchData {
   return {
     models: summary.models,
@@ -53,7 +60,9 @@ function modelModeKey(modelName: string, outputMode: string): string {
   return outputMode === "text" ? modelName : `${modelName}__${outputMode}`;
 }
 
-function compactHeatmapMatrix(summary: GitBenchData) {
+function compactHeatmapMatrix(
+  summary: GitBenchData
+): HeatmapChartData["matrix"] {
   return Object.fromEntries(
     summary.models.map((model) => [
       modelModeKey(model.name, model.output_mode ?? "text"),
@@ -62,17 +71,33 @@ function compactHeatmapMatrix(summary: GitBenchData) {
           summary.matrix[
             modelModeKey(model.name, model.output_mode ?? "text")
           ]?.[benchmark];
-        return cell ? [cell.pass_at_k, cell.passed, cell.total] : null;
+        if (!cell) return null;
+        return [cell.pass_at_k, cell.passed, cell.total];
       }),
     ])
   );
 }
 
 export function chartData(
+  chart: Exclude<ChartKey, "heatmap">,
+  summary: GitBenchData,
+  benchmark?: string
+): GitBenchData;
+export function chartData(
+  chart: "heatmap",
+  summary: GitBenchData,
+  benchmark?: string
+): HeatmapChartData;
+export function chartData(
   chart: ChartKey,
   summary: GitBenchData,
   benchmark?: string
-) {
+): GitBenchData | HeatmapChartData;
+export function chartData(
+  chart: ChartKey,
+  summary: GitBenchData,
+  benchmark?: string
+): GitBenchData | HeatmapChartData {
   const data = emptyData(summary);
 
   switch (chart) {

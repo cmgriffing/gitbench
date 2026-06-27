@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { GitBenchData } from "@/types";
+import type { GitBenchData } from "@/lib/types";
 
 let _cache: GitBenchData | null = null;
 

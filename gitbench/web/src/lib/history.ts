@@ -1,4 +1,4 @@
-import type { RunMeta } from "@/types";
+import type { RunMeta } from "@/lib/types";
 
 export function modelRunCounts(runs: RunMeta[]): Record<string, number> {
   return runs.reduce<Record<string, number>>((counts, run) => {
