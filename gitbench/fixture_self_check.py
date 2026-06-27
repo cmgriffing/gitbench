@@ -7,10 +7,15 @@ import subprocess
 from dataclasses import dataclass
 
 from gitbench.harness.types import Fixture
-from gitbench.scorer_capabilities import capabilities_for_scorer
+from gitbench.scorer_capabilities import (
+    ScorerCapabilities,
+    capabilities_for_scorer,
+    generic_capabilities_for_scorer,
+)
 
 
 _HASH_RE = re.compile(r"\b[0-9a-fA-F]{7,40}\b")
+_MISSING_BENCHMARK_NAME = object()
 
 
 @dataclass
@@ -23,13 +28,44 @@ class FixtureSelfCheckIssue:
 def check_fixture(
     fixture: Fixture,
     repo_path: str | None = None,
-    benchmark_name: str | None = None,
+    *,
+    benchmark_name: str | object = _MISSING_BENCHMARK_NAME,
 ) -> list[FixtureSelfCheckIssue]:
+    """Run benchmark-aware self-checks for a concrete benchmark fixture."""
+    if benchmark_name is _MISSING_BENCHMARK_NAME or benchmark_name is None:
+        raise ValueError(
+            "check_fixture() requires benchmark_name for benchmark-aware suite "
+            "validation; use check_fixture_generically() for explicit generic "
+            "fixture-only checks."
+        )
+    if not isinstance(benchmark_name, str) or not benchmark_name.strip():
+        raise ValueError("benchmark_name must be a non-empty string")
     issues: list[FixtureSelfCheckIssue] = []
     capabilities = capabilities_for_scorer(
         fixture.scoring.get("type", "similarity"),
         benchmark_name=benchmark_name,
     )
+    issues.extend(_check_fixture_with_capabilities(fixture, capabilities, repo_path))
+    return issues
+
+
+def check_fixture_generically(
+    fixture: Fixture,
+    repo_path: str | None = None,
+) -> list[FixtureSelfCheckIssue]:
+    """Run generic fixture-only checks without benchmark-local scorer behavior."""
+    capabilities = generic_capabilities_for_scorer(
+        fixture.scoring.get("type", "similarity")
+    )
+    return _check_fixture_with_capabilities(fixture, capabilities, repo_path)
+
+
+def _check_fixture_with_capabilities(
+    fixture: Fixture,
+    capabilities: ScorerCapabilities,
+    repo_path: str | None,
+) -> list[FixtureSelfCheckIssue]:
+    issues: list[FixtureSelfCheckIssue] = []
     issues.extend(_check_hash_answer_shape(fixture, capabilities.dynamic_expected))
     issues.extend(_check_multiline_exact_order(fixture, capabilities.order_sensitive))
     if repo_path is not None:

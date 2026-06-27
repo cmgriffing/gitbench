@@ -2,10 +2,15 @@
 
 import subprocess
 
+import pytest
+
 from gitbench.benchmarks.blame_forensics import BlameForensicsBenchmark
-from gitbench.fixture_self_check import check_fixture
+from gitbench.fixture_self_check import check_fixture, check_fixture_generically
 from gitbench.harness.types import Fixture
-from gitbench.scorer_capabilities import capabilities_for_scorer
+from gitbench.scorer_capabilities import (
+    capabilities_for_scorer,
+    generic_capabilities_for_scorer,
+)
 
 
 def test_self_check_flags_non_hash_expected_for_hash_prompt():
@@ -18,7 +23,7 @@ def test_self_check_flags_non_hash_expected_for_hash_prompt():
         scoring={"type": "exact_match"},
     )
 
-    issues = check_fixture(fixture)
+    issues = check_fixture_generically(fixture)
 
     assert [issue.code for issue in issues] == ["static-non-hash-expected"]
 
@@ -33,7 +38,7 @@ def test_self_check_allows_dynamic_hash_scorer_for_hash_prompt():
         scoring={"type": "commit_hash_by_subject", "subject": "Fix null pointer bug"},
     )
 
-    assert check_fixture(fixture) == []
+    assert check_fixture_generically(fixture) == []
 
 
 def test_self_check_flags_multiline_exact_match_without_order_contract():
@@ -46,7 +51,7 @@ def test_self_check_flags_multiline_exact_match_without_order_contract():
         scoring={"type": "exact_match"},
     )
 
-    issues = check_fixture(fixture)
+    issues = check_fixture_generically(fixture)
 
     assert [issue.code for issue in issues] == ["multiline-exact-order-review"]
 
@@ -61,16 +66,35 @@ def test_self_check_allows_multiline_exact_match_with_order_contract():
         scoring={"type": "exact_match", "order_matters": True},
     )
 
-    assert check_fixture(fixture) == []
+    assert check_fixture_generically(fixture) == []
 
 
 def test_capability_lookup_uses_benchmark_context_before_generic_fallback():
     branch_caps = capabilities_for_scorer("exact_match", benchmark_name="branch_cleanup")
-    generic_caps = capabilities_for_scorer("exact_match")
+    generic_caps = generic_capabilities_for_scorer("exact_match")
 
     assert branch_caps.order_sensitive is False
     assert branch_caps.selection_parser == "branch_line_set"
     assert generic_caps.order_sensitive is True
+
+
+def test_capability_lookup_requires_benchmark_context_for_effective_behavior():
+    with pytest.raises(ValueError, match="requires benchmark_name"):
+        capabilities_for_scorer("exact_match")
+
+
+def test_suite_level_self_check_requires_benchmark_context():
+    fixture = Fixture(
+        id="missing_context",
+        description="Suite-level fixture",
+        setup=[],
+        prompt="List branches to delete, one per line",
+        expected="fix-typo\nold-feature",
+        scoring={"type": "exact_match"},
+    )
+
+    with pytest.raises(ValueError, match="requires benchmark_name"):
+        check_fixture(fixture)
 
 
 def test_self_check_allows_branch_cleanup_exact_match_set_scoring():
@@ -84,6 +108,21 @@ def test_self_check_allows_branch_cleanup_exact_match_set_scoring():
     )
 
     assert check_fixture(fixture, benchmark_name="branch_cleanup") == []
+
+
+def test_generic_fixture_only_check_remains_explicit():
+    fixture = Fixture(
+        id="branch_set",
+        description="Branch-like fixture checked without benchmark context",
+        setup=[],
+        prompt="List branches to delete, one per line",
+        expected="fix-typo\nold-feature",
+        scoring={"type": "exact_match"},
+    )
+
+    issues = check_fixture_generically(fixture)
+
+    assert [issue.code for issue in issues] == ["multiline-exact-order-review"]
 
 
 def test_self_check_allows_reflog_dynamic_lookup_key_for_hash_prompt():
@@ -131,7 +170,7 @@ def test_self_check_validates_git_derived_expected_value(tmp_path):
         },
     )
 
-    assert check_fixture(fixture, repo_path=str(repo)) == []
+    assert check_fixture_generically(fixture, repo_path=str(repo)) == []
 
 
 def test_self_check_reports_git_derived_expected_mismatch(tmp_path):
@@ -153,7 +192,7 @@ def test_self_check_reports_git_derived_expected_mismatch(tmp_path):
         },
     )
 
-    issues = check_fixture(fixture, repo_path=str(repo))
+    issues = check_fixture_generically(fixture, repo_path=str(repo))
 
     assert [issue.code for issue in issues] == ["derived-expected-mismatch"]
 
@@ -168,7 +207,14 @@ def test_blame_f010_has_one_broken_import_and_preserves_introducing_blame():
     executor, repo_path = benchmark.setup_fixture(fixture)
 
     try:
-        assert check_fixture(fixture, repo_path=repo_path) == []
+        assert (
+            check_fixture(
+                fixture,
+                repo_path=repo_path,
+                benchmark_name=BlameForensicsBenchmark.name,
+            )
+            == []
+        )
 
         broken_additions = subprocess.run(
             [

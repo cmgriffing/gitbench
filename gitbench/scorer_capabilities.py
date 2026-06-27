@@ -16,6 +16,7 @@ class ScorerCapabilities:
 
 
 UNKNOWN_CAPABILITIES = ScorerCapabilities(known=False)
+_MISSING_BENCHMARK_NAME = object()
 
 
 GENERIC_CAPABILITIES: dict[str, ScorerCapabilities] = {
@@ -58,11 +59,25 @@ BENCHMARK_SCORER_CAPABILITIES: dict[tuple[str, str], ScorerCapabilities] = {
 
 def capabilities_for_scorer(
     scoring_type: str,
-    benchmark_name: str | None = None,
+    *,
+    benchmark_name: str | object = _MISSING_BENCHMARK_NAME,
 ) -> ScorerCapabilities:
     """Return effective scorer capabilities for a benchmark/scoring pair."""
-    if benchmark_name is not None:
-        benchmark_key = (benchmark_name, scoring_type)
-        if benchmark_key in BENCHMARK_SCORER_CAPABILITIES:
-            return BENCHMARK_SCORER_CAPABILITIES[benchmark_key]
+    if benchmark_name is _MISSING_BENCHMARK_NAME or benchmark_name is None:
+        raise ValueError(
+            "capabilities_for_scorer() requires benchmark_name for effective "
+            "benchmark scoring behavior; use generic_capabilities_for_scorer() "
+            "for explicit generic fixture-only checks."
+        )
+    if not isinstance(benchmark_name, str) or not benchmark_name.strip():
+        raise ValueError("benchmark_name must be a non-empty string")
+
+    benchmark_key = (benchmark_name, scoring_type)
+    if benchmark_key in BENCHMARK_SCORER_CAPABILITIES:
+        return BENCHMARK_SCORER_CAPABILITIES[benchmark_key]
+    return GENERIC_CAPABILITIES.get(scoring_type, UNKNOWN_CAPABILITIES)
+
+
+def generic_capabilities_for_scorer(scoring_type: str) -> ScorerCapabilities:
+    """Return scorer capabilities without benchmark-local behavior."""
     return GENERIC_CAPABILITIES.get(scoring_type, UNKNOWN_CAPABILITIES)
