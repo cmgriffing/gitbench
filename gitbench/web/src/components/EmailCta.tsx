@@ -18,7 +18,7 @@ export default function EmailCta() {
   const [error, setError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [submittedEmail, setSubmittedEmail] = React.useState<string | null>(
-    null
+    null,
   );
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -52,7 +52,7 @@ export default function EmailCta() {
       setError(
         error instanceof Error
           ? error.message
-          : "Something went wrong. Please try again."
+          : "Something went wrong. Please try again.",
       );
     } finally {
       setIsSubmitting(false);
@@ -72,25 +72,26 @@ export default function EmailCta() {
     >
       <div className="card grid gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
         <div className="flex min-w-0 gap-4">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-[8px] border border-(--color-border) bg-white/[0.04] text-(--color-accent)">
+          {/* <div className="flex size-11 shrink-0 items-center justify-center rounded-[8px] border border-(--color-border) bg-white/[0.04] text-(--color-accent)">
             <Mail aria-hidden="true" className="size-5" />
-          </div>
+          </div> */}
           <div className="min-w-0">
             <div className="section-label mb-3">
-              <span>Updates</span>
+              <span>Analysis</span>
             </div>
             <h2 className="mb-2 text-xl font-bold leading-tight text-(--color-text)">
-              Get GitBench updates in your inbox
+              We have some thoughts about the data
             </h2>
             <p className="max-w-2xl text-sm leading-relaxed text-(--color-text-mid)">
-              Leave an email and we will send new model runs, benchmark changes,
-              and release notes when they matter.
+              We heavily encourage you to read and understand the results of our
+              benchmarks and come to your own conclusions. We have some thoughts
+              and we would love to share them with you.
             </p>
           </div>
         </div>
         <DialogTrigger asChild>
           <Button className="w-full md:w-auto">
-            Join the list
+            Get the PDF
             <ArrowRight aria-hidden="true" className="size-4" />
           </Button>
         </DialogTrigger>
@@ -100,7 +101,7 @@ export default function EmailCta() {
         <DialogHeader>
           <DialogTitle>Get GitBench updates</DialogTitle>
           <DialogDescription className="text-(--color-text-mid)">
-            Enter your email to receive benchmark updates and model result notes.
+            Enter your email to receive our analysis of the GitBench results.
           </DialogDescription>
         </DialogHeader>
 
