@@ -11,11 +11,13 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { loadDataSync } from "@/lib/data";
-import { hasRepeatModelRuns } from "@/lib/history";
+// import { hasRepeatModelRuns } from "@/lib/history";
 
 const currentPath = Astro.url.pathname;
 const data = loadDataSync();
-const showHistory = hasRepeatModelRuns(data.runs_meta);
+const showHistory = false;
+// History is hidden for now
+// const showHistory = hasRepeatModelRuns(data.runs_meta);
 
 function isActive(path: string) {
   if (path === "/") return currentPath === "/";
