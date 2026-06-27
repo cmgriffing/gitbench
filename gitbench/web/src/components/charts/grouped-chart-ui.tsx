@@ -357,9 +357,6 @@ export function VerticalGroupedMetricChart({
                     dataKey={inKey}
                     name={`${outputModeLabel(mode)} In`}
                     stackId={stackId}
-                    className={cn("active:outline-0 focus:outline-0", {
-                      "stroke-2 stroke-blue-500": true,
-                    })}
                     barSize={verticalChartBarSize(rows.length, 1)}
                     isAnimationActive={false}
                   >
