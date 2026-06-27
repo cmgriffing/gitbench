@@ -227,7 +227,6 @@ body::before {
   text-decoration: none;
   letter-spacing: 0;
   transition: color 0.15s, background 0.15s;
-  border-left: 2px solid transparent;
 }
 
 .sidebar-link:hover {
@@ -237,7 +236,6 @@ body::before {
 
 .sidebar-link.active {
   color: var(--text);
-  border-left-color: var(--brand-primary-highlight);
   background: var(--accent-glow);
 }
 
@@ -652,7 +650,6 @@ select.brand-select option {
   }
 
   .sidebar-link.active {
-    border-left: 2px solid var(--brand-primary-highlight);
     background: var(--accent-glow);
   }
 
