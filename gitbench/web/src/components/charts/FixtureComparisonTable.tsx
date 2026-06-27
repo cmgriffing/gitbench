@@ -27,9 +27,9 @@ interface FixtureComparisonTableProps {
 
 const LEVEL_ORDER = ["none", "low", "medium", "high", "xhigh", "max"];
 
-function sortByReasoningLevel(
-  efforts: { reasoningLevel: string | null }[]
-): typeof efforts {
+function sortByReasoningLevel<T extends { reasoningLevel: string | null }>(
+  efforts: T[]
+): T[] {
   return [...efforts].sort((a, b) => {
     const ai = LEVEL_ORDER.indexOf(a.reasoningLevel ?? "none");
     const bi = LEVEL_ORDER.indexOf(b.reasoningLevel ?? "none");

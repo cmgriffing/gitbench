@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { GitBenchData } from "@/lib/types";
+import type { CampaignAwareGitBenchData } from "@/lib/types";
 import { loadPassRateChart } from "@/lib/report-client";
 import ProviderIcon from "@/components/ProviderIcon";
 import ModelOutputControls from "@/components/charts/ModelOutputControls";
@@ -22,14 +22,16 @@ import { useCampaignId } from "@/lib/use-campaign";
 
 interface PassRateBarChartProps {
   benchmarkName?: string;
-  initialData?: GitBenchData;
+  initialData?: CampaignAwareGitBenchData;
 }
 
 export default function PassRateBarChart({
   benchmarkName,
   initialData,
 }: PassRateBarChartProps = {}) {
-  const [data, setData] = useState<GitBenchData | null>(initialData ?? null);
+  const [data, setData] = useState<CampaignAwareGitBenchData | null>(
+    initialData ?? null
+  );
   const campaignId = useCampaignId();
   const {
     selectedGroups,

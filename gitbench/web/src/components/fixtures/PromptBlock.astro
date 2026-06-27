@@ -1,5 +1,5 @@
 ---
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Copy } from "lucide-react";
 
 interface Props {
@@ -17,16 +17,19 @@ const { text } = Astro.props;
     >
       Prompt
     </span>
-    <Button
-      variant="ghost"
-      size="xs"
-      class="font-mono text-[0.6rem]"
+    <button
+      type="button"
+      class={buttonVariants({
+        variant: "ghost",
+        size: "xs",
+        className: "font-mono text-[0.6rem]",
+      })}
       data-text={text}
       onclick="navigator.clipboard.writeText(this.getAttribute('data-text') || '')"
     >
-      <Copy class="size-3" />
+      <Copy className="size-3" />
       Copy
-    </Button>
+    </button>
   </div>
   <div
     class="bg-(--color-surface) border border-border rounded-xl p-5 font-mono text-xs text-(--color-text-mid) whitespace-pre-wrap wrap-break-word leading-relaxed max-h-[500px] overflow-y-auto"

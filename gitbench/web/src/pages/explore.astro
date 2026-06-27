@@ -143,13 +143,13 @@ const allFixtures = Object.values(data.fixture_index);
               <span class="font-mono text-xs text-(--color-text-mid) font-medium">
                 {fi.id}
               </span>
-              <Badge variant="secondary" class="font-mono text-[0.6rem]">
+              <Badge variant="secondary" className="font-mono text-[0.6rem]">
                 {fi.benchmark}
               </Badge>
               {fi.difficulty && (
                 <Badge
                   variant="outline"
-                  class="font-mono text-[0.55rem] opacity-50 border-pass-border text-pass"
+                  className="font-mono text-[0.55rem] opacity-50 border-pass-border text-pass"
                 >
                   {fi.difficulty}
                 </Badge>
@@ -159,7 +159,7 @@ const allFixtures = Object.values(data.fixture_index);
               {fi.tags.slice(0, 3).map((t) => (
                 <Badge
                   variant="secondary"
-                  class="font-mono text-[0.55rem] px-1 py-0"
+                  className="font-mono text-[0.55rem] px-1 py-0"
                 >
                   {t}
                 </Badge>

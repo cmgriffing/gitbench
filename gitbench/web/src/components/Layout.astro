@@ -98,12 +98,14 @@ const generated = new Date().toISOString().split("T")[0];
     </div>
     <script>
       document
-        .querySelectorAll(".sidebar-collapse-toggle, .menu-toggle")
+        .querySelectorAll<HTMLInputElement>(
+          ".sidebar-collapse-toggle, .menu-toggle",
+        )
         .forEach(function (input) {
           input.addEventListener("change", function () {
-            var checked = this.checked;
-            this.setAttribute("aria-expanded", String(checked));
-            var nav = this.parentElement.querySelector(".sidebar-nav");
+            var checked = input.checked;
+            input.setAttribute("aria-expanded", String(checked));
+            var nav = input.parentElement?.querySelector(".sidebar-nav");
             if (nav) nav.setAttribute("aria-expanded", String(checked));
           });
         });

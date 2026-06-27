@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import type { GitBenchData } from "@/lib/types";
-import { loadHeatmapChart, type HeatmapChartData } from "@/lib/report-client";
+import type { HeatmapChartData } from "@/lib/chart-data";
+import { loadHeatmapChart } from "@/lib/report-client";
 import { modelPath, splitModelName } from "@/lib/routes";
 import ModelOutputControls from "@/components/charts/ModelOutputControls";
 import { Badge } from "@/components/ui/badge";

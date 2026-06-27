@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadModelResults } from "@/lib/report-client";
-import type { FixtureResult } from "@/lib/report-store";
+import type { FixtureResult } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { useCampaignId } from "@/lib/use-campaign";
 

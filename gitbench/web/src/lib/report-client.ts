@@ -6,7 +6,8 @@ import type {
   ModelResultsFilters,
   RawAttempt,
 } from "@/lib/report-store";
-import type { GitBenchData } from "@/lib/types";
+import type { HeatmapChartData } from "@/lib/chart-data";
+import type { CampaignAwareGitBenchData, FixtureResult } from "@/lib/types";
 
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
@@ -14,13 +15,6 @@ async function getJson<T>(url: string): Promise<T> {
     throw new Error(`Failed to load ${url}: ${response.status}`);
   }
   return response.json() as Promise<T>;
-}
-
-export interface HeatmapChartData {
-  models: GitBenchData["models"];
-  benchmarks: GitBenchData["benchmarks"];
-  base_model_groups: GitBenchData["base_model_groups"];
-  matrix: Record<string, ([number, number, number] | null)[]>;
 }
 
 export interface CampaignsResponse {
@@ -36,6 +30,19 @@ export interface RawAttemptsResponse {
   publishable: boolean;
   attempts: RawAttempt[];
 }
+
+export interface CampaignAwareResponse {
+  campaign_id: string | null;
+  campaign_metadata: CampaignAwareGitBenchData["campaign_metadata"];
+}
+
+export interface ModelResultsResponse extends CampaignAwareResponse {
+  model: string;
+  results: Record<string, FixtureResult[]>;
+}
+
+export type CampaignAwareHeatmapChartData = HeatmapChartData &
+  CampaignAwareResponse;
 
 export function loadCampaigns(
   filters: Record<string, string> = {}
@@ -118,41 +125,43 @@ function loadCampaignAwareData(
   return `${path}${suffix}`;
 }
 
-export function loadSummary(): Promise<GitBenchData> {
-  return getJson<GitBenchData>(loadCampaignAwareData("/api/summary"));
+export function loadSummary(): Promise<CampaignAwareGitBenchData> {
+  return getJson<CampaignAwareGitBenchData>(loadCampaignAwareData("/api/summary"));
 }
 
 function loadChartData(
-  chart: "pass-rate" | "cost" | "runtime" | "tokens" | "quadrant" | "heatmap",
+  chart: "pass-rate" | "cost" | "runtime" | "tokens" | "quadrant",
   params: Record<string, string | undefined> = {}
-): Promise<GitBenchData> {
-  return getJson<GitBenchData>(
+): Promise<CampaignAwareGitBenchData> {
+  return getJson<CampaignAwareGitBenchData>(
     loadCampaignAwareData(`/api/charts/${chart}`, params)
   );
 }
 
-export function loadPassRateChart(benchmark?: string): Promise<GitBenchData> {
+export function loadPassRateChart(
+  benchmark?: string
+): Promise<CampaignAwareGitBenchData> {
   return loadChartData("pass-rate", { benchmark });
 }
 
-export function loadCostChart(): Promise<GitBenchData> {
+export function loadCostChart(): Promise<CampaignAwareGitBenchData> {
   return loadChartData("cost");
 }
 
-export function loadRuntimeChart(): Promise<GitBenchData> {
+export function loadRuntimeChart(): Promise<CampaignAwareGitBenchData> {
   return loadChartData("runtime");
 }
 
-export function loadTokenChart(): Promise<GitBenchData> {
+export function loadTokenChart(): Promise<CampaignAwareGitBenchData> {
   return loadChartData("tokens");
 }
 
-export function loadQuadrantChart(): Promise<GitBenchData> {
+export function loadQuadrantChart(): Promise<CampaignAwareGitBenchData> {
   return loadChartData("quadrant");
 }
 
-export function loadHeatmapChart(): Promise<HeatmapChartData> {
-  return getJson<HeatmapChartData>(
+export function loadHeatmapChart(): Promise<CampaignAwareHeatmapChartData> {
+  return getJson<CampaignAwareHeatmapChartData>(
     loadCampaignAwareData("/api/charts/heatmap")
   );
 }
@@ -166,13 +175,15 @@ export function loadBenchmark(benchmark: string): Promise<BenchmarkDetail> {
 export function loadModelResults(
   model: string,
   filters: ModelResultsFilters = {}
-) {
+): Promise<ModelResultsResponse> {
   const params: Record<string, string> = {};
   for (const [key, value] of Object.entries(filters)) {
     if (value) params[key] = value;
   }
   const path = model.split("/").map(encodeURIComponent).join("/");
-  return getJson(loadCampaignAwareData(`/api/models/${path}/results`, params));
+  return getJson<ModelResultsResponse>(
+    loadCampaignAwareData(`/api/models/${path}/results`, params)
+  );
 }
 
 export function loadFixture(
