@@ -1,0 +1,28 @@
+---
+import Layout from "@/components/Layout.astro";
+import TimeSeriesChart from "@/components/charts/TimeSeriesChart";
+import { CampaignHistory } from "@/components/CampaignHistory";
+---
+
+<Layout
+  title="History"
+  description="Track GitBench evaluation runs over time, including pass-rate trends and campaign timeline changes."
+  image="/og/history.png"
+>
+  <section class="mb-10">
+    <div class="section-label"><span>Pass Rate Over Time</span></div>
+    <TimeSeriesChart client:load />
+  </section>
+
+  <section>
+    <div class="info-tip">
+      <div class="section-label"><span>Evaluation Timeline</span></div>
+      <p class="info-blurb">
+        One primary row per stored evaluation run when campaign records are
+        available. Δ is shown only when the previous row has the same
+        configuration hash.
+      </p>
+    </div>
+    <CampaignHistory client:load />
+  </section>
+</Layout>

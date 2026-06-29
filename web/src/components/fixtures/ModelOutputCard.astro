@@ -1,0 +1,164 @@
+---
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { modelPath, modelResultAnchor } from "@/lib/routes";
+import { formatCompactTokenUsage } from "@/lib/token-usage";
+import { formatStructuredOutputFailure } from "@/lib/structured-output-display";
+import { Copy } from "lucide-react";
+
+interface Props {
+  modelName: string;
+  outputMode?: string;
+  passed: boolean;
+  similarity: number;
+  output: string;
+  error: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  reasoningTokens?: number | null;
+  reasoningLevel?: string | null;
+  parsedPayload?: string | null;
+  rawStructuredOutput?: string | null;
+  structuredError?: string | null;
+}
+
+const {
+  modelName,
+  outputMode = "text",
+  passed,
+  similarity,
+  output,
+  error,
+  inputTokens,
+  outputTokens,
+  reasoningTokens,
+  reasoningLevel,
+  parsedPayload,
+  rawStructuredOutput,
+  structuredError,
+} = Astro.props;
+const passColor = passed
+  ? "bg-pass-bg text-pass border-pass-border"
+  : "bg-fail-bg text-fail border-(--color-fail-border)";
+
+const isJsonMode = outputMode === "json_schema";
+const displayPayload = parsedPayload
+  ? (() => {
+      try {
+        return JSON.stringify(JSON.parse(parsedPayload), null, 2);
+      } catch {
+        return parsedPayload;
+      }
+    })()
+  : null;
+const structuredFailure = formatStructuredOutputFailure(
+  structuredError,
+  rawStructuredOutput,
+);
+const displayOutput = structuredFailure?.message ?? output;
+const copyText = structuredFailure?.copyText ?? output;
+const tokenBadge = formatCompactTokenUsage(
+  inputTokens,
+  outputTokens,
+  reasoningLevel,
+  reasoningTokens,
+);
+const cardId = modelResultAnchor(modelName, outputMode);
+---
+
+<div id={cardId} class="card scroll-mt-6 p-5">
+  <div class="flex justify-between items-start flex-wrap gap-3 mb-3">
+    <div class="flex gap-2 items-center flex-wrap">
+      <a
+        href={modelPath(modelName)}
+        class="font-display text-sm font-bold text-(--color-text) no-underline"
+      >
+        {modelName}
+      </a>
+      <Badge
+        variant="outline"
+        className={`font-mono text-[0.6rem] ${passColor}`}
+      >
+        {passed ? "PASS" : "FAIL"}
+      </Badge>
+      <span class="font-mono text-xs font-semibold text-(--color-text)">
+        {similarity}%
+      </span>
+      {
+        tokenBadge && (
+          <span class="font-mono text-[0.6rem] px-1.5 py-0.5 bg-(--color-surface) border border-border rounded text-(--color-text-dim)">
+            {tokenBadge}
+          </span>
+        )
+      }
+    </div>
+    <button
+      type="button"
+      class={buttonVariants({
+        variant: "ghost",
+        size: "xs",
+        className: "font-mono text-[0.6rem]",
+      })}
+      data-text={copyText}
+      onclick="navigator.clipboard.writeText(this.getAttribute('data-text') || '')"
+    >
+      <Copy className="size-3" />
+      Copy
+    </button>
+  </div>
+  <div
+    class="bg-(--color-surface) border border-border rounded-lg p-4 font-mono text-xs text-(--color-text-mid) whitespace-pre-wrap wrap-break-word leading-relaxed max-h-[300px] overflow-y-auto"
+  >
+    {displayOutput || "(empty output)"}
+  </div>
+  {
+    isJsonMode && (
+      <div class="mt-3">
+        <div class="flex items-center gap-2 mb-2">
+          <Badge
+            variant="outline"
+            className="font-mono text-[0.55rem] border-(--color-accent) text-(--color-accent)"
+          >
+            JSON Schema
+          </Badge>
+          <span class="font-mono text-[0.6rem] text-(--color-text-dim)">
+            Structured Output
+          </span>
+        </div>
+        {
+          displayPayload && (
+            <div class="bg-(--color-surface) border border-border rounded-lg p-4 font-mono text-xs text-(--color-text-mid) whitespace-pre-wrap wrap-break-word leading-relaxed max-h-[300px] overflow-y-auto">
+              {displayPayload}
+            </div>
+          )
+        }
+        {
+          !displayPayload && rawStructuredOutput && !structuredFailure && (
+            <div class="bg-(--color-surface) border border-border rounded-lg p-4 font-mono text-xs text-(--color-text-dim) whitespace-pre-wrap wrap-break-word leading-relaxed max-h-[300px] overflow-y-auto opacity-60">
+              (raw) {rawStructuredOutput}
+            </div>
+          )
+        }
+      </div>
+    )
+  }
+  {
+    structuredError && (
+      <div class="mt-2 p-3 bg-(--color-fail-bg) border border-(--color-fail-border) rounded-lg">
+        <div class="font-mono text-[0.6rem] text-fail font-semibold mb-1">
+          Structured Output Error
+        </div>
+        <div class="font-mono text-[0.65rem] text-(--color-text-dim)">
+          {structuredError}
+        </div>
+      </div>
+    )
+  }
+  {
+    error && (
+      <div class="mt-2 font-mono text-[0.65rem] text-fail">
+        Failure: {error}
+      </div>
+    )
+  }
+</div>

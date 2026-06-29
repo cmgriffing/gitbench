@@ -2,7 +2,6 @@
 
 import json
 import logging
-import sqlite3
 import sys
 import threading
 import time
@@ -1453,10 +1452,10 @@ class TestRunCommand:
         assert "not deterministically JSON serializable" in result.output
         assert "Traceback" not in result.output
 
-    def test_report_no_build_ingests_campaign_artifacts_into_json_and_sqlite(
+    def test_report_deprecated_flags_ingest_campaign_artifacts_into_json(
         self, runner, tmp_path
     ):
-        """Report generation discovers campaign artifacts through the CLI path."""
+        """Report generation discovers campaign artifacts without running web workflows."""
         from gitbench.harness.campaign import (
             AttemptIdentity,
             AttemptStatus,
@@ -1465,7 +1464,6 @@ class TestRunCommand:
             make_campaign,
         )
         from gitbench.harness.campaign_store import CampaignStore
-        from gitbench.render import write_sqlite_report_db as real_write_sqlite_report_db
 
         results_root = tmp_path / "gitbench-results"
         identity = AttemptIdentity(
@@ -1505,13 +1503,9 @@ class TestRunCommand:
         )
 
         output_path = tmp_path / "report-results.json"
-        db_path = tmp_path / "gitbench.db"
-
-        def write_temp_db(data, _db_output):
-            real_write_sqlite_report_db(data, db_path)
 
         with patch("gitbench.cli.load_config", return_value={}), \
-             patch("gitbench.render.write_sqlite_report_db", side_effect=write_temp_db):
+             patch("subprocess.run") as run_web_workflow:
             result = runner.invoke(
                 cli,
                 [
@@ -1521,32 +1515,23 @@ class TestRunCommand:
                     "--output",
                     str(output_path),
                     "--no-build",
+                    "--open",
+                    "--dev",
                 ],
             )
 
         assert result.exit_code == 0, result.output
+        assert "Warning: `gitbench report --no-build` is deprecated" in result.output
+        assert "Warning: `gitbench report --open` is deprecated" in result.output
+        assert "Warning: `gitbench report --dev` is deprecated" in result.output
+        assert "Next web commands:" in result.output
+        assert "pnpm build" in result.output
+        assert "pnpm dev:api" in result.output
+        run_web_workflow.assert_not_called()
+
         data = json.loads(output_path.read_text())
         assert data["campaigns"][0]["campaign_id"] == "cmp-cli-report"
         assert data["campaigns"][0]["raw_attempts"][0]["identity"]["benchmark"] == "commit_messages"
-
-        with sqlite3.connect(db_path) as conn:
-            assert conn.execute("SELECT COUNT(*) FROM campaigns").fetchone()[0] == 1
-            assert conn.execute("SELECT COUNT(*) FROM raw_attempts").fetchone()[0] == 1
-            row = conn.execute(
-                """
-                SELECT campaign_id, model_name, reasoning_level, output_mode,
-                       benchmark_name, fixture_id
-                FROM raw_attempts
-                """
-            ).fetchone()
-        assert row == (
-            "cmp-cli-report",
-            "mock",
-            "none",
-            "text",
-            "commit_messages",
-            "f001",
-        )
 
     def test_report_preserves_aggregate_report_artifacts_with_real_model_data(self, runner, tmp_path):
         """Already-aggregated report JSON remains usable as report input."""

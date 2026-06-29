@@ -1,0 +1,57 @@
+---
+import Layout from "@/components/Layout.astro";
+import { loadDataSync } from "@/lib/data";
+import { Badge } from "@/components/ui/badge";
+
+const data = loadDataSync();
+---
+
+<Layout
+  title="Benchmarks"
+  description="Browse GitBench Git task categories and see where AI models perform best or fail across fixture suites."
+  image="/og/benchmarks.png"
+>
+  <div class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
+    {
+      data.benchmarks.map((bench) => {
+        // Collect best pass rate across models
+        let bestRate = 0;
+        for (const m of data.models) {
+          const cell = data.matrix[m.name]?.[bench];
+          if (cell && cell.pass_at_k > bestRate) bestRate = cell.pass_at_k;
+        }
+        const bestPct = Math.round(bestRate * 1000) / 10;
+
+        // Count fixtures
+        const fixtures = Object.values(data.fixture_index).filter(
+          (fi) => fi.benchmark === bench,
+        );
+
+        return (
+          <a href={`/benchmarks/${bench}`} class="no-underline">
+            <div class="card p-6 cursor-pointer transition-colors hover:border-(--color-border-accent)">
+              <div class="font-mono text-sm font-semibold text-(--color-text) mb-1.5">
+                {bench}
+              </div>
+              <div class="flex gap-2 items-center flex-wrap">
+                <span title="Best pass rate on this benchmark.">
+                  <Badge
+                    variant="outline"
+                    className="font-mono text-[0.68rem] border-pass-border text-pass bg-pass-bg"
+                  >
+                    Best: {bestPct}%
+                  </Badge>
+                </span>
+                <span
+                  class="font-mono text-[0.65rem] text-(--color-text-dim)"
+                >
+                  {fixtures.length} fixtures
+                </span>
+              </div>
+            </div>
+          </a>
+        );
+      })
+    }
+  </div>
+</Layout>
