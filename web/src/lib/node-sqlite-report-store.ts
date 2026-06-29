@@ -29,15 +29,6 @@ const SOURCE_REPORT_DB_PATH = fileURLToPath(
   new URL("../../data/gitbench.db", import.meta.url)
 );
 
-function defaultReportDbPath(): string {
-  const candidates = [
-    path.resolve(moduleDir, "../../data/gitbench.db"),
-    path.resolve(process.cwd(), "data", "gitbench.db"),
-    path.resolve(moduleDir, "../../../data/gitbench.db"),
-  ];
-  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
-}
-
 export function clearReportStoreCache(): void {
   cachedDb = null;
   cachedStore = null;
@@ -1219,9 +1210,8 @@ export class NodeSqliteReportStore implements ReportStore {
         }
       > = {};
       for (const attempt of attempts) {
-        const key = `${attempt.model_name}::${attempt.reasoning_level ?? ""}::${
-          attempt.output_mode
-        }`;
+        const key = `${attempt.model_name}::${attempt.reasoning_level ?? ""}::${attempt.output_mode
+          }`;
         byModelMode[key] = byModelMode[key] ?? {
           model_name: attempt.model_name,
           reasoning_level: attempt.reasoning_level,
